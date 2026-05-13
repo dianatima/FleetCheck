@@ -1,0 +1,36 @@
+{
+  "name": "app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "vite frontend",
+    "dev:backend": "tsx watch backend/index.ts",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "vite build frontend",
+    "build:backend": "tsc -p tsconfig.backend.json",
+    "start": "node dist/backend/index.js",
+    "preview": "vite preview frontend"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "lucide-vue-next": "^0.344.0",
+    "pinia": "^2.1.7",
+    "fastify": "^5.8.5",
+    "vue": "^3.5.34",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.18",
+    "postcss": "8.4.45",
+    "sass": "1.77.2",
+    "tailwindcss": "3.4.10",
+    "@types/node": "^24.12.3",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "@vue/tsconfig": "^0.9.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.12",
+    "vue-tsc": "^3.2.8"
+  }
+}

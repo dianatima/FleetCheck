@@ -1,0 +1,27 @@
+import { createRouter, createWebHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/', name: 'landing', component: () => import('../views/LandingPage.vue') },
+    { path: '/department', name: 'department', component: () => import('../views/DepartmentSelection.vue') },
+    { path: '/login', name: 'login', component: () => import('../views/LoginPage.vue') },
+    { path: '/register/company', name: 'company-register', component: () => import('../views/CompanyRegister.vue') },
+    { path: '/register/driver', name: 'driver-register', component: () => import('../views/DriverRegister.vue') },
+    { path: '/pending', name: 'pending-approval', component: () => import('../views/PendingApproval.vue') },
+    { path: '/dashboard', name: 'manager-dashboard', component: () => import('../views/ManagerDashboard.vue') },
+    { path: '/driver', name: 'driver-dashboard', component: () => import('../views/DriverDashboard.vue') },
+    { path: '/vehicles', name: 'vehicles', component: () => import('../views/VehicleList.vue') },
+    { path: '/vehicles/:id', name: 'vehicle-detail', component: () => import('../views/VehicleDetail.vue') },
+    { path: '/inspect/pre', name: 'pre-trip', component: () => import('../views/PreTripInspection.vue') },
+    { path: '/inspect/post', name: 'post-trip', component: () => import('../views/PreTripInspection.vue'), props: { isPostTrip: true } },
+    { path: '/inspect/result', name: 'inspection-result', component: () => import('../views/InspectionResult.vue') },
+    { path: '/repairs', name: 'repairs', component: () => import('../views/RepairRequest.vue') },
+    { path: '/reports', name: 'reports', component: () => import('../views/Reports.vue') },
+    { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue') },
+    { path: '/:pathMatch(.*)*', redirect: '/' },
+  ],
+  scrollBehavior: () => ({ top: 0 }),
+})
+
+export default router

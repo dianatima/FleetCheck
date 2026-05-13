@@ -1,0 +1,19 @@
+{
+  "name": "FleetCheck Pro",
+  "short_name": "FleetCheck",
+  "description": "Digital vehicle inspections for safer fleets",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"]
+}
