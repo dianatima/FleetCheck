@@ -24,6 +24,7 @@ const router = createRouter({
     { path: '/issues', name: 'issues', component: () => import('../views/IssuesList.vue') },
     { path: '/issues/:id', name: 'issue-detail', component: () => import('../views/IssueDetail.vue') },
     { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue') },
+    { path: '/auth/callback', component: () => import('@/views/AuthCallback.vue')},
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: () => ({ top: 0 }),

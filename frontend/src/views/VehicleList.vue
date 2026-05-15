@@ -8,7 +8,7 @@
           class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
         />
         <input
-          v-model="search"
+          v-model="localSearch"
           class="input-field pl-9 py-2 text-sm"
           :placeholder="store.t('searchVehicles')"
         />
@@ -16,7 +16,11 @@
 
       <div class="flex items-center gap-2">
         <Filter :size="15" class="text-gray-400" />
-        <select v-model="filterStatus" class="input-field py-2 text-sm w-auto">
+        <select
+          v-model="vehicleStore.statusFilter"
+          @change="vehicleStore.setStatusFilter(vehicleStore.statusFilter)"
+          class="input-field py-2 text-sm w-auto"
+        >
           <option value="all">{{ store.t("allStatus") }}</option>
           <option value="active">{{ store.t("statusActive") }}</option>
           <option value="needs-attention">
@@ -42,7 +46,7 @@
     </div>
 
     <template v-else>
-      <!-- Summary badges -->
+      <!-- Summary badges for current page -->
       <div class="flex flex-wrap gap-2 mb-5">
         <span class="badge-green">
           {{ vehicles.filter((v) => v.status === "active").length }}
@@ -85,7 +89,7 @@
 
             <tbody>
               <tr
-                v-for="v in filtered"
+                v-for="v in vehicles"
                 :key="v.id"
                 class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
               >
@@ -186,7 +190,7 @@
                 </td>
               </tr>
 
-              <tr v-if="filtered.length === 0">
+              <tr v-if="vehicles.length === 0">
                 <td
                   :colspan="vehicleHeaders.length"
                   class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
@@ -197,6 +201,76 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Pagination -->
+        <div
+          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900"
+        >
+          <div class="text-xs text-gray-500 dark:text-gray-400">
+            Showing
+            <span class="font-medium text-gray-700 dark:text-gray-200">
+              {{
+                vehicleStore.total === 0
+                  ? 0
+                  : (vehicleStore.page - 1) * vehicleStore.pageSize + 1
+              }}
+            </span>
+            –
+            <span class="font-medium text-gray-700 dark:text-gray-200">
+              {{
+                Math.min(
+                  vehicleStore.page * vehicleStore.pageSize,
+                  vehicleStore.total
+                )
+              }}
+            </span>
+            of
+            <span class="font-medium text-gray-700 dark:text-gray-200">
+              {{ vehicleStore.total }}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <select
+              :value="vehicleStore.pageSize"
+              @change="
+                vehicleStore.setPageSize(
+                  Number(($event.target as HTMLSelectElement).value)
+                )
+              "
+              class="input-field py-1.5 text-xs w-auto"
+            >
+              <option :value="5">5 / page</option>
+              <option :value="10">10 / page</option>
+              <option :value="25">25 / page</option>
+              <option :value="50">50 / page</option>
+            </select>
+
+            <button
+              type="button"
+              class="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="vehicleStore.page <= 1"
+              @click="vehicleStore.prevPage()"
+            >
+              Previous
+            </button>
+
+            <div
+              class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-200"
+            >
+              {{ vehicleStore.page }} / {{ vehicleStore.totalPages }}
+            </div>
+
+            <button
+              type="button"
+              class="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="vehicleStore.page >= vehicleStore.totalPages"
+              @click="vehicleStore.nextPage()"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     </template>
 
@@ -205,13 +279,9 @@
       <Transition name="modal">
         <div
           v-if="showModal"
-          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          @click.self="closeModal"
         >
-          <div
-            class="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            @click="closeModal"
-          />
-
           <div
             class="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
           >
@@ -288,7 +358,6 @@
                 </div>
               </div>
 
-              <!-- Row 1: Vehicle Number + Type -->
               <div class="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label class="label">
@@ -317,10 +386,7 @@
                     </option>
                   </select>
                 </div>
-              </div>
 
-              <!-- Row 2: Make + Model -->
-              <div class="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label class="label">
                     {{ store.t("make") }}
@@ -346,10 +412,7 @@
                     required
                   />
                 </div>
-              </div>
 
-              <!-- Row 3: Year + Plate Number -->
-              <div class="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label class="label">
                     {{ store.t("year") }}
@@ -378,10 +441,7 @@
                     required
                   />
                 </div>
-              </div>
 
-              <!-- Row 4: VIN + Odometer -->
-              <div class="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label class="label">{{ store.t("vin") }}</label>
                   <input
@@ -401,10 +461,7 @@
                     min="0"
                   />
                 </div>
-              </div>
 
-              <!-- Row 5: Engine hours + Status -->
-              <div class="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label class="label">Engine Hours</label>
                   <input
@@ -434,7 +491,6 @@
                 </div>
               </div>
 
-              <!-- Footer -->
               <div
                 class="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800"
               >
@@ -459,7 +515,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   Search,
@@ -476,6 +532,7 @@ import AppLayout from "../components/layout/AppLayout.vue";
 import { useAppStore } from "../stores/app";
 import { useVehicleStore } from "@/stores/vehicleStore";
 import { uploadVehiclePhoto } from "@/api/storage";
+import { useAuthStore } from "@/stores/authStore";
 
 type VehicleStatus = "active" | "needs-attention" | "blocked" | "in-repair";
 
@@ -499,19 +556,30 @@ type Vehicle = {
 const store = useAppStore();
 const vehicleStore = useVehicleStore();
 const router = useRouter();
-
-onMounted(() => {
-  vehicleStore.fetchVehicles();
-});
-
-const search = ref("");
-const filterStatus = ref("all");
+const authStore = useAuthStore();
+console.log("AUTH PROFILE", authStore.profile);
+console.log("COMPANY ID", authStore.companyId);
 const showModal = ref(false);
 const editingId = ref<string | null>(null);
 const photoPreview = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
-
 const selectedPhotoFile = ref<File | null>(null);
+
+const localSearch = ref(vehicleStore.search);
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(localSearch, (value) => {
+  if (searchTimer) clearTimeout(searchTimer);
+
+  searchTimer = setTimeout(() => {
+    vehicleStore.setSearch(value);
+  }, 350);
+});
+
+onMounted(() => {
+  vehicleStore.fetchVehicles();
+});
 
 const vehicles = computed<Vehicle[]>(() => vehicleStore.vehicles as Vehicle[]);
 
@@ -618,8 +686,6 @@ function hideBrokenImage(e: Event) {
 }
 
 async function handleSave() {
-  console.log("SAVE CLICKED", form.value);
-
   let photoUrl = form.value.photo_url || null;
 
   if (selectedPhotoFile.value) {
@@ -644,12 +710,8 @@ async function handleSave() {
         : null,
     status: form.value.status,
     photo_url: photoUrl,
-
-    // тимчасовий company_id для MVP
-    // не забути заміни пізніше на id моєї company з таблиці companies!!!
-    company_id: "24119d61-05a7-4300-b57b-473ed31fc771",
+    company_id: authStore.companyId,
   };
-  console.log("PAYLOAD", vehiclePayload);
 
   if (editingId.value) {
     await vehicleStore.updateVehicle(editingId.value, vehiclePayload);
@@ -682,27 +744,6 @@ const vehicleHeaders = computed(() => [
   store.t("status"),
   "",
 ]);
-
-const filtered = computed(() =>
-  vehicles.value.filter((v) => {
-    const searchValue = search.value.toLowerCase();
-    const name = getVehicleName(v).toLowerCase();
-
-    const matchSearch =
-      name.includes(searchValue) ||
-      String(v.unit || "")
-        .toLowerCase()
-        .includes(searchValue) ||
-      String(v.plate || "")
-        .toLowerCase()
-        .includes(searchValue);
-
-    const matchStatus =
-      filterStatus.value === "all" || v.status === filterStatus.value;
-
-    return matchSearch && matchStatus;
-  })
-);
 </script>
 
 <style scoped>
@@ -714,18 +755,5 @@ const filtered = computed(() =>
 .modal-enter-from,
 .modal-leave-to {
   opacity: 0;
-}
-
-.modal-enter-active .relative,
-.modal-leave-active .relative {
-  transition: transform 0.2s ease;
-}
-
-.modal-enter-from .relative {
-  transform: scale(0.96) translateY(8px);
-}
-
-.modal-leave-to .relative {
-  transform: scale(0.96) translateY(8px);
 }
 </style>
