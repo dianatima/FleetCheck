@@ -7,9 +7,9 @@
     <Transition name="fade">
       <div v-if="open" class="absolute right-0 top-full mt-2 w-80 card shadow-xl z-50 overflow-hidden">
         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-          <h3 class="font-semibold text-gray-900 dark:text-white text-sm">Notifications</h3>
+          <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('notifications') }}</h3>
           <div class="flex items-center gap-2">
-            <span v-if="unreadCount > 0" class="text-xs text-blue-600 dark:text-blue-400 font-medium">{{ unreadCount }} new</span>
+            <span v-if="unreadCount > 0" class="text-xs text-blue-600 dark:text-blue-400 font-medium">{{ unreadCount }} {{ store.t('new') }}</span>
             <button @click="open = false" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
               <X :size="14" class="text-gray-400" />
             </button>
@@ -34,7 +34,7 @@
           </div>
         </div>
         <div class="px-4 py-2.5 border-t border-gray-100 dark:border-gray-700">
-          <button class="text-xs text-blue-600 dark:text-blue-400 font-medium hover:underline">View all notifications</button>
+          <button class="text-xs text-blue-600 dark:text-blue-400 font-medium hover:underline">{{ store.t('viewAllNotifications') }}</button>
         </div>
       </div>
     </Transition>
@@ -44,7 +44,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Bell, X, CheckCircle, AlertTriangle, Clock, Wrench, UserPlus, FileText } from 'lucide-vue-next'
+import { useAppStore } from '../../stores/app'
 
+const store = useAppStore()
 const open = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 

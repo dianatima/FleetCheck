@@ -14,21 +14,21 @@
     "preview": "vite preview frontend"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
+    "@supabase/supabase-js": "^2.105.4",
+    "fastify": "^5.8.5",
     "lucide-vue-next": "^0.344.0",
     "pinia": "^2.1.7",
-    "fastify": "^5.8.5",
     "vue": "^3.5.34",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@types/node": "^24.12.3",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "@vue/tsconfig": "^0.9.1",
     "autoprefixer": "^10.4.18",
     "postcss": "8.4.45",
     "sass": "1.77.2",
     "tailwindcss": "3.4.10",
-    "@types/node": "^24.12.3",
-    "@vitejs/plugin-vue": "^6.0.6",
-    "@vue/tsconfig": "^0.9.1",
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
     "vue-tsc": "^3.2.8"

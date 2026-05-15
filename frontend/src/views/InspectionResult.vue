@@ -1,7 +1,7 @@
 <template>
-  <AppLayout title="Inspection Result">
+  <AppLayout :title="store.t('inspectionResult')">
     <RouterLink to="/inspect/pre" class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 text-sm font-medium transition-colors">
-      <ArrowLeft :size="16" /> Back to Inspection
+      <ArrowLeft :size="16" /> {{ store.t('backToInspection') }}
     </RouterLink>
 
     <!-- Result banner -->
@@ -14,21 +14,21 @@
         {{ passed ? store.t('inspectionPassed') : store.t('inspectionFailed') }}
       </h2>
       <p class="text-sm" :class="passed ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'">
-        {{ passed ? 'Vehicle is ready for operation. All inspection items passed.' : `${failedItems.length} issue(s) found. Manager review required before operating this vehicle.` }}
+        {{ passed ? store.t('vehicleReadyForOperation') : `${failedItems.length} ${store.t('issuesFoundMessage')}` }}
       </p>
     </div>
 
     <!-- Summary -->
     <div class="card p-5 mb-5">
-      <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4">Inspection Summary</h3>
+      <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4">{{ store.t('inspectionSummary') }}</h3>
       <div class="grid grid-cols-3 gap-3 mb-4">
         <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center">
           <div class="text-2xl font-bold text-green-600 dark:text-green-400">54</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400">Passed</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('statusPassed') }}</div>
         </div>
         <div class="bg-red-50 dark:bg-red-900/20 rounded-xl p-3 text-center">
           <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ failedItems.length }}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400">Failed</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('statusFailed') }}</div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
           <div class="text-2xl font-bold text-gray-600 dark:text-gray-300">4</div>
@@ -36,12 +36,12 @@
         </div>
       </div>
       <div class="grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">Vehicle:</span> Kenworth T680 · #1042</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">Driver:</span> John Smith</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">Type:</span> Pre-Trip Inspection</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">Time:</span> May 12, 2026 7:24 AM</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">Duration:</span> 18 minutes</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">Photos taken:</span> 3</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('vehicle') }}:</span> Kenworth T680 · #1042</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('driver') }}:</span> John Smith</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('type') }}:</span> Pre-Trip Inspection</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('time') }}:</span> May 12, 2026 7:24 AM</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('duration') }}:</span> 18 minutes</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('photosTaken') }}:</span> 3</div>
       </div>
     </div>
 
@@ -49,7 +49,7 @@
     <div v-if="!passed" class="card mb-5">
       <div class="flex items-center gap-2 p-4 border-b border-gray-100 dark:border-gray-700">
         <AlertTriangle :size="16" class="text-red-500" />
-        <h3 class="font-semibold text-gray-900 dark:text-white text-sm">Failed Items</h3>
+        <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('failedItems') }}</h3>
       </div>
       <div class="divide-y divide-gray-50 dark:divide-gray-700/50">
         <div v-for="item in failedItems" :key="item.item" class="p-4">
@@ -58,7 +58,7 @@
               <p class="text-sm font-medium text-gray-900 dark:text-white">{{ item.item }}</p>
               <p class="text-xs text-gray-500 dark:text-gray-400">{{ item.section }}</p>
             </div>
-            <span :class="item.severity === 'high' ? 'badge-red' : 'badge-orange'">{{ item.severity }}</span>
+            <span :class="item.severity === 'high' ? 'badge-red' : 'badge-orange'">{{ item.severity === 'high' ? store.t('priorityHigh') : store.t('priorityMedium') }}</span>
           </div>
           <p class="text-xs text-red-600 dark:text-red-400 mt-1.5 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg">{{ item.comment }}</p>
         </div>
@@ -76,10 +76,10 @@
         </button>
       </template>
       <RouterLink to="/reports" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
-        <FileText :size="16" /> View Full Report
+        <FileText :size="16" /> {{ store.t('viewFullReport') }}
       </RouterLink>
       <RouterLink :to="passed ? '/driver' : '/inspect/pre'" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
-        <RotateCcw :size="16" /> {{ passed ? 'Back to Dashboard' : 'Fix & Resubmit' }}
+        <RotateCcw :size="16" /> {{ passed ? store.t('backToDashboard') : store.t('fixResubmit') }}
       </RouterLink>
     </div>
   </AppLayout>

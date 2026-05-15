@@ -21,13 +21,17 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { LayoutDashboard, ClipboardList, Truck, FileText, User } from 'lucide-vue-next'
+import { useAppStore } from '../../stores/app'
 
-const items = [
-  { icon: LayoutDashboard, label: 'Home', to: '/dashboard' },
-  { icon: ClipboardList, label: 'Inspect', to: '/inspect/pre' },
-  { icon: Truck, label: 'Vehicles', to: '/vehicles' },
-  { icon: FileText, label: 'Reports', to: '/reports' },
-  { icon: User, label: 'Profile', to: '/settings' },
-]
+const store = useAppStore()
+
+const items = computed(() => [
+  { icon: LayoutDashboard, label: store.t('home'), to: '/dashboard' },
+  { icon: ClipboardList, label: store.t('inspect'), to: '/inspect/pre' },
+  { icon: Truck, label: store.t('vehicles'), to: '/vehicles' },
+  { icon: FileText, label: store.t('reports'), to: '/reports' },
+  { icon: User, label: store.t('profile'), to: '/settings' },
+])
 </script>

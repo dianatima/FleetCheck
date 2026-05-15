@@ -3,7 +3,7 @@
     <header class="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
       <div class="max-w-2xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <RouterLink to="/login" class="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm font-medium">
-          <ArrowLeft :size="16" /> Back to Login
+          <ArrowLeft :size="16" /> {{ store.t('backToLogin') }}
         </RouterLink>
         <div class="flex items-center gap-2">
           <LanguageSelector :compact="true" />
@@ -17,8 +17,8 @@
         <div class="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-2xl shadow-lg mb-4">
           <UserPlus :size="24" class="text-white" />
         </div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Driver Registration</h1>
-        <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">Create your driver account using your company invitation code.</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ store.t('driverRegistration') }}</h1>
+        <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">{{ store.t('driverRegSubtitle') }}</p>
       </div>
 
       <div class="card p-6 shadow-sm">
@@ -27,7 +27,7 @@
           <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
             <label class="label text-blue-700 dark:text-blue-300">{{ store.t('invitationCode') }} *</label>
             <input class="input-field bg-white dark:bg-gray-800 mt-1" placeholder="e.g. FCP-2847-XQRT" required />
-            <p class="text-xs text-blue-600 dark:text-blue-400 mt-1.5">Ask your fleet manager for the company invitation code.</p>
+            <p class="text-xs text-blue-600 dark:text-blue-400 mt-1.5">{{ store.t('askManagerForCode') }}</p>
           </div>
 
           <div class="grid sm:grid-cols-2 gap-4">
@@ -39,24 +39,24 @@
             <div><label class="label">{{ store.t('email') }} *</label><input class="input-field" type="email" placeholder="john@email.com" required /></div>
           </div>
           <div class="grid sm:grid-cols-2 gap-4">
-            <div><label class="label">Driver License Number *</label><input class="input-field" placeholder="DL123456789" required /></div>
-            <div><label class="label">License Expiration Date *</label><input class="input-field" type="date" required /></div>
+            <div><label class="label">{{ store.t('licenseNumber') }} *</label><input class="input-field" placeholder="DL123456789" required /></div>
+            <div><label class="label">{{ store.t('expiryDate') }} *</label><input class="input-field" type="date" required /></div>
           </div>
-          <div><label class="label">Date of Birth *</label><input class="input-field" type="date" required /></div>
+          <div><label class="label">{{ store.t('dateOfBirth') }} *</label><input class="input-field" type="date" required /></div>
           <div class="grid sm:grid-cols-2 gap-4">
             <div>
               <label class="label">{{ store.t('password') }} *</label>
               <div class="relative">
-                <input :type="showPass ? 'text' : 'password'" class="input-field pr-10" placeholder="Min 8 characters" required />
+                <input :type="showPass ? 'text' : 'password'" class="input-field pr-10" :placeholder="store.t('min8Chars')" required />
                 <button type="button" @click="showPass = !showPass" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                   <EyeOff v-if="showPass" :size="16" /><Eye v-else :size="16" />
                 </button>
               </div>
             </div>
             <div>
-              <label class="label">Confirm Password *</label>
+              <label class="label">{{ store.t('confirmPassword') }} *</label>
               <div class="relative">
-                <input :type="showConfirm ? 'text' : 'password'" class="input-field pr-10" placeholder="Repeat password" required />
+                <input :type="showConfirm ? 'text' : 'password'" class="input-field pr-10" :placeholder="store.t('repeatPassword')" required />
                 <button type="button" @click="showConfirm = !showConfirm" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                   <EyeOff v-if="showConfirm" :size="16" /><Eye v-else :size="16" />
                 </button>
@@ -65,12 +65,12 @@
           </div>
 
           <div>
-            <label class="label">Upload Driver License Photo</label>
+            <label class="label">{{ store.t('uploadDriverLicensePhoto') }}</label>
             <div class="grid grid-cols-2 gap-3">
-              <div v-for="side in ['Front Side', 'Back Side']" :key="side" class="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-5 text-center hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer">
+              <div v-for="(sideKey, idx) in ['frontSide', 'backSide']" :key="idx" class="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-5 text-center hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer">
                 <Upload :size="20" class="mx-auto text-gray-400 mb-1.5" />
-                <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">{{ side }}</p>
-                <p class="text-[10px] text-gray-400 mt-0.5">JPG, PNG</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">{{ store.t(sideKey) }}</p>
+                <p class="text-[10px] text-gray-400 mt-0.5">{{ store.t('jpgPng') }}</p>
               </div>
             </div>
           </div>
@@ -78,12 +78,12 @@
           <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
             <input type="checkbox" class="mt-0.5 rounded" id="terms" required />
             <label for="terms" class="text-xs text-gray-600 dark:text-gray-400">
-              I agree to the <span class="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">Terms of Service</span> and <span class="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">Privacy Policy</span>. I confirm that all information provided is accurate.
+              {{ store.t('iAgreeToThe') }} <span class="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">{{ store.t('termsOfService') }}</span> and <span class="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">{{ store.t('privacyPolicy') }}</span>. {{ store.t('iConfirmAccurate') }}
             </label>
           </div>
 
           <button type="submit" class="btn-primary w-full py-3 text-base gap-2">
-            <UserPlus :size="18" /> Create Driver Account
+            <UserPlus :size="18" /> {{ store.t('createDriverAccount') }}
           </button>
         </form>
       </div>

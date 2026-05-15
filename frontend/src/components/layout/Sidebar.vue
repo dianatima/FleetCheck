@@ -12,59 +12,75 @@
     </div>
 
     <!-- Nav -->
-    <nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-      <RouterLink
-        v-for="item in navItems"
-        :key="item.name"
-        :to="item.to"
-        custom
-        v-slot="{ isActive, navigate }"
-      >
-        <button @click="navigate" :class="isActive ? 'sidebar-link-active' : 'sidebar-link'" class="w-full">
-          <component :is="item.icon" :size="18" />
-          <span>{{ store.t(item.label) }}</span>
-          <ChevronRight v-if="isActive" :size="14" class="ml-auto" />
-        </button>
-      </RouterLink>
+    <nav class="flex-1 px-3 py-4 overflow-y-auto">
+      <!-- Manager section -->
+      <div class="space-y-0.5 mb-4">
+        <RouterLink
+          v-for="item in managerItems"
+          :key="item.to"
+          :to="item.to"
+          custom
+          v-slot="{ isActive, navigate }"
+        >
+          <button @click="navigate" :class="isActive ? 'sidebar-link-active' : 'sidebar-link'" class="w-full">
+            <component :is="item.icon" :size="18" />
+            <span>{{ store.t(item.label) }}</span>
+            <ChevronRight v-if="isActive" :size="14" class="ml-auto" />
+          </button>
+        </RouterLink>
+      </div>
+
+      <!-- Driver section separator -->
+      <div class="px-2 mb-2 mt-1">
+        <p class="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{{ store.t('driver') }}</p>
+      </div>
+      <div class="space-y-0.5">
+        <RouterLink
+          v-for="item in driverItems"
+          :key="item.to"
+          :to="item.to"
+          custom
+          v-slot="{ isActive, navigate }"
+        >
+          <button @click="navigate" :class="isActive ? 'sidebar-link-active' : 'sidebar-link'" class="w-full">
+            <component :is="item.icon" :size="18" />
+            <span>{{ store.t(item.label) }}</span>
+            <ChevronRight v-if="isActive" :size="14" class="ml-auto" />
+          </button>
+        </RouterLink>
+      </div>
     </nav>
 
     <!-- Bottom -->
     <div class="p-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
-      <div class="flex items-center gap-2 px-2">
-        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold">JD</div>
-        <div class="flex-1 min-w-0">
-          <p class="text-xs font-medium text-gray-900 dark:text-white truncate">James Davis</p>
-          <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Fleet Manager</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-1 pt-1">
-        <NotificationBell />
-        <LanguageSelector :compact="true" />
-        <ThemeToggle />
-        <RouterLink to="/" class="ml-auto p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
-          <LogOut :size="15" />
-        </RouterLink>
-      </div>
+      <RouterLink to="/" class="flex items-center gap-2 w-full px-2 py-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm font-medium">
+        <LogOut :size="15" />
+        <span>{{ store.t('signOut') }}</span>
+      </RouterLink>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { LayoutDashboard, Truck, Users, ClipboardList, FileText, Wrench, Settings, ChevronRight, LogOut } from 'lucide-vue-next'
+import { LayoutDashboard, Truck, Users, ClipboardList, FileText, Wrench, Settings, ChevronRight, LogOut, User, AlertTriangle } from 'lucide-vue-next'
 import { useAppStore } from '../../stores/app'
-import NotificationBell from '../shared/NotificationBell.vue'
-import LanguageSelector from '../shared/LanguageSelector.vue'
-import ThemeToggle from '../shared/ThemeToggle.vue'
 
 const store = useAppStore()
 
-const navItems = [
+const managerItems = [
   { icon: LayoutDashboard, label: 'dashboard', to: '/dashboard' },
   { icon: Truck, label: 'vehicles', to: '/vehicles' },
-  { icon: Users, label: 'drivers', to: '/vehicles' },
-  { icon: ClipboardList, label: 'inspections', to: '/inspect/pre' },
+  { icon: Users, label: 'drivers', to: '/drivers' },
   { icon: FileText, label: 'reports', to: '/reports' },
+  { icon: AlertTriangle, label: 'issues', to: '/issues' },
   { icon: Wrench, label: 'repairs', to: '/repairs' },
   { icon: Settings, label: 'settings', to: '/settings' },
+]
+
+const driverItems = [
+  { icon: User, label: 'driverDashboard', to: '/driver' },
+  { icon: Truck, label: 'vehicles', to: '/driver/vehicles' },
+  { icon: FileText, label: 'reports', to: '/driver/reports' },
+  { icon: ClipboardList, label: 'inspections', to: '/inspect/pre' },
 ]
 </script>

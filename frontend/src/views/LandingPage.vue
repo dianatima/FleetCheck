@@ -12,8 +12,7 @@
         <div class="flex items-center gap-2">
           <LanguageSelector />
           <ThemeToggle />
-          <RouterLink to="/login" class="hidden sm:flex btn-secondary text-sm py-2">{{ store.t('companyLogin') }}</RouterLink>
-          <RouterLink to="/department" class="btn-primary text-sm py-2">{{ store.t('getStarted') }}</RouterLink>
+          <RouterLink to="/register/company" class="btn-primary text-sm py-2">{{ store.t('getStarted') }}</RouterLink>
         </div>
       </div>
     </header>
@@ -29,26 +28,19 @@
           <div>
             <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 text-sm font-medium mb-6">
               <Star :size="14" />
-              <span>Trusted by 500+ fleet companies</span>
+              <span>{{ store.t('fleetManagementSaasPlatform') }}</span>
             </div>
             <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white leading-tight mb-6">
               {{ store.t('tagline') }}
             </h1>
             <p class="text-lg text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
-              Streamline pre-trip and post-trip inspections, manage your fleet, track vehicle conditions, photos, repairs, and stay compliant — all from one platform.
+              {{ store.t('landingSubtitle') }}
             </p>
             <div class="flex flex-wrap gap-3">
-              <RouterLink to="/department" class="btn-primary px-6 py-3 text-base gap-2">
+              <RouterLink to="/register/company" class="btn-primary px-6 py-3 text-base gap-2">
                 {{ store.t('getStarted') }} <ArrowRight :size="18" />
               </RouterLink>
-              <RouterLink to="/login" class="btn-secondary px-6 py-3 text-base">{{ store.t('companyLogin') }}</RouterLink>
-              <RouterLink to="/register/driver" class="btn-secondary px-6 py-3 text-base text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-700">{{ store.t('driverRegistration') }}</RouterLink>
-            </div>
-            <div class="flex flex-wrap items-center gap-4 mt-8">
-              <div v-for="item in checkItems" :key="item" class="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
-                <CheckCircle :size="14" class="text-green-500" />
-                {{ item }}
-              </div>
+              <RouterLink to="/login" class="btn-secondary px-6 py-3 text-base">{{ store.t('signIn') }}</RouterLink>
             </div>
           </div>
 
@@ -58,7 +50,7 @@
               <div class="card shadow-2xl p-6">
                 <div class="flex items-center justify-between mb-5">
                   <div>
-                    <h3 class="font-semibold text-gray-900 dark:text-white text-sm">Fleet Overview</h3>
+                    <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('fleetOverview') }}</h3>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Today, May 12</p>
                   </div>
                   <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -74,7 +66,7 @@
                 <!-- Chart bars -->
                 <div class="mb-4">
                   <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Inspections This Week</span>
+                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ store.t('inspectionsThisWeek') }}</span>
                     <span class="text-xs text-green-500 font-medium">+12%</span>
                   </div>
                   <div class="flex items-end gap-1.5 h-16">
@@ -98,7 +90,7 @@
                         <p class="text-[10px] text-gray-400">{{ r.driver }}</p>
                       </div>
                     </div>
-                    <span :class="r.status === 'Passed' ? 'badge-green' : 'badge-red'">{{ r.status }}</span>
+                    <span :class="r.passed ? 'badge-green' : 'badge-red'">{{ r.passed ? store.t('statusPassed') : store.t('statusFailed') }}</span>
                   </div>
                 </div>
               </div>
@@ -108,9 +100,9 @@
                   <div class="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
                     <CheckCircle :size="12" class="text-white" />
                   </div>
-                  <span class="text-xs font-semibold text-gray-900 dark:text-white">Pre-Trip Done</span>
+                  <span class="text-xs font-semibold text-gray-900 dark:text-white">{{ store.t('preTripDone') }}</span>
                 </div>
-                <p class="text-[10px] text-gray-500 dark:text-gray-400">Unit #1042 · All items passed</p>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400">Unit #1042 · {{ store.t('allItemsPassed') }}</p>
                 <div class="mt-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1">
                   <div class="bg-green-500 h-1 rounded-full w-full" />
                 </div>
@@ -121,8 +113,8 @@
                     <Wrench :size="11" class="text-white" />
                   </div>
                   <div>
-                    <p class="text-[10px] font-semibold text-gray-900 dark:text-white">Repair Request</p>
-                    <p class="text-[9px] text-orange-500">High Priority</p>
+                    <p class="text-[10px] font-semibold text-gray-900 dark:text-white">{{ store.t('repairTracking') }}</p>
+                    <p class="text-[9px] text-orange-500">{{ store.t('highPriority') }}</p>
                   </div>
                 </div>
               </div>
@@ -148,8 +140,8 @@
     <section class="py-16 sm:py-24 bg-gray-50 dark:bg-gray-900">
       <div class="max-w-7xl mx-auto px-4 sm:px-6">
         <div class="text-center mb-12">
-          <h2 class="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">Everything your fleet needs</h2>
-          <p class="text-gray-500 dark:text-gray-400 text-lg max-w-2xl mx-auto">From daily driver checklists to compliance reports, FleetCheck Pro keeps your entire fleet operation running smoothly.</p>
+          <h2 class="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">{{ store.t('everythingYourFleetNeeds') }}</h2>
+          <p class="text-gray-500 dark:text-gray-400 text-lg max-w-2xl mx-auto">{{ store.t('landingFeaturesIntro') }}</p>
         </div>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div v-for="f in features" :key="f.title" class="card p-6 hover:shadow-md transition-shadow">
@@ -163,18 +155,6 @@
       </div>
     </section>
 
-    <!-- CTA -->
-    <section class="py-16 bg-white dark:bg-gray-800">
-      <div class="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-        <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">Ready to modernize your fleet?</h2>
-        <p class="text-gray-500 dark:text-gray-400 mb-8">Join thousands of fleet managers who trust FleetCheck Pro for their daily operations.</p>
-        <div class="flex flex-wrap justify-center gap-3">
-          <RouterLink to="/department" class="btn-primary px-8 py-3 text-base">Start Free Trial</RouterLink>
-          <RouterLink to="/register/driver" class="btn-secondary px-8 py-3 text-base">Driver? Register Here</RouterLink>
-        </div>
-      </div>
-    </section>
-
     <!-- Footer -->
     <footer class="bg-gray-900 dark:bg-gray-950 text-gray-400 py-8">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -184,7 +164,7 @@
           </div>
           <span class="text-white font-semibold">FleetCheck Pro</span>
         </div>
-        <p class="text-sm">© 2026 FleetCheck Pro. All rights reserved.</p>
+        <p class="text-sm">{{ store.t('footerCopyright') }}</p>
         <LanguageSelector :compact="true" />
       </div>
     </footer>
@@ -192,6 +172,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Truck, CheckCircle, ArrowRight, Star, Wrench, ClipboardCheck, BarChart3, Camera, Shield } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
 import LanguageSelector from '../components/shared/LanguageSelector.vue'
@@ -199,31 +180,34 @@ import ThemeToggle from '../components/shared/ThemeToggle.vue'
 
 const store = useAppStore()
 
-const checkItems = ['Free 14-day trial', 'No credit card required', 'Works on any device']
 const barData = [60, 80, 55, 90, 70, 100, 85]
 const weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-const miniStats = [
-  { label: 'Active Vehicles', value: '48', bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-600 dark:text-green-400' },
-  { label: 'Inspections', value: '127', bg: 'bg-blue-50 dark:bg-blue-900/20', text: 'text-blue-600 dark:text-blue-400' },
-  { label: 'Open Repairs', value: '6', bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-600 dark:text-orange-400' },
-]
+
+const miniStats = computed(() => [
+  { label: store.t('availableVehicles'), value: '48', bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-600 dark:text-green-400' },
+  { label: store.t('inspections'), value: '127', bg: 'bg-blue-50 dark:bg-blue-900/20', text: 'text-blue-600 dark:text-blue-400' },
+  { label: store.t('repairs'), value: '6', bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-600 dark:text-orange-400' },
+])
+
 const recentRows = [
-  { unit: 'Unit #1042', driver: 'J. Smith', status: 'Passed' },
-  { unit: 'Unit #0781', driver: 'M. Garcia', status: 'Failed' },
-  { unit: 'Unit #2210', driver: 'D. Lee', status: 'Passed' },
+  { unit: 'Unit #1042', driver: 'J. Smith', passed: true },
+  { unit: 'Unit #0781', driver: 'M. Garcia', passed: false },
+  { unit: 'Unit #2210', driver: 'D. Lee', passed: true },
 ]
-const stats = [
-  { value: '10,000+', label: 'Inspections Daily' },
-  { value: '500+', label: 'Companies' },
-  { value: '99.9%', label: 'Uptime' },
-  { value: '50+', label: 'Countries' },
-]
-const features = [
-  { icon: ClipboardCheck, title: 'Digital Inspections', desc: 'Pre-trip and post-trip checklists with photo capture and digital signatures.' },
-  { icon: Truck, title: 'Fleet Management', desc: 'Track all vehicles, equipment, and assets in one centralized dashboard.' },
-  { icon: Shield, title: 'Compliance Ready', desc: 'DOT-compliant reports, driver logs, and exportable documentation.' },
-  { icon: Camera, title: 'Photo Evidence', desc: 'Capture and store vehicle condition photos with duplicate detection.' },
-  { icon: Wrench, title: 'Repair Tracking', desc: 'Log issues, assign mechanics, and track repairs to completion.' },
-  { icon: BarChart3, title: 'Analytics & Reports', desc: 'Actionable insights on fleet health, driver performance, and trends.' },
-]
+
+const stats = computed(() => [
+  { value: '10,000+', label: store.t('inspectionsDaily') },
+  { value: '500+', label: store.t('companies') },
+  { value: '99.9%', label: store.t('uptime') },
+  { value: '50+', label: store.t('countries') },
+])
+
+const features = computed(() => [
+  { icon: ClipboardCheck, title: store.t('digitalInspections'), desc: store.t('digitalInspectionsDesc') },
+  { icon: Truck, title: store.t('fleetManagement'), desc: store.t('fleetManagementDesc') },
+  { icon: Shield, title: store.t('complianceReady'), desc: store.t('complianceReadyDesc') },
+  { icon: Camera, title: store.t('photoEvidence'), desc: store.t('photoEvidenceDesc') },
+  { icon: Wrench, title: store.t('repairTracking'), desc: store.t('repairTrackingDesc') },
+  { icon: BarChart3, title: store.t('analyticsReports'), desc: store.t('analyticsReportsDesc') },
+])
 </script>
