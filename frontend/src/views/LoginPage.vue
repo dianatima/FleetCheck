@@ -33,6 +33,10 @@
           {{ authStore.error }}
         </div>
 
+        <div class="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/60 dark:bg-blue-900/20 dark:text-blue-200">
+          {{ store.t("noGoogleAccountHint") }}
+        </div>
+
         <button
           type="button"
           @click="handleGoogle"
@@ -121,16 +125,23 @@
           </button>
         </form>
 
+        <RouterLink
+          to="/register/company"
+          class="mt-4 w-full flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 dark:border-blue-800"
+        >
+          {{ store.t("createAccountWithEmail") }}
+        </RouterLink>
+
         <div
           class="mt-5 pt-5 border-t border-gray-100 dark:border-gray-700 text-center"
         >
           <p class="text-sm text-gray-500 dark:text-gray-400">
-            Don’t have a company account?
+            {{ store.t("alreadyCreatedWorkspaceWithEmail") }}
             <RouterLink
               to="/register/company"
               class="text-blue-600 dark:text-blue-400 font-medium hover:underline"
             >
-              Create company
+              {{ store.t("createItHere") }}
             </RouterLink>
           </p>
         </div>
@@ -158,6 +169,11 @@ const password = ref("");
 const showPass = ref(false);
 
 function redirectByRole() {
+  if (authStore.profile?.role === "driver" && authStore.profile?.status === 'pending') {
+    router.push('/pending');
+    return;
+  }
+
   if (authStore.profile?.role === "driver") {
     router.push("/driver");
     return;

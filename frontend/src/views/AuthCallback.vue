@@ -15,7 +15,9 @@ const authStore = useAuthStore();
 onMounted(async () => {
   await authStore.loadSession();
 
-  if (authStore.profile?.role === "driver") {
+  if (authStore.profile?.role === "driver" && authStore.profile?.status === 'pending') {
+    router.replace('/pending');
+  } else if (authStore.profile?.role === "driver") {
     router.replace("/driver");
   } else {
     router.replace("/dashboard");

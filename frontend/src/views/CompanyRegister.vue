@@ -172,13 +172,8 @@
 
             <div>
               <label class="label">Country *</label>
-              <select v-model="company.country" class="input-field">
-                <option>United States</option>
-                <option>Canada</option>
-                <option>Ukraine</option>
-                <option>Mexico</option>
-                <option>France</option>
-                <option>Spain</option>
+              <select v-model="company.country" class="input-field" @change="handleCompanyCountryChange">
+                <option v-for="country in prioritizedCountries" :key="country.code" :value="country.name">{{ country.name }}</option>
               </select>
             </div>
 
@@ -203,18 +198,20 @@
             <div>
               <label class="label">Phone</label>
               <input
-                v-model="company.phone"
+                :value="company.phone"
                 class="input-field"
                 type="tel"
-                placeholder="+1 (555) 000-0000"
+                :placeholder="selectedCompanyCountry.phonePlaceholder"
+                inputmode="tel"
+                @input="handleCompanyPhoneInput"
               />
             </div>
 
             <div class="sm:col-span-2">
               <label class="label">Address</label>
-              <input
+              <AddressAutocomplete
                 v-model="company.address"
-                class="input-field"
+                :country="company.country"
                 placeholder="123 Fleet Street"
               />
             </div>
@@ -259,10 +256,12 @@
             <div class="sm:col-span-2">
               <label class="label">Phone</label>
               <input
-                v-model="owner.phone"
+                :value="owner.phone"
                 class="input-field"
                 type="tel"
-                placeholder="+1 (555) 000-0000"
+                :placeholder="selectedCompanyCountry.phonePlaceholder"
+                inputmode="tel"
+                @input="handleOwnerPhoneInput"
               />
             </div>
           </div>
@@ -343,10 +342,14 @@ import { useAppStore } from "../stores/app";
 import { useAuthStore } from "@/stores/authStore";
 import LanguageSelector from "../components/shared/LanguageSelector.vue";
 import ThemeToggle from "../components/shared/ThemeToggle.vue";
+import AddressAutocomplete from "../components/shared/AddressAutocomplete.vue";
+import { formatPhoneByCountry, getCountryOption, getPreferredCountryCode, getPrioritizedCountries } from "@/lib/companyForm";
 
 const store = useAppStore();
 const authStore = useAuthStore();
 const router = useRouter();
+const browserLocale = typeof navigator !== "undefined" ? navigator.language : undefined;
+const defaultCountry = getCountryOption(getPreferredCountryCode(store.language, browserLocale));
 
 const step = ref(1);
 
@@ -358,7 +361,7 @@ const showConfirm = ref(false);
 
 const company = reactive({
   name: "",
-  country: "United States",
+  country: defaultCountry.name,
   state: "",
   city: "",
   phone: "",
@@ -389,6 +392,9 @@ const industryOptions = [
   "Other Fleet",
 ];
 
+const prioritizedCountries = computed(() => getPrioritizedCountries(store.language, browserLocale));
+const selectedCompanyCountry = computed(() => getCountryOption(company.country));
+
 const canProceedStep1 = computed(() => {
   return (
     email.value.trim().length > 0 &&
@@ -411,6 +417,19 @@ const canProceedCurrentStep = computed(() => {
   if (step.value === 3) return canProceedStep3.value;
   return true;
 });
+
+function handleCompanyCountryChange() {
+  company.phone = formatPhoneByCountry(company.phone, company.country);
+  owner.phone = formatPhoneByCountry(owner.phone, company.country);
+}
+
+function handleCompanyPhoneInput(event: Event) {
+  company.phone = formatPhoneByCountry((event.target as HTMLInputElement).value, company.country);
+}
+
+function handleOwnerPhoneInput(event: Event) {
+  owner.phone = formatPhoneByCountry((event.target as HTMLInputElement).value, company.country);
+}
 
 async function handleNext() {
   if (!canProceedCurrentStep.value) return;

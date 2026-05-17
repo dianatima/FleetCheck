@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -30,8 +30,10 @@ export const useVehicleStore = defineStore('vehicles', () => {
     const to = from + pageSize.value - 1
       
     if (!authStore.companyId) {
-        vehicles.value = []
-        return
+      vehicles.value = []
+      total.value = 0
+      loading.value = false
+      return
     }
 
     let query = supabase
@@ -195,6 +197,15 @@ export const useVehicleStore = defineStore('vehicles', () => {
     statusFilter.value = 'all'
     page.value = 1
   }
+
+  watch(
+    () => authStore.companyId,
+    async () => {
+      selectedVehicle.value = null
+      page.value = 1
+      await fetchVehicles()
+    }
+  )
 
   return {
     vehicles,

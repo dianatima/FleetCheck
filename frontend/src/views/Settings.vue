@@ -17,52 +17,172 @@
       </button>
     </div>
 
-    <!-- Company Profile -->
-    <div v-if="activeTab === 'company'" class="card p-6">
-      <h2 class="font-bold text-gray-900 dark:text-white mb-5">{{ store.t('companyProfile') }}</h2>
-
-      <div class="grid sm:grid-cols-2 gap-4 mb-4">
-        <div>
-          <label class="label">{{ store.t('companyName') }}</label>
-          <input v-model="companyForm.companyName" class="input-field" placeholder="Acme Trucking Inc." />
-        </div>
-        <div>
-          <label class="label">{{ store.t('phone') }}</label>
-          <input v-model="companyForm.phone" class="input-field" type="tel" placeholder="+1 (555) 000-0000" />
-        </div>
-      </div>
-
-      <div class="mb-4">
-        <label class="label">{{ store.t('address') }}</label>
-        <input v-model="companyForm.address" class="input-field" placeholder="123 Fleet Street" />
-      </div>
-
-      <div class="mb-6">
-        <label class="label">{{ store.t('industryType') }}</label>
-        <select v-model="companyForm.industry" class="input-field">
-          <option v-for="o in industryOptions" :key="o">{{ o }}</option>
-        </select>
-      </div>
-
-      <div class="border-t border-gray-100 dark:border-gray-700 pt-5 mb-5">
-        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">{{ store.t('fleetManager') }}</h3>
-        <div class="grid sm:grid-cols-2 gap-4">
+    <!-- Company Management -->
+    <div v-if="activeTab === 'company'" class="space-y-5">
+      <div class="card p-6">
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
           <div>
-            <label class="label">{{ store.t('firstName') }}</label>
-            <input v-model="managerForm.firstName" class="input-field" placeholder="John" />
+            <h2 class="font-bold text-gray-900 dark:text-white mb-2">Business Management</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+              One owner can have more than five companies. There is no hard limit in the UI. Add as many businesses as your workspace needs.
+            </p>
           </div>
-          <div>
-            <label class="label">{{ store.t('lastName') }}</label>
-            <input v-model="managerForm.lastName" class="input-field" placeholder="Smith" />
+          <div class="rounded-xl bg-blue-50 dark:bg-blue-900/20 px-4 py-3 min-w-44">
+            <p class="text-xs uppercase tracking-wide text-blue-500 dark:text-blue-300">Companies in workspace</p>
+            <p class="text-2xl font-bold text-blue-700 dark:text-blue-200">{{ companies.length }}</p>
           </div>
-          <div class="sm:col-span-2">
-            <label class="label">{{ store.t('phone') }}</label>
-            <input v-model="managerForm.phone" class="input-field" type="tel" placeholder="+1 (555) 000-0000" />
+        </div>
+
+        <div v-if="authStore.error" class="mt-4 rounded-xl bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+          {{ authStore.error }}
+        </div>
+        <div v-else-if="companyActionMessage" class="mt-4 rounded-xl bg-green-50 dark:bg-green-900/20 px-4 py-3 text-sm text-green-700 dark:text-green-300">
+          {{ companyActionMessage }}
+        </div>
+
+        <div v-if="!authStore.isAuthenticated" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+          <p class="font-semibold mb-1">You are not signed in.</p>
+          <p class="mb-3">Sign in to add companies to your workspace, or create your first company account from the registration flow.</p>
+          <div class="flex flex-wrap gap-2">
+            <RouterLink to="/login" class="btn-primary text-sm px-4 py-2">Sign in</RouterLink>
+            <RouterLink to="/register/company" class="btn-secondary text-sm px-4 py-2">Create first company</RouterLink>
           </div>
         </div>
       </div>
 
-      <button class="btn-primary text-sm">{{ store.t('save') }}</button>
+      <div class="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div class="card p-6">
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <h3 class="font-semibold text-gray-900 dark:text-white">Your businesses</h3>
+            <span class="text-xs text-gray-400 dark:text-gray-500">Unlimited list</span>
+          </div>
+
+          <div v-if="companies.length === 0" class="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            No companies connected yet.
+          </div>
+
+          <div v-else class="space-y-3">
+            <div
+              v-for="company in companies"
+              :key="company.company_id"
+              class="rounded-2xl border px-4 py-4 transition-colors"
+              :class="authStore.companyId === company.company_id
+                ? 'border-blue-300 bg-blue-50/70 dark:border-blue-700 dark:bg-blue-900/20'
+                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'"
+            >
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                    <h4 class="font-semibold text-gray-900 dark:text-white truncate">{{ company.company_name }}</h4>
+                    <span v-if="authStore.companyId === company.company_id" class="badge-green">Active</span>
+                    <span class="badge-blue">{{ company.role }}</span>
+                    <span v-if="company.status" class="badge-gray">{{ company.status }}</span>
+                  </div>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ company.industry || 'No industry selected' }}</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ formatCompanyLocation(company) }}</p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    class="btn-secondary text-sm px-4 py-2"
+                      :disabled="!authStore.isAuthenticated || authStore.companyId === company.company_id"
+                    @click="switchCompany(company.company_id)"
+                  >
+                    {{ authStore.companyId === company.company_id ? 'Current' : 'Switch' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="px-4 py-2 rounded-xl border text-sm font-medium transition-colors border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20 disabled:opacity-40"
+                    :disabled="!authStore.isAuthenticated"
+                    @click="openDeleteCompany(company.company_id)"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div class="card p-6">
+            <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Add business</h3>
+            <form class="space-y-4" @submit.prevent="handleCreateCompany">
+              <div>
+                <label class="label">Company name *</label>
+                <input v-model="createCompanyForm.name" class="input-field" placeholder="Prime Rentals" required />
+              </div>
+              <div>
+                <label class="label">Industry</label>
+                <select v-model="createCompanyForm.industry" class="input-field">
+                  <option value="">Select industry</option>
+                  <option v-for="o in industryOptions" :key="o">{{ o }}</option>
+                </select>
+              </div>
+              <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="label">Country</label>
+                  <select v-model="createCompanyForm.country" class="input-field" @change="handleCreateCompanyCountryChange">
+                    <option v-for="country in prioritizedCountries" :key="country.code" :value="country.name">{{ country.name }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="label">City</label>
+                  <input v-model="createCompanyForm.city" class="input-field" placeholder="Chicago" />
+                </div>
+              </div>
+              <div>
+                <label class="label">Phone</label>
+                <input
+                  :value="createCompanyForm.phone"
+                  class="input-field"
+                  :placeholder="selectedCreateCompanyCountry.phonePlaceholder"
+                  inputmode="tel"
+                  @input="handleCreateCompanyPhoneInput"
+                />
+              </div>
+              <div>
+                <label class="label">Address</label>
+                <AddressAutocomplete v-model="createCompanyForm.address" :country="createCompanyForm.country" placeholder="123 Fleet Street" />
+              </div>
+              <button type="submit" class="btn-primary text-sm w-full justify-center" :disabled="!authStore.isAuthenticated || authStore.loading || !createCompanyForm.name.trim()">
+                {{ authStore.loading ? 'Creating...' : 'Create company' }}
+              </button>
+            </form>
+          </div>
+
+          <div v-if="deleteTarget" class="card p-6 border border-red-200 dark:border-red-800">
+            <h3 class="font-semibold text-red-600 dark:text-red-300 mb-2">Delete company</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              You are deleting <span class="font-semibold text-gray-900 dark:text-white">{{ deleteTarget?.company_name }}</span>.
+              This action removes the company from your workspace. If you are the last member, it will be archived.
+            </p>
+            <p class="text-sm text-red-600 dark:text-red-300 mb-4">
+              {{ companies.length === 1
+                ? store.t('lastBusinessDeleteWarning')
+                : store.t('deleteBusinessAccessWarning') }}
+            </p>
+            <div class="space-y-4">
+              <div>
+                <label class="label">Confirm with your password</label>
+                <input v-model="deletePassword" type="password" class="input-field" placeholder="Current password" />
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  type="button"
+                  class="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                  :disabled="authStore.loading || !deletePassword"
+                  @click="handleDeleteCompany"
+                >
+                  {{ authStore.loading ? 'Deleting...' : 'Delete company' }}
+                </button>
+                <button type="button" class="btn-secondary text-sm px-4 py-2" @click="closeDeleteCompany">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Language -->
@@ -114,15 +234,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Building2, Globe, Sun, Moon, Check } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
 import type { Language } from '../stores/app'
 import AppLayout from '../components/layout/AppLayout.vue'
+import { useAuthStore } from '../stores/authStore'
+import AddressAutocomplete from '../components/shared/AddressAutocomplete.vue'
+import { formatPhoneByCountry, getCountryOption, getPreferredCountryCode, getPrioritizedCountries } from '@/lib/companyForm'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 const activeTab = ref('company')
 const appTheme = ref<'light' | 'dark'>('light')
+const companyActionMessage = ref('')
+const deletePassword = ref('')
+const deleteCompanyId = ref<string | null>(null)
+const browserLocale = typeof navigator !== 'undefined' ? navigator.language : undefined
+const defaultCountry = getCountryOption(getPreferredCountryCode(store.language, browserLocale))
 
 const tabs = computed(() => [
   { id: 'company',  icon: Building2, label: store.t('companyProfile') },
@@ -149,17 +278,111 @@ function selectTheme(id: string) {
 }
 
 const industryOptions = ['Trucking / Freight', 'Construction Equipment', 'Boom Lift Rental', 'Delivery Fleet', 'Taxi / Passenger', 'Service Vehicles', 'Other']
+const companies = computed(() => authStore.companyMemberships)
+const deleteTarget = computed(() => companies.value.find((company) => company.company_id === deleteCompanyId.value) || null)
+const prioritizedCountries = computed(() => getPrioritizedCountries(store.language, browserLocale))
+const selectedCreateCompanyCountry = computed(() => getCountryOption(createCompanyForm.country))
 
-const companyForm = reactive({
-  companyName: 'Acme Trucking Inc.',
-  phone: '+1 (555) 234-5678',
-  address: '456 Fleet Ave, Los Angeles, CA',
-  industry: 'Trucking / Freight',
+const createCompanyForm = reactive({
+  name: '',
+  country: defaultCountry.name,
+  state: '',
+  city: '',
+  address: '',
+  phone: '',
+  industry: '',
 })
 
-const managerForm = reactive({
-  firstName: 'James',
-  lastName: 'Davis',
-  phone: '+1 (555) 987-6543',
+onMounted(async () => {
+  if (!authStore.companyMemberships.length) {
+    await authStore.fetchCompanyMemberships()
+  }
 })
+
+function resetCreateCompanyForm() {
+  createCompanyForm.name = ''
+  createCompanyForm.country = defaultCountry.name
+  createCompanyForm.state = ''
+  createCompanyForm.city = ''
+  createCompanyForm.address = ''
+  createCompanyForm.phone = ''
+  createCompanyForm.industry = ''
+}
+
+function formatCompanyLocation(company: {
+  city?: string | null
+  state?: string | null
+  country?: string | null
+  address?: string | null
+}) {
+  const location = [company.city, company.state, company.country].filter(Boolean).join(', ')
+
+  if (location) {
+    return location
+  }
+
+  return company.address || 'No location provided'
+}
+
+function handleCreateCompanyCountryChange() {
+  createCompanyForm.phone = formatPhoneByCountry(createCompanyForm.phone, createCompanyForm.country)
+}
+
+function handleCreateCompanyPhoneInput(event: Event) {
+  createCompanyForm.phone = formatPhoneByCountry((event.target as HTMLInputElement).value, createCompanyForm.country)
+}
+
+function switchCompany(companyId: string) {
+  authStore.setActiveCompany(companyId)
+  companyActionMessage.value = 'Active company updated.'
+}
+
+function openDeleteCompany(companyId: string) {
+  deleteCompanyId.value = companyId
+  deletePassword.value = ''
+  companyActionMessage.value = ''
+}
+
+function closeDeleteCompany() {
+  deleteCompanyId.value = null
+  deletePassword.value = ''
+}
+
+async function handleCreateCompany() {
+  companyActionMessage.value = ''
+
+  const success = await authStore.createCompany({
+    name: createCompanyForm.name.trim(),
+    country: createCompanyForm.country.trim(),
+    state: createCompanyForm.state.trim(),
+    city: createCompanyForm.city.trim(),
+    address: createCompanyForm.address.trim(),
+    phone: createCompanyForm.phone.trim(),
+    industry: createCompanyForm.industry.trim(),
+  })
+
+  if (!success) {
+    return
+  }
+
+  companyActionMessage.value = 'Company created and added to your workspace.'
+  resetCreateCompanyForm()
+}
+
+async function handleDeleteCompany() {
+  if (!deleteTarget.value || !deletePassword.value) {
+    return
+  }
+
+  companyActionMessage.value = ''
+
+  const success = await authStore.deleteCompany(deleteTarget.value.company_id, deletePassword.value)
+
+  if (!success) {
+    return
+  }
+
+  companyActionMessage.value = `Company "${deleteTarget.value.company_name}" was removed from your workspace.`
+  closeDeleteCompany()
+}
 </script>

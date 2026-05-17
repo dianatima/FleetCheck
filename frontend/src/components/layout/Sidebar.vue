@@ -14,7 +14,7 @@
     <!-- Nav -->
     <nav class="flex-1 px-3 py-4 overflow-y-auto">
       <!-- Manager section -->
-      <div class="space-y-0.5 mb-4">
+      <div v-if="authStore.role !== 'driver'" class="space-y-0.5 mb-4">
         <RouterLink
           v-for="item in managerItems"
           :key="item.to"
@@ -31,10 +31,10 @@
       </div>
 
       <!-- Driver section separator -->
-      <div class="px-2 mb-2 mt-1">
+      <div v-if="authStore.role === 'driver'" class="px-2 mb-2 mt-1">
         <p class="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{{ store.t('driver') }}</p>
       </div>
-      <div class="space-y-0.5">
+      <div v-if="authStore.role === 'driver'" class="space-y-0.5">
         <RouterLink
           v-for="item in driverItems"
           :key="item.to"
@@ -64,8 +64,10 @@
 <script setup lang="ts">
 import { LayoutDashboard, Truck, Users, ClipboardList, FileText, Wrench, Settings, ChevronRight, LogOut, User, AlertTriangle } from 'lucide-vue-next'
 import { useAppStore } from '../../stores/app'
+import { useAuthStore } from '../../stores/authStore'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 
 const managerItems = [
   { icon: LayoutDashboard, label: 'dashboard', to: '/dashboard' },
@@ -79,6 +81,7 @@ const managerItems = [
 
 const driverItems = [
   { icon: User, label: 'driverDashboard', to: '/driver' },
+  { icon: User, label: 'profile', to: '/driver/profile' },
   { icon: Truck, label: 'vehicles', to: '/driver/vehicles' },
   { icon: FileText, label: 'reports', to: '/driver/reports' },
   { icon: ClipboardList, label: 'inspections', to: '/inspect/pre' },

@@ -1,320 +1,388 @@
 <template>
-  <AppLayout title="Driver Profile">
-    <RouterLink to="/drivers" class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 text-sm font-medium transition-colors">
+  <AppLayout :title="driver?.name || store.t('driverProfile')">
+    <RouterLink to="/drivers" class="mb-4 inline-flex items-center gap-2 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
       <ArrowLeft :size="16" /> {{ store.t('backToDrivers') }}
     </RouterLink>
 
-    <!-- Header card -->
-    <div class="card p-5 mb-5">
-      <div class="flex items-center gap-4">
-        <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0 shadow-md"
-             :style="{ background: driver.avatarColor }">
-          {{ initials(driver.name) }}
-        </div>
-        <div class="flex-1 min-w-0">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white leading-tight">{{ driver.name }}</h2>
-          <p class="text-sm text-gray-500 dark:text-gray-400">{{ driver.licenseClass }}</p>
-          <span :class="statusConfig[driver.status].badge" class="mt-1.5 inline-block">{{ statusConfig[driver.status].label }}</span>
-        </div>
-        <button @click="showEditModal = true" class="btn-secondary gap-2 text-sm self-start"><Pencil :size="15" /> {{ store.t('edit') }}</button>
+    <div v-if="message" class="mb-5 rounded-2xl bg-green-50 px-5 py-4 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
+      {{ message }}
+    </div>
+
+    <div v-if="localError" class="mb-5 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
+      {{ localError }}
+    </div>
+
+    <div v-if="loading" class="space-y-5 animate-pulse">
+      <div class="card h-40" />
+      <div class="grid gap-5 lg:grid-cols-2">
+        <div class="card h-64" />
+        <div class="card h-64" />
       </div>
     </div>
 
-    <!-- Details grid -->
-    <div class="grid lg:grid-cols-2 gap-5 mb-5">
-
-      <!-- Personal info -->
-      <div class="card p-5 space-y-4">
-        <h3 class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{{ store.t('personalInformation') }}</h3>
-        <DetailRow :icon="Mail" :label="store.t('emailField')" :value="driver.email" />
-        <DetailRow :icon="Phone" :label="store.t('phone')" :value="driver.phone" />
-        <DetailRow :icon="Cake" :label="store.t('dateOfBirth')" :value="driver.birthday ? formatDate(driver.birthday) : '—'" />
-        <DetailRow :icon="MapPin" :label="store.t('address')" :value="driver.address || '—'" />
-        <DetailRow :icon="CalendarDays" :label="store.t('hireDate')" :value="driver.hireDate ? formatDate(driver.hireDate) : '—'" />
-      </div>
-
-      <!-- Emergency + vehicle types -->
-      <div class="space-y-5">
-        <div class="border border-red-200 dark:border-red-800 rounded-xl p-5 bg-red-50/40 dark:bg-red-900/10 space-y-4">
-          <h3 class="text-xs font-semibold text-red-500 uppercase tracking-wider flex items-center gap-1.5"><Heart :size="12" /> {{ store.t('emergencyContact') }}</h3>
-          <DetailRow :icon="User" :label="store.t('contactName')" :value="driver.emergencyName || '—'" />
-          <DetailRow :icon="Phone" :label="store.t('phone')" :value="driver.emergencyPhone || '—'" />
-        </div>
-
-        <div class="card p-5">
-          <h3 class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">{{ store.t('allowedVehicleTypes') }}</h3>
-          <div class="flex flex-wrap gap-2">
-            <span v-for="t in driver.allowedVehicles" :key="t" class="badge-blue">{{ t }}</span>
-            <span v-if="!driver.allowedVehicles.length" class="text-sm text-gray-400">{{ store.t('noneAssigned') }}</span>
+    <div v-else-if="driver" class="space-y-5">
+      <div class="card p-5">
+        <div class="flex flex-wrap items-start gap-4">
+          <img
+            v-if="driver.avatarUrl"
+            :src="driver.avatarUrl"
+            :alt="driver.name"
+            class="h-20 w-20 rounded-2xl border border-gray-200 object-cover dark:border-gray-700"
+            referrerpolicy="no-referrer"
+          />
+          <div v-else class="flex h-20 w-20 items-center justify-center rounded-2xl text-xl font-bold text-white" :style="{ background: driver.avatarColor }">
+            {{ initials(driver.name) }}
           </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Documents -->
-    <div class="grid lg:grid-cols-2 gap-5 mb-5">
-      <!-- Driver license -->
-      <div class="card p-5 space-y-4">
-        <h3 class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-          <FileText :size="12" class="text-blue-500" /> {{ store.t('driverLicense') }}
-        </h3>
-        <DetailRow :icon="Hash" :label="store.t('licenseNumber')" :value="driver.licenseNo" mono />
-        <DetailRow :icon="Award" :label="store.t('class')" :value="driver.licenseClass" />
-        <div class="flex items-start gap-3">
-          <div class="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0">
-            <CalendarDays :size="15" class="text-gray-500 dark:text-gray-400" />
-          </div>
-          <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('expiryDate') }}</p>
-            <p class="text-sm font-semibold flex items-center gap-1.5 mt-0.5"
-               :class="isExpired(driver.licenseExpiry) ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'">
-              <AlertCircle v-if="isExpired(driver.licenseExpiry)" :size="14" />
-              {{ driver.licenseExpiry ? formatDate(driver.licenseExpiry) : '—' }}
-              <span v-if="isExpired(driver.licenseExpiry)" class="text-xs font-normal">(Expired)</span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Medical card -->
-      <div class="card p-5 space-y-4">
-        <h3 class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-          <FileText :size="12" class="text-green-500" /> {{ store.t('medicalCard') }}
-        </h3>
-        <DetailRow :icon="Hash" :label="store.t('cardNumber')" :value="driver.medCardNo || '—'" mono />
-        <div class="flex items-start gap-3">
-          <div class="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0">
-            <CalendarDays :size="15" class="text-gray-500 dark:text-gray-400" />
-          </div>
-          <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('expiryDate') }}</p>
-            <p class="text-sm font-semibold flex items-center gap-1.5 mt-0.5"
-               :class="isExpired(driver.medCardExpiry) ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'">
-              <AlertCircle v-if="isExpired(driver.medCardExpiry)" :size="14" />
-              {{ driver.medCardExpiry ? formatDate(driver.medCardExpiry) : '—' }}
-              <span v-if="isExpired(driver.medCardExpiry)" class="text-xs font-normal">(Expired)</span>
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Recent inspections -->
-    <div class="card mb-5">
-      <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
-        <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('recentInspections') }}</h3>
-        <RouterLink to="/reports" class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5">{{ store.t('viewAll') }} <ChevronRight :size="12" /></RouterLink>
-      </div>
-      <div class="divide-y divide-gray-50 dark:divide-gray-700/50">
-        <div v-for="r in inspections" :key="r.id" class="flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-          <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="r.status === 'pass' ? 'bg-green-500' : 'bg-red-500'" />
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ r.type }}</p>
-            <p class="text-xs text-gray-400">{{ r.date }}</p>
-          </div>
-          <span v-if="r.issues > 0" class="badge-red">{{ r.issues }} issues</span>
-          <span :class="r.status === 'pass' ? 'badge-green' : 'badge-red'">{{ r.status === 'pass' ? store.t('pass') : store.t('fail') }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Edit modal (same form as DriversPage, embedded) -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto">
-          <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showEditModal = false" />
-          <div class="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl my-8">
-            <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800 sticky top-0 bg-white dark:bg-gray-900 rounded-t-2xl z-10">
-              <h2 class="text-lg font-bold text-gray-900 dark:text-white">{{ store.t('editDriver') }}</h2>
-              <button @click="showEditModal = false" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                <X :size="18" />
-              </button>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ driver.name }}</h2>
+              <span :class="statusBadge(driver.status)">{{ statusLabel(driver.status) }}</span>
+              <span :class="availabilityBadge(driver)">{{ availabilityLabel(driver) }}</span>
             </div>
-            <form @submit.prevent="saveEdit" class="p-6 space-y-6">
-              <section>
-                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2"><User :size="15" class="text-blue-500" /> {{ store.t('personalInformation') }}</h3>
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div><label class="label">{{ store.t('firstName') }} <span class="text-red-500">*</span></label><input v-model="form.firstName" class="input-field" required /></div>
-                  <div><label class="label">{{ store.t('lastName') }} <span class="text-red-500">*</span></label><input v-model="form.lastName" class="input-field" required /></div>
-                  <div><label class="label">{{ store.t('emailField') }} <span class="text-red-500">*</span></label><input v-model="form.email" class="input-field" type="email" required /></div>
-                  <div><label class="label">{{ store.t('phone') }}</label><input v-model="form.phone" class="input-field" /></div>
-                  <div><label class="label">{{ store.t('dateOfBirth') }}</label><input v-model="form.birthday" class="input-field" type="date" /></div>
-                </div>
-                <div class="mt-4">
-                  <label class="label">{{ store.t('homeAddress') }}</label>
-                  <div class="relative"><MapPin :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input v-model="form.address" class="input-field pl-9" /></div>
-                </div>
-              </section>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ driver.email || '—' }}</p>
+            <p v-if="authStore.currentCompany" class="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ store.t('activeBusiness') }}: {{ authStore.currentCompany.company_name }}
+            </p>
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ availabilityHint(driver) }}</p>
+          </div>
 
-              <section class="border border-red-200 dark:border-red-800 rounded-xl p-4 bg-red-50/40 dark:bg-red-900/10">
-                <h3 class="text-sm font-semibold text-red-600 dark:text-red-400 mb-4 flex items-center gap-2"><Heart :size="15" /> {{ store.t('emergencyContact') }}</h3>
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div><label class="label">{{ store.t('contactName') }}</label><input v-model="form.emergencyName" class="input-field" /></div>
-                  <div><label class="label">{{ store.t('contactPhone') }}</label><input v-model="form.emergencyPhone" class="input-field" /></div>
-                </div>
-              </section>
-
-              <section class="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2"><FileText :size="15" class="text-blue-500" /> {{ store.t('driverLicense') }}</h3>
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div><label class="label">{{ store.t('licenseNumber') }} <span class="text-red-500">*</span></label><input v-model="form.licenseNo" class="input-field" required /></div>
-                  <div>
-                    <label class="label">{{ store.t('licenseClass') }} <span class="text-red-500">*</span></label>
-                    <select v-model="form.licenseClass" class="input-field" required>
-                      <option value="">{{ store.t('selectClass') }}</option>
-                      <option v-for="c in licenseClasses" :key="c" :value="c">{{ c }}</option>
-                    </select>
-                  </div>
-                  <div><label class="label">{{ store.t('expiryDate') }}</label><input v-model="form.licenseExpiry" class="input-field" type="date" /></div>
-                </div>
-              </section>
-
-              <section class="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2"><FileText :size="15" class="text-green-500" /> {{ store.t('medicalCard') }}</h3>
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div><label class="label">{{ store.t('medicalCardNumber') }}</label><input v-model="form.medCardNo" class="input-field" /></div>
-                  <div><label class="label">{{ store.t('expiryDate') }}</label><input v-model="form.medCardExpiry" class="input-field" type="date" /></div>
-                </div>
-              </section>
-
-              <section>
-                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2"><Briefcase :size="15" class="text-blue-500" /> {{ store.t('employment') }}</h3>
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div><label class="label">{{ store.t('hireDate') }}</label><input v-model="form.hireDate" class="input-field" type="date" /></div>
-                  <div>
-                    <label class="label">{{ store.t('status') }} <span class="text-red-500">*</span></label>
-                    <select v-model="form.status" class="input-field" required>
-                      <option v-for="s in driverStatuses" :key="s.value" :value="s.value">{{ s.label }}</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="mt-4">
-                  <label class="label">{{ store.t('allowedVehicleTypes') }}</label>
-                  <div class="flex flex-wrap gap-2 mt-1">
-                    <button v-for="t in vehicleTypes" :key="t" type="button" @click="toggleVehicleType(t)"
-                      class="px-3 py-1.5 rounded-lg border text-xs font-medium transition-all"
-                      :class="form.allowedVehicles.includes(t) ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-blue-300'">
-                      {{ t }}
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <div class="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <button type="button" @click="showEditModal = false" class="btn-secondary px-5 py-2.5">{{ store.t('cancel') }}</button>
-                <button type="submit" class="btn-primary px-6 py-2.5 gap-2"><Save :size="16" /> {{ store.t('saveChanges') }}</button>
-              </div>
-            </form>
+          <div v-if="driver.status === 'pending'" class="flex flex-wrap gap-2">
+            <button type="button" class="btn-secondary px-4 py-2 text-sm" @click="updateDriverStatus('active')">
+              {{ store.t('approveDriver') }}
+            </button>
+            <button type="button" class="btn-secondary px-4 py-2 text-sm text-red-600 dark:text-red-300" @click="updateDriverStatus('inactive')">
+              {{ store.t('rejectDriver') }}
+            </button>
           </div>
         </div>
-      </Transition>
-    </Teleport>
+      </div>
+
+      <div class="grid gap-5 xl:grid-cols-[minmax(0,2fr),360px]">
+        <div class="space-y-5">
+          <section class="card p-5 space-y-4">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{{ store.t('personalInformation') }}</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <DetailRow :icon="Mail" :label="store.t('emailField')" :value="driver.email || '—'" />
+              <DetailRow :icon="Phone" :label="store.t('phone')" :value="driver.phone || '—'" />
+              <DetailRow :icon="Cake" :label="store.t('dateOfBirth')" :value="driver.birthday ? formatDate(driver.birthday) : '—'" />
+              <DetailRow :icon="CalendarDays" :label="store.t('hireDate')" :value="driver.hireDate ? formatDate(driver.hireDate) : '—'" />
+            </div>
+            <DetailRow :icon="MapPin" :label="store.t('address')" :value="driver.address || '—'" />
+          </section>
+
+          <section class="rounded-2xl border border-red-200 bg-red-50/40 p-5 dark:border-red-800 dark:bg-red-900/10">
+            <h3 class="mb-4 text-xs font-semibold uppercase tracking-wider text-red-500">{{ store.t('emergencyContact') }}</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <DetailRow :icon="User" :label="store.t('contactName')" :value="driver.emergencyName || '—'" />
+              <DetailRow :icon="Phone" :label="store.t('contactPhone')" :value="driver.emergencyPhone || '—'" />
+            </div>
+          </section>
+        </div>
+
+        <div class="space-y-5">
+          <section class="card p-5 space-y-4">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{{ store.t('driverLicense') }}</h3>
+            <DetailRow :icon="Hash" :label="store.t('licenseNumber')" :value="driver.licenseNo || '—'" mono />
+            <DetailRow :icon="Award" :label="store.t('licenseClass')" :value="driver.licenseClass || '—'" />
+            <DetailRow :icon="CalendarDays" :label="store.t('expiryDate')" :value="driver.licenseExpiry ? formatDate(driver.licenseExpiry) : '—'" :value-class="isExpired(driver.licenseExpiry) ? 'text-red-600 dark:text-red-400' : ''" />
+            <a v-if="driver.licensePhotoUrl" :href="driver.licensePhotoUrl" target="_blank" rel="noreferrer" class="inline-flex text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">{{ store.t('view') }}</a>
+          </section>
+
+          <section class="card p-5 space-y-4">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{{ store.t('medicalCard') }}</h3>
+            <DetailRow :icon="Hash" :label="store.t('medicalCardNumber')" :value="driver.medCardNo || '—'" mono />
+            <DetailRow :icon="CalendarDays" :label="store.t('expiryDate')" :value="driver.medCardExpiry ? formatDate(driver.medCardExpiry) : '—'" :value-class="isExpired(driver.medCardExpiry) ? 'text-red-600 dark:text-red-400' : ''" />
+            <a v-if="driver.medCardPhotoUrl" :href="driver.medCardPhotoUrl" target="_blank" rel="noreferrer" class="inline-flex text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">{{ store.t('view') }}</a>
+          </section>
+
+          <section class="card p-5 space-y-4">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{{ store.t('status') }}</h3>
+            <div class="grid gap-3">
+              <DetailRow :icon="Briefcase" :label="store.t('availabilityBusiness')" :value="driver.activeCompanyName || authStore.currentCompany?.company_name || '—'" />
+              <DetailRow :icon="Truck" :label="store.t('vehicle')" :value="driver.activeVehicleName || '—'" />
+              <DetailRow :icon="ClipboardCheck" :label="store.t('type')" :value="driver.activeServiceType || '—'" />
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div v-else class="card p-6 text-sm text-gray-500 dark:text-gray-400">
+      {{ store.t('noDriversFound') }}
+    </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, defineComponent, h } from 'vue'
+import { defineComponent, h, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  ArrowLeft, Pencil, FileText, ChevronRight,
-  User, Mail, Phone, MapPin, Heart, Hash, Award, CalendarDays, Cake,
-  Briefcase, AlertCircle, X, Save
-} from 'lucide-vue-next'
+import { ArrowLeft, Award, Briefcase, Cake, CalendarDays, ClipboardCheck, Hash, Mail, MapPin, Phone, Truck, User } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
-const store = useAppStore()
+import { useAuthStore } from '../stores/authStore'
+import { supabase } from '@/lib/supabase'
+
+type DriverDetailRecord = {
+  id: string
+  authUserId: string | null
+  name: string
+  email: string
+  phone: string
+  birthday: string
+  address: string
+  emergencyName: string
+  emergencyPhone: string
+  licenseNo: string
+  licenseClass: string
+  licenseExpiry: string
+  licensePhotoUrl: string
+  medCardNo: string
+  medCardExpiry: string
+  medCardPhotoUrl: string
+  hireDate: string
+  status: string
+  avatarUrl: string
+  avatarColor: string
+  availabilityStatus: 'available' | 'busy' | 'maintenance'
+  activeCompanyName: string
+  activeVehicleName: string
+  activeServiceType: string
+}
 
 const route = useRoute()
+const store = useAppStore()
+const authStore = useAuthStore()
 
-// ─── DetailRow component ───
+const loading = ref(true)
+const localError = ref('')
+const message = ref('')
+const driver = ref<DriverDetailRecord | null>(null)
+
+const avatarColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
+const TODAY = new Date().toISOString().split('T')[0]
+
 const DetailRow = defineComponent({
-  props: { icon: Object, label: String, value: String, mono: Boolean },
+  props: {
+    icon: { type: Object, required: true },
+    label: { type: String, required: true },
+    value: { type: String, required: true },
+    mono: { type: Boolean, default: false },
+    valueClass: { type: String, default: '' },
+  },
   setup(props) {
     return () => h('div', { class: 'flex items-start gap-3' }, [
-      h('div', { class: 'w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0' },
-        [h(props.icon as any, { size: 15, class: 'text-gray-500 dark:text-gray-400' })]),
+      h('div', { class: 'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700' }, [
+        h(props.icon as any, { size: 15, class: 'text-gray-500 dark:text-gray-400' }),
+      ]),
       h('div', [
         h('p', { class: 'text-xs text-gray-500 dark:text-gray-400' }, props.label),
-        h('p', { class: `text-sm font-semibold text-gray-900 dark:text-white mt-0.5${props.mono ? ' font-mono' : ''}` }, props.value),
+        h('p', { class: `mt-0.5 text-sm font-semibold text-gray-900 dark:text-white${props.mono ? ' font-mono' : ''}${props.valueClass ? ` ${props.valueClass}` : ''}` }, props.value),
       ]),
     ])
   },
 })
 
-// ─── Config ───
-const licenseClasses = ['Class A CDL', 'Class B CDL', 'Class C CDL', 'Class D', 'Class E', 'Motorcycle']
-const vehicleTypes = ['Truck', 'Van', 'Car', 'Equipment', 'Bus', 'Trailer', 'Pickup', 'Other']
-const driverStatuses = computed(() => [
-  { value: 'active',   label: store.t('statusActive') },
-  { value: 'pending',  label: store.t('statusPending') },
-  { value: 'inactive', label: store.t('statusInactive') },
-])
-const statusConfig = computed((): Record<string, { label: string; badge: string }> => ({
-  'active':   { label: store.t('statusActive'),   badge: 'badge-green' },
-  'pending':  { label: store.t('statusPending'),  badge: 'badge-yellow' },
-  'inactive': { label: store.t('statusInactive'), badge: 'badge-gray' },
-}))
-
-const TODAY = new Date().toISOString().split('T')[0]
-function isExpired(d: string) { return !!d && d < TODAY }
-function formatDate(d: string) { if (!d) return '—'; const [y, m, day] = d.split('-'); return `${day}/${m}/${y}` }
-function initials(name: string) { return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() }
-
-// ─── Mock data keyed by id ───
-const allDrivers: Record<string, any> = {
-  '1': { id: 1, name: 'John Smith',    email: 'john.smith@fleet.com',   phone: '+1 (555) 012-3456', birthday: '1985-06-15', address: '123 Oak St, Chicago, IL',    emergencyName: 'Mary Smith',    emergencyPhone: '+1 555-9999', licenseNo: 'IL-D123456', licenseClass: 'Class A CDL', licenseExpiry: '2026-08-01', medCardNo: 'MC-001', medCardExpiry: '2025-12-01', hireDate: '2021-03-15', allowedVehicles: ['Truck','Pickup'], status: 'active',   avatarColor: '#3b82f6' },
-  '2': { id: 2, name: 'Maria Garcia',  email: 'maria.garcia@fleet.com', phone: '+1 (555) 234-5678', birthday: '1990-02-20', address: '456 Elm Ave, Dallas, TX',     emergencyName: 'Carlos Garcia', emergencyPhone: '+1 555-8888', licenseNo: 'TX-D234567', licenseClass: 'Class A CDL', licenseExpiry: '2027-03-15', medCardNo: 'MC-002', medCardExpiry: '2026-06-01', hireDate: '2020-07-01', allowedVehicles: ['Truck','Van'],    status: 'active',   avatarColor: '#10b981' },
-  '3': { id: 3, name: 'David Lee',     email: 'david.lee@fleet.com',    phone: '+1 (555) 345-6789', birthday: '1988-11-03', address: '789 Pine Rd, Miami, FL',      emergencyName: 'Susan Lee',     emergencyPhone: '+1 555-7777', licenseNo: 'FL-D345678', licenseClass: 'Class B CDL', licenseExpiry: '2025-11-20', medCardNo: 'MC-003', medCardExpiry: '2025-09-01', hireDate: '2022-01-10', allowedVehicles: ['Van','Bus'],      status: 'active',   avatarColor: '#f59e0b' },
-  '4': { id: 4, name: 'Sarah Johnson', email: 'sarah.j@fleet.com',      phone: '+1 (555) 456-7890', birthday: '1979-04-30', address: '321 Maple Dr, Seattle, WA',  emergencyName: 'Tom Johnson',   emergencyPhone: '+1 555-6666', licenseNo: 'WA-D456789', licenseClass: 'Class A CDL', licenseExpiry: '2026-01-10', medCardNo: 'MC-004', medCardExpiry: '2026-01-01', hireDate: '2019-11-20', allowedVehicles: ['Truck'],          status: 'pending',  avatarColor: '#ef4444' },
-  '5': { id: 5, name: 'Mike Brown',    email: 'mike.brown@fleet.com',   phone: '+1 (555) 567-8901', birthday: '1995-09-12', address: '654 Cedar Ln, Phoenix, AZ',  emergencyName: 'Lisa Brown',    emergencyPhone: '+1 555-5555', licenseNo: 'AZ-D567890', licenseClass: 'Class B CDL', licenseExpiry: '2027-05-01', medCardNo: 'MC-005', medCardExpiry: '2027-02-01', hireDate: '2023-05-08', allowedVehicles: ['Pickup','Car'],   status: 'pending',  avatarColor: '#06b6d4' },
-  '6': { id: 6, name: 'Anna White',    email: 'anna.white@fleet.com',   phone: '+1 (555) 678-9012', birthday: '1983-07-22', address: '987 Birch St, Boston, MA',   emergencyName: 'Paul White',    emergencyPhone: '+1 555-4444', licenseNo: 'MA-D678901', licenseClass: 'Class A CDL', licenseExpiry: '2024-12-01', medCardNo: 'MC-006', medCardExpiry: '2024-10-01', hireDate: '2018-09-03', allowedVehicles: [],                 status: 'inactive', avatarColor: '#ec4899' },
+function initials(value: string) {
+  return value.split(/\s+/).filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase() || 'DR'
 }
 
-const driver = reactive({ ...( allDrivers[route.params.id as string] ?? allDrivers['1'] ) })
-
-const inspections = [
-  { id: 1, date: 'Today 7:24 AM',      type: 'Pre-Trip',  status: 'pass', issues: 0 },
-  { id: 2, date: 'Yesterday 6:15 PM',  type: 'Post-Trip', status: 'pass', issues: 0 },
-  { id: 3, date: 'May 11, 7:02 AM',    type: 'Pre-Trip',  status: 'fail', issues: 2 },
-  { id: 4, date: 'May 10, 6:45 PM',    type: 'Post-Trip', status: 'pass', issues: 0 },
-  { id: 5, date: 'May 10, 7:15 AM',    type: 'Pre-Trip',  status: 'pass', issues: 0 },
-]
-
-// ─── Edit modal ───
-const showEditModal = ref(false)
-
-const form = ref({
-  firstName: driver.name.split(' ')[0],
-  lastName: driver.name.split(' ').slice(1).join(' '),
-  email: driver.email, phone: driver.phone, birthday: driver.birthday,
-  address: driver.address, emergencyName: driver.emergencyName, emergencyPhone: driver.emergencyPhone,
-  licenseNo: driver.licenseNo, licenseClass: driver.licenseClass, licenseExpiry: driver.licenseExpiry,
-  medCardNo: driver.medCardNo, medCardExpiry: driver.medCardExpiry,
-  hireDate: driver.hireDate, status: driver.status, allowedVehicles: [...driver.allowedVehicles],
-})
-
-function toggleVehicleType(t: string) {
-  const idx = form.value.allowedVehicles.indexOf(t)
-  if (idx === -1) form.value.allowedVehicles.push(t)
-  else form.value.allowedVehicles.splice(idx, 1)
+function formatDate(value: string) {
+  if (!value) return '—'
+  const [year, month, day] = value.split('-')
+  return `${day}/${month}/${year}`
 }
 
-function saveEdit() {
-  Object.assign(driver, {
-    name: `${form.value.firstName} ${form.value.lastName}`,
-    email: form.value.email, phone: form.value.phone, birthday: form.value.birthday,
-    address: form.value.address, emergencyName: form.value.emergencyName, emergencyPhone: form.value.emergencyPhone,
-    licenseNo: form.value.licenseNo, licenseClass: form.value.licenseClass, licenseExpiry: form.value.licenseExpiry,
-    medCardNo: form.value.medCardNo, medCardExpiry: form.value.medCardExpiry,
-    hireDate: form.value.hireDate, status: form.value.status, allowedVehicles: [...form.value.allowedVehicles],
-  })
-  showEditModal.value = false
+function isExpired(value: string) {
+  return Boolean(value) && value < TODAY
 }
+
+function avatarColorFor(seed: string) {
+  const total = seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return avatarColors[total % avatarColors.length]
+}
+
+function statusLabel(status: string) {
+  if (status === 'pending') return store.t('statusPending')
+  if (status === 'inactive') return store.t('statusInactive')
+  return store.t('statusActive')
+}
+
+function statusBadge(status: string) {
+  if (status === 'pending') return 'inline-flex rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+  if (status === 'inactive') return 'inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+  return 'inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300'
+}
+
+function isBusy(record: DriverDetailRecord) {
+  return record.availabilityStatus === 'busy' || Boolean(record.activeCompanyName || record.activeVehicleName || record.activeServiceType)
+}
+
+function availabilityLabel(record: DriverDetailRecord) {
+  if (record.availabilityStatus === 'maintenance') {
+    return store.t('statusInRepair')
+  }
+
+  return isBusy(record) ? store.t('availabilityBusy') : store.t('availabilityAvailable')
+}
+
+function availabilityBadge(record: DriverDetailRecord) {
+  if (record.availabilityStatus === 'maintenance') {
+    return 'inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+  }
+
+  return isBusy(record)
+    ? 'inline-flex rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+    : 'inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300'
+}
+
+function availabilityHint(record: DriverDetailRecord) {
+  if (!isBusy(record)) {
+    return store.t('availabilityReadyHint')
+  }
+
+  const segments = []
+
+  if (record.activeCompanyName) {
+    segments.push(`${store.t('availabilityBusiness')}: ${record.activeCompanyName}`)
+  }
+
+  if (record.activeVehicleName) {
+    segments.push(`${store.t('availabilityVehicle')}: ${record.activeVehicleName}`)
+  }
+
+  if (record.activeServiceType) {
+    segments.push(`${store.t('availabilityService')}: ${record.activeServiceType}`)
+  }
+
+  return segments.join(' · ') || store.t('availabilityAssignedElsewhere')
+}
+
+async function loadDriver() {
+  loading.value = true
+  localError.value = ''
+
+  if (!authStore.companyId || !route.params.id) {
+    driver.value = null
+    loading.value = false
+    return
+  }
+
+  const { data: driverData, error: driverError } = await supabase
+    .from('drivers')
+    .select('id, auth_user_id, first_name, last_name, email, phone, birthday, address, emergency_name, emergency_phone, license_no, license_class, license_expiry, license_photo_url, med_card_no, med_card_expiry, med_card_photo_url, hire_date, status, availability_status, active_company_name, active_vehicle_name, active_service_type')
+    .eq('id', route.params.id)
+    .maybeSingle()
+
+  if (driverError || !driverData) {
+    localError.value = driverError?.message || store.t('driverProfileNotFound')
+    driver.value = null
+    loading.value = false
+    return
+  }
+
+  if (driverData.auth_user_id) {
+    const { count, error: membershipError } = await supabase
+      .from('company_memberships')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('user_id', driverData.auth_user_id)
+      .eq('company_id', authStore.companyId)
+      .eq('role', 'driver')
+
+    if (membershipError || !count) {
+      localError.value = membershipError?.message || store.t('driverProfileNotFound')
+      driver.value = null
+      loading.value = false
+      return
+    }
+  }
+
+  let avatarUrl = ''
+
+  if (driverData.auth_user_id) {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('avatar_url, status')
+      .eq('auth_user_id', driverData.auth_user_id)
+      .maybeSingle()
+
+    avatarUrl = profileData?.avatar_url || ''
+
+    if (profileData?.status && profileData.status !== driverData.status) {
+      driverData.status = profileData.status
+    }
+  }
+
+  const name = [driverData.first_name, driverData.last_name].filter(Boolean).join(' ').trim() || driverData.email || 'Driver'
+
+  driver.value = {
+    id: driverData.id,
+    authUserId: driverData.auth_user_id || null,
+    name,
+    email: driverData.email || '',
+    phone: driverData.phone || '',
+    birthday: driverData.birthday || '',
+    address: driverData.address || '',
+    emergencyName: driverData.emergency_name || '',
+    emergencyPhone: driverData.emergency_phone || '',
+    licenseNo: driverData.license_no || '',
+    licenseClass: driverData.license_class || '',
+    licenseExpiry: driverData.license_expiry || '',
+    licensePhotoUrl: driverData.license_photo_url || '',
+    medCardNo: driverData.med_card_no || '',
+    medCardExpiry: driverData.med_card_expiry || '',
+    medCardPhotoUrl: driverData.med_card_photo_url || '',
+    hireDate: driverData.hire_date || '',
+    status: driverData.status || 'pending',
+    avatarUrl,
+    avatarColor: avatarColorFor(driverData.email || driverData.id),
+    availabilityStatus: driverData.availability_status || 'available',
+    activeCompanyName: driverData.active_company_name || '',
+    activeVehicleName: driverData.active_vehicle_name || '',
+    activeServiceType: driverData.active_service_type || '',
+  }
+
+  loading.value = false
+}
+
+async function updateDriverStatus(nextStatus: 'active' | 'inactive') {
+  if (!driver.value) {
+    return
+  }
+
+  const { error: driverError } = await supabase
+    .from('drivers')
+    .update({ status: nextStatus })
+    .eq('id', driver.value.id)
+
+  if (driverError) {
+    localError.value = driverError.message
+    return
+  }
+
+  if (driver.value.authUserId) {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ status: nextStatus })
+      .eq('auth_user_id', driver.value.authUserId)
+
+    if (profileError) {
+      localError.value = profileError.message
+      return
+    }
+  }
+
+  message.value = nextStatus === 'active' ? store.t('driverApproved') : store.t('driverRejected')
+  await loadDriver()
+}
+
+onMounted(loadDriver)
+
+watch(
+  () => [route.params.id, authStore.companyId],
+  () => {
+    message.value = ''
+    loadDriver()
+  },
+)
 </script>
-
-<style scoped>
-.badge-blue   { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400; }
-.badge-yellow { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400; }
-.modal-enter-active, .modal-leave-active { transition: opacity 0.2s ease; }
-.modal-enter-from, .modal-leave-to { opacity: 0; }
-</style>

@@ -36,6 +36,16 @@
       </button>
     </div>
 
+    <div v-if="authStore.currentCompany" class="card p-3 mb-5 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Active business</p>
+        <p class="font-semibold text-gray-900 dark:text-white">{{ authStore.currentCompany.company_name }}</p>
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400 max-w-xl">
+        Vehicles marked as busy should not be assigned in another business until the current trip ends.
+      </p>
+    </div>
+
     <!-- Loading / Error -->
     <div v-if="vehicleStore.loading" class="card p-6 text-sm text-gray-500">
       Loading vehicles...
@@ -169,6 +179,17 @@
                   <span :class="statusConfig[v.status]?.badge || 'badge-gray'">
                     {{ statusConfig[v.status]?.label || v.status }}
                   </span>
+                </td>
+
+                <td class="px-4 py-3">
+                  <div class="flex flex-col gap-1 min-w-44">
+                    <span :class="getAvailabilityBadgeClass(v)">
+                      {{ getAvailabilityLabel(v) }}
+                    </span>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                      {{ getAvailabilityHint(v) }}
+                    </p>
+                  </div>
                 </td>
 
                 <td class="px-4 py-3">
@@ -539,6 +560,11 @@ type VehicleStatus = "active" | "needs-attention" | "blocked" | "in-repair";
 type Vehicle = {
   id: string;
   company_id?: string | null;
+  availability_status?: "available" | "busy" | "maintenance" | null;
+  active_company_name?: string | null;
+  active_driver_name?: string | null;
+  active_service_type?: string | null;
+  active_assignment_label?: string | null;
   unit: string;
   make: string;
   model: string;
@@ -557,8 +583,6 @@ const store = useAppStore();
 const vehicleStore = useVehicleStore();
 const router = useRouter();
 const authStore = useAuthStore();
-console.log("AUTH PROFILE", authStore.profile);
-console.log("COMPANY ID", authStore.companyId);
 const showModal = ref(false);
 const editingId = ref<string | null>(null);
 const photoPreview = ref<string | null>(null);
@@ -627,6 +651,56 @@ function closeModal() {
 
 function getVehicleName(v: Vehicle) {
   return `${v.make || ""} ${v.model || ""}`.trim();
+}
+
+function isVehicleBusy(v: Vehicle) {
+  return v.availability_status === "busy" || Boolean(v.active_company_name || v.active_driver_name || v.active_assignment_label);
+}
+
+function getAvailabilityLabel(v: Vehicle) {
+  if (v.availability_status === "maintenance") {
+    return "Maintenance"
+  }
+
+  return isVehicleBusy(v) ? "Busy" : "Available"
+}
+
+function getAvailabilityHint(v: Vehicle) {
+  if (v.availability_status === "maintenance") {
+    return "Temporarily unavailable until maintenance is completed."
+  }
+
+  if (!isVehicleBusy(v)) {
+    return "Ready to be assigned in the current business."
+  }
+
+  if (v.active_assignment_label) {
+    return v.active_assignment_label
+  }
+
+  const segments = []
+
+  if (v.active_driver_name) {
+    segments.push(`Driver: ${v.active_driver_name}`)
+  }
+
+  if (v.active_company_name) {
+    segments.push(`Business: ${v.active_company_name}`)
+  }
+
+  if (v.active_service_type) {
+    segments.push(`Service: ${v.active_service_type}`)
+  }
+
+  return segments.join(' · ') || 'Currently assigned to another active trip.'
+}
+
+function getAvailabilityBadgeClass(v: Vehicle) {
+  if (v.availability_status === "maintenance") {
+    return 'badge-gray'
+  }
+
+  return isVehicleBusy(v) ? 'badge-yellow' : 'badge-green'
 }
 
 function startEdit(v: Vehicle) {
@@ -742,6 +816,7 @@ const vehicleHeaders = computed(() => [
   store.t("vin"),
   store.t("odometer"),
   store.t("status"),
+  'Availability',
   "",
 ]);
 </script>

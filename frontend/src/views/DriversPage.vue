@@ -15,7 +15,59 @@
           <option value="inactive">{{ store.t('statusInactive') }}</option>
         </select>
       </div>
-      <button @click="openAddModal" class="btn-primary gap-2 text-sm"><Plus :size="16" /> {{ store.t('addDriver') }}</button>
+      <button @click="handleRefreshInviteCode" class="btn-primary gap-2 text-sm"><Plus :size="16" /> {{ companyInviteCode ? store.t('rotateBusinessCode') : store.t('generateBusinessCode') }}</button>
+    </div>
+
+    <div v-if="authStore.currentCompany" class="card p-3 mb-5 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ store.t('activeBusiness') }}</p>
+        <p class="font-semibold text-gray-900 dark:text-white">{{ authStore.currentCompany.company_name }}</p>
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400 max-w-xl">
+        {{ store.t('driverInvitationsHelp') }}
+      </p>
+    </div>
+
+    <div v-if="authStore.currentCompany" class="card p-4 mb-5 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ store.t('driverInvitations') }}</p>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ store.t('inviteDriversTo') }} {{ authStore.currentCompany.company_name }}</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ store.t('businessInviteCodeHelp') }}</p>
+        </div>
+        <button @click="handleRefreshInviteCode" class="btn-secondary gap-2 text-sm"><Plus :size="16" /> {{ companyInviteCode ? store.t('rotateBusinessCode') : store.t('generateBusinessCode') }}</button>
+      </div>
+
+      <div v-if="inviteMessage" class="rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
+        {{ inviteMessage }}
+      </div>
+
+      <div v-if="!companyInviteCode" class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+        {{ store.t('noBusinessInviteCode') }}
+      </div>
+
+      <div v-else class="rounded-xl border border-gray-200 px-4 py-4 dark:border-gray-700">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ store.t('businessInviteCode') }}</p>
+            <p class="font-mono text-sm font-semibold text-gray-900 dark:text-white">{{ companyInviteCode }}</p>
+          </div>
+          <span class="badge-blue">{{ store.t('statusActive') }}</span>
+        </div>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">{{ store.t('businessInviteCodeHelp') }}</p>
+        <div class="mt-4 rounded-xl bg-gray-50 px-4 py-3 dark:bg-gray-800/70">
+          <p class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ store.t('driverRegistrationLink') }}</p>
+          <a :href="driverRegistrationLink" target="_blank" rel="noreferrer" class="mt-1 block break-all text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+            {{ driverRegistrationLink }}
+          </a>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button type="button" class="btn-secondary px-3 py-1.5 text-xs" @click="copyInvite(companyInviteCode)">{{ store.t('copyCode') }}</button>
+          <button type="button" class="btn-secondary px-3 py-1.5 text-xs" @click="copyInviteLink(companyInviteCode)">{{ store.t('copyLink') }}</button>
+          <a :href="driverRegistrationLink" target="_blank" rel="noreferrer" class="btn-secondary px-3 py-1.5 text-xs">{{ store.t('openRegistrationPage') }}</a>
+          <button type="button" class="btn-secondary px-3 py-1.5 text-xs" @click="handleRefreshInviteCode">{{ store.t('rotateBusinessCode') }}</button>
+        </div>
+      </div>
     </div>
 
     <!-- Summary badges -->
@@ -37,13 +89,14 @@
               <th class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap">{{ store.t('licExpiry') }}</th>
               <th class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap">{{ store.t('medExpiry') }}</th>
               <th class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap">{{ store.t('allowedVehicles') }}</th>
+              <th class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap">{{ store.t('availability') }}</th>
               <th class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3">{{ store.t('status') }}</th>
               <th class="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="filtered.length === 0">
-              <td colspan="8" class="text-center py-12 text-sm text-gray-400">{{ store.t('noDriversFound') }}</td>
+              <td colspan="9" class="text-center py-12 text-sm text-gray-400">{{ store.t('noDriversFound') }}</td>
             </tr>
             <tr
               v-for="d in filtered"
@@ -88,11 +141,31 @@
                   <span v-if="!d.allowedVehicles.length" class="text-xs text-gray-400">—</span>
                 </div>
               </td>
+              <td class="px-4 py-3">
+                <div class="flex flex-col gap-1 min-w-44">
+                  <span :class="driverAvailabilityBadge(d)">{{ driverAvailabilityLabel(d) }}</span>
+                  <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ driverAvailabilityHint(d) }}</p>
+                </div>
+              </td>
               <!-- Status -->
               <td class="px-4 py-3"><span :class="statusConfig[d.status].badge">{{ statusConfig[d.status].label }}</span></td>
               <!-- Actions — stop propagation so row click doesn't also trigger -->
               <td class="px-4 py-3" @click.stop>
-                <div class="flex items-center gap-1">
+                <div class="flex items-center gap-1 flex-wrap justify-end">
+                  <button
+                    v-if="d.status === 'pending'"
+                    @click="updateDriverStatus(d, 'active')"
+                    class="btn-secondary px-2.5 py-1 text-xs"
+                  >
+                    {{ store.t('approveDriver') }}
+                  </button>
+                  <button
+                    v-if="d.status === 'pending'"
+                    @click="updateDriverStatus(d, 'inactive')"
+                    class="btn-secondary px-2.5 py-1 text-xs text-red-600 dark:text-red-300"
+                  >
+                    {{ store.t('rejectDriver') }}
+                  </button>
                   <button @click="startEdit(d)" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
                     <Pencil :size="14" />
                   </button>
@@ -279,12 +352,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, defineComponent, h } from 'vue'
+import { ref, computed, defineComponent, h, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Filter, Plus, X, Save, Pencil, Trash2, User, MapPin, Heart, FileText, Camera, Briefcase, Eye, EyeOff, AlertCircle } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '../stores/authStore'
+import { supabase } from '@/lib/supabase'
 const store = useAppStore()
+const authStore = useAuthStore()
 
 const PhotoUpload = defineComponent({
   props: { label: String },
@@ -337,8 +413,17 @@ const router = useRouter()
 const search = ref('')
 const filterStatus = ref('all')
 const showModal = ref(false)
-const editingId = ref<number | null>(null)
+const editingId = ref<string | number | null>(null)
 const showPass = ref(false)
+const inviteMessage = ref('')
+const companyInviteCode = computed(() => authStore.currentCompany?.driver_invite_code || '')
+const driverRegistrationLink = computed(() => {
+  if (!companyInviteCode.value) {
+    return `${window.location.origin}/register/driver`
+  }
+
+  return `${window.location.origin}/register/driver?code=${encodeURIComponent(companyInviteCode.value)}`
+})
 
 // ─── Config ───
 const licenseClasses = ['Class A CDL', 'Class B CDL', 'Class C CDL', 'Class D', 'Class E', 'Motorcycle']
@@ -372,13 +457,55 @@ function initials(name: string) {
   return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
 }
 
+function avatarColorFor(value: string, index: number) {
+  const seed = `${value}-${index}`
+  const total = seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return avatarColors[total % avatarColors.length]
+}
+
 // ─── Type ───
 interface Driver {
-  id: number; name: string; email: string; phone: string; birthday: string
+  id: string | number; name: string; email: string; phone: string; birthday: string
+  authUserId?: string
   address: string; emergencyName: string; emergencyPhone: string
   licenseNo: string; licenseClass: string; licenseExpiry: string
   medCardNo: string; medCardExpiry: string; hireDate: string
   status: string; allowedVehicles: string[]; avatarColor: string
+  availability_status?: 'available' | 'busy'; activeCompanyName?: string; activeVehicleName?: string; activeServiceType?: string
+}
+
+function isDriverBusy(driver: Driver) {
+  return driver.availability_status === 'busy' || Boolean(driver.activeCompanyName || driver.activeVehicleName || driver.activeServiceType)
+}
+
+function driverAvailabilityLabel(driver: Driver) {
+  return isDriverBusy(driver) ? store.t('availabilityBusy') : store.t('availabilityAvailable')
+}
+
+function driverAvailabilityHint(driver: Driver) {
+  if (!isDriverBusy(driver)) {
+    return store.t('availabilityReadyHint')
+  }
+
+  const segments = []
+
+  if (driver.activeCompanyName) {
+    segments.push(`${store.t('availabilityBusiness')}: ${driver.activeCompanyName}`)
+  }
+
+  if (driver.activeVehicleName) {
+    segments.push(`${store.t('availabilityVehicle')}: ${driver.activeVehicleName}`)
+  }
+
+  if (driver.activeServiceType) {
+    segments.push(`${store.t('availabilityService')}: ${driver.activeServiceType}`)
+  }
+
+  return segments.join(' · ') || store.t('availabilityAssignedElsewhere')
+}
+
+function driverAvailabilityBadge(driver: Driver) {
+  return isDriverBusy(driver) ? 'badge-yellow' : 'badge-green'
 }
 
 // ─── Card ───
@@ -413,6 +540,54 @@ function closeModal() {
   showPass.value = false
 }
 
+async function copyInvite(value: string) {
+  await navigator.clipboard.writeText(value)
+  inviteMessage.value = `${store.t('inviteCodeCopied')} ${value}`
+}
+
+async function copyInviteLink(code: string) {
+  const link = `${window.location.origin}/register/driver?code=${encodeURIComponent(code)}`
+  await navigator.clipboard.writeText(link)
+  inviteMessage.value = store.t('inviteLinkCopied')
+}
+
+async function handleRefreshInviteCode() {
+  const hadCode = Boolean(companyInviteCode.value)
+  const invite = await authStore.createDriverInvite()
+
+  if (!invite) {
+    return
+  }
+
+  inviteMessage.value = hadCode ? store.t('businessInviteCodeUpdated') : store.t('businessInviteCodeCreated')
+}
+
+async function updateDriverStatus(driver: Driver, nextStatus: 'active' | 'inactive') {
+  const { error: driverError } = await supabase
+    .from('drivers')
+    .update({ status: nextStatus })
+    .eq('id', driver.id)
+
+  if (driverError) {
+    console.error('Unable to update driver status.', driverError)
+    return
+  }
+
+  if (driver.authUserId) {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ status: nextStatus })
+      .eq('auth_user_id', driver.authUserId)
+
+    if (profileError) {
+      console.error('Unable to update driver profile status.', profileError)
+    }
+  }
+
+  inviteMessage.value = nextStatus === 'active' ? store.t('driverApproved') : store.t('driverRejected')
+  await fetchDrivers()
+}
+
 function startEdit(d: Driver) {
   const [firstName, ...rest] = d.name.split(' ')
   form.value = {
@@ -437,7 +612,7 @@ let nextId = 100
 
 function handleSave() {
   const name = `${form.value.firstName} ${form.value.lastName}`
-  const data: Omit<Driver, 'id' | 'avatarColor'> = {
+  const data: Omit<Driver, 'id' | 'avatarColor' | 'availability_status' | 'activeCompanyName' | 'activeVehicleName' | 'activeServiceType'> = {
     name, email: form.value.email, phone: form.value.phone, birthday: form.value.birthday,
     address: form.value.address, emergencyName: form.value.emergencyName, emergencyPhone: form.value.emergencyPhone,
     licenseNo: form.value.licenseNo, licenseClass: form.value.licenseClass, licenseExpiry: form.value.licenseExpiry,
@@ -448,26 +623,94 @@ function handleSave() {
     const idx = drivers.value.findIndex(d => d.id === editingId.value)
     if (idx !== -1) drivers.value[idx] = { ...drivers.value[idx], ...data }
   } else {
-    drivers.value.push({ id: ++nextId, avatarColor: avatarColors[nextId % avatarColors.length], ...data })
+    drivers.value.push({ id: ++nextId, avatarColor: avatarColors[nextId % avatarColors.length], availability_status: 'available', ...data })
   }
   closeModal()
 }
 
 // ─── Data ───
-const drivers = ref<Driver[]>([
-  { id: 1, name: 'John Smith',    email: 'john.smith@fleet.com',   phone: '+1 (555) 012-3456', birthday: '1985-06-15', address: '123 Oak St, Chicago, IL',    emergencyName: 'Mary Smith',    emergencyPhone: '+1 555-9999', licenseNo: 'IL-D123456', licenseClass: 'Class A CDL', licenseExpiry: '2026-08-01', medCardNo: 'MC-001', medCardExpiry: '2025-12-01', hireDate: '2021-03-15', allowedVehicles: ['Truck','Pickup'], status: 'active',   avatarColor: '#3b82f6' },
-  { id: 2, name: 'Maria Garcia',  email: 'maria.garcia@fleet.com', phone: '+1 (555) 234-5678', birthday: '1990-02-20', address: '456 Elm Ave, Dallas, TX',     emergencyName: 'Carlos Garcia', emergencyPhone: '+1 555-8888', licenseNo: 'TX-D234567', licenseClass: 'Class A CDL', licenseExpiry: '2027-03-15', medCardNo: 'MC-002', medCardExpiry: '2026-06-01', hireDate: '2020-07-01', allowedVehicles: ['Truck','Van'],    status: 'active',   avatarColor: '#10b981' },
-  { id: 3, name: 'David Lee',     email: 'david.lee@fleet.com',    phone: '+1 (555) 345-6789', birthday: '1988-11-03', address: '789 Pine Rd, Miami, FL',      emergencyName: 'Susan Lee',     emergencyPhone: '+1 555-7777', licenseNo: 'FL-D345678', licenseClass: 'Class B CDL', licenseExpiry: '2025-11-20', medCardNo: 'MC-003', medCardExpiry: '2025-09-01', hireDate: '2022-01-10', allowedVehicles: ['Van','Bus'],      status: 'active',   avatarColor: '#f59e0b' },
-  { id: 4, name: 'Sarah Johnson', email: 'sarah.j@fleet.com',      phone: '+1 (555) 456-7890', birthday: '1979-04-30', address: '321 Maple Dr, Seattle, WA',  emergencyName: 'Tom Johnson',   emergencyPhone: '+1 555-6666', licenseNo: 'WA-D456789', licenseClass: 'Class A CDL', licenseExpiry: '2026-01-10', medCardNo: 'MC-004', medCardExpiry: '2026-01-01', hireDate: '2019-11-20', allowedVehicles: ['Truck'],          status: 'pending',  avatarColor: '#ef4444' },
-  { id: 5, name: 'Mike Brown',    email: 'mike.brown@fleet.com',   phone: '+1 (555) 567-8901', birthday: '1995-09-12', address: '654 Cedar Ln, Phoenix, AZ',  emergencyName: 'Lisa Brown',    emergencyPhone: '+1 555-5555', licenseNo: 'AZ-D567890', licenseClass: 'Class B CDL', licenseExpiry: '2027-05-01', medCardNo: 'MC-005', medCardExpiry: '2027-02-01', hireDate: '2023-05-08', allowedVehicles: ['Pickup','Car'],   status: 'pending',  avatarColor: '#06b6d4' },
-  { id: 6, name: 'Anna White',    email: 'anna.white@fleet.com',   phone: '+1 (555) 678-9012', birthday: '1983-07-22', address: '987 Birch St, Boston, MA',   emergencyName: 'Paul White',    emergencyPhone: '+1 555-4444', licenseNo: 'MA-D678901', licenseClass: 'Class A CDL', licenseExpiry: '2024-12-01', medCardNo: 'MC-006', medCardExpiry: '2024-10-01', hireDate: '2018-09-03', allowedVehicles: [],                 status: 'inactive', avatarColor: '#ec4899' },
-])
+const drivers = ref<Driver[]>([])
+
+async function fetchDrivers() {
+  if (!authStore.companyId) {
+    drivers.value = []
+    return
+  }
+
+  const { data: memberships, error: membershipError } = await supabase
+    .from('company_memberships')
+    .select('user_id')
+    .eq('company_id', authStore.companyId)
+    .eq('role', 'driver')
+
+  if (membershipError) {
+    console.error('Unable to load company driver memberships.', membershipError)
+    drivers.value = []
+    return
+  }
+
+  const driverUserIds = (memberships || [])
+    .map((membership) => membership.user_id)
+    .filter(Boolean)
+
+  if (!driverUserIds.length) {
+    drivers.value = []
+    return
+  }
+
+  const { data, error: driversError } = await supabase
+    .from('drivers')
+    .select('id, auth_user_id, first_name, last_name, email, phone, birthday, address, emergency_name, emergency_phone, license_no, license_class, license_expiry, med_card_no, med_card_expiry, hire_date, status, availability_status, active_company_name, active_vehicle_name, active_service_type')
+    .in('auth_user_id', driverUserIds)
+    .order('created_at', { ascending: false })
+
+  if (driversError) {
+    console.error('Unable to load drivers.', driversError)
+    drivers.value = []
+    return
+  }
+
+  drivers.value = (data || []).map((driver, index) => ({
+    id: driver.id,
+    authUserId: driver.auth_user_id || undefined,
+    name: [driver.first_name, driver.last_name].filter(Boolean).join(' ').trim() || driver.email || 'Driver',
+    email: driver.email || '',
+    phone: driver.phone || '',
+    birthday: driver.birthday || '',
+    address: driver.address || '',
+    emergencyName: driver.emergency_name || '',
+    emergencyPhone: driver.emergency_phone || '',
+    licenseNo: driver.license_no || '',
+    licenseClass: driver.license_class || '',
+    licenseExpiry: driver.license_expiry || '',
+    medCardNo: driver.med_card_no || '',
+    medCardExpiry: driver.med_card_expiry || '',
+    hireDate: driver.hire_date || '',
+    status: driver.status || 'pending',
+    allowedVehicles: [],
+    avatarColor: avatarColorFor(driver.email || driver.id, index),
+    availability_status: driver.availability_status || 'available',
+    activeCompanyName: driver.active_company_name || undefined,
+    activeVehicleName: driver.active_vehicle_name || undefined,
+    activeServiceType: driver.active_service_type || undefined,
+  }))
+}
 
 const filtered = computed(() => drivers.value.filter(d => {
   const q = search.value.toLowerCase()
   const matchSearch = d.name.toLowerCase().includes(q) || d.licenseNo.toLowerCase().includes(q) || d.email.toLowerCase().includes(q)
   return matchSearch && (filterStatus.value === 'all' || d.status === filterStatus.value)
 }))
+
+onMounted(() => {
+  authStore.fetchDriverInvites()
+  fetchDrivers()
+})
+
+watch(() => authStore.companyId, () => {
+  authStore.fetchDriverInvites()
+  fetchDrivers()
+})
 </script>
 
 <style scoped>
