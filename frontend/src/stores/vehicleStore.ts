@@ -102,17 +102,27 @@ export const useVehicleStore = defineStore('vehicles', () => {
   async function createVehicle(vehicle: any) {
     loading.value = true
     error.value = null
-
-    const { error: supabaseError } = await supabase
+  
+    if (!authStore.companyId) {
+      error.value = 'Company ID is missing'
+      loading.value = false
+      return false
+    }
+  
+    const { data, error: supabaseError } = await supabase
       .from('vehicles')
-      .insert(vehicle)
-
+      .insert({
+        ...vehicle,
+        company_id: authStore.companyId,
+      })
+      .select()
+  
     if (supabaseError) {
       error.value = supabaseError.message
       loading.value = false
       return false
     }
-
+  
     await fetchVehicles()
     loading.value = false
     return true
