@@ -113,10 +113,13 @@ import { ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Camera, Check, CheckCheck, X, Gauge, Lightbulb, Disc, Droplets, ShieldCheck, FileText } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '../stores/authStore'
 import AppLayout from '../components/layout/AppLayout.vue'
+import { supabase } from '@/lib/supabase'
 
-defineProps<{ isPostTrip?: boolean }>()
+const props = defineProps<{ isPostTrip?: boolean }>()
 const store = useAppStore()
+const authStore = useAuthStore()
 const router = useRouter()
 
 type State = 'pass' | 'fail' | null
@@ -155,7 +158,35 @@ const passCount = computed(() => items.filter(i => i.state === 'pass').length)
 const failCount = computed(() => items.filter(i => i.state === 'fail').length)
 const progress  = computed(() => Math.round((doneCount.value / items.length) * 100))
 
-function handleSubmit() {
+async function handleSubmit() {
+  if (authStore.user?.id && authStore.companyId) {
+    try {
+      const { data: driverRecord } = await supabase
+        .from('drivers')
+        .select('id')
+        .eq('auth_user_id', authStore.user.id)
+        .maybeSingle()
+
+      const notes = items
+        .filter((item) => item.state === 'fail' && item.note.trim())
+        .map((item) => `${store.t(item.labelKey)}: ${item.note.trim()}`)
+        .join('\n')
+
+      await supabase
+        .from('inspections')
+        .insert({
+          company_id: authStore.companyId,
+          driver_id: driverRecord?.id || null,
+          performed_by_user_id: authStore.user.id,
+          inspection_type: props.isPostTrip ? 'post-trip' : 'pre-trip',
+          result: failCount.value > 0 ? 'fail' : 'pass',
+          notes: notes || null,
+        })
+    } catch (error) {
+      console.error('Unable to save inspection record.', error)
+    }
+  }
+
   store.setInspectionResult(failCount.value > 0 ? 'fail' : 'pass')
   router.push('/inspect/result')
 }

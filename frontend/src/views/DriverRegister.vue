@@ -39,6 +39,12 @@
             <p v-if="inviteCompanyName" class="mt-2 text-sm font-medium text-blue-700 dark:text-blue-200">
               {{ store.t('invitationFoundFor') }} {{ inviteCompanyName }}
             </p>
+            <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-blue-700 dark:text-blue-200">
+              <span>{{ store.t('alreadyHaveAccount') }}</span>
+              <RouterLink :to="signInJoinLink" class="font-medium underline underline-offset-2">
+                {{ store.t('signInAndJoinBusiness') }}
+              </RouterLink>
+            </div>
           </div>
 
           <section class="space-y-4">
@@ -85,7 +91,7 @@
                 <div class="grid sm:grid-cols-2 gap-4">
                   <div>
                     <label class="label">{{ store.t('dateOfBirth') }} *</label>
-                    <input v-model="birthday" class="input-field" :class="inputClass('birthday')" type="date" required />
+                    <input v-model="birthday" class="input-field" :class="inputClass('birthday')" type="date" :max="latestAllowedBirthday" required />
                     <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ ageRequirementHint }}</p>
                     <p v-if="fieldMessage('birthday')" class="mt-1 text-xs text-red-500">{{ fieldMessage('birthday') }}</p>
                   </div>
@@ -125,7 +131,7 @@
                 </div>
 
                 <div>
-                  <label class="label">{{ store.t('streetAddress') }} *</label>
+                  <label class="label">{{ store.t('homeAddress') }} *</label>
                   <AddressAutocomplete v-model="streetAddress" :country="country" :input-class="inputClass('streetAddress')" placeholder="123 Main St" />
                   <p v-if="fieldMessage('streetAddress')" class="mt-1 text-xs text-red-500">{{ fieldMessage('streetAddress') }}</p>
                 </div>
@@ -174,7 +180,8 @@
               </div>
               <div>
                 <label class="label">{{ store.t('licensePhoto') }}</label>
-                <input type="file" accept="image/*" class="input-field text-sm" @change="onLicenseSelected" />
+                <input type="file" accept="image/*" class="input-field text-sm" :class="inputClass('licensePhoto')" @change="onLicenseSelected" />
+                <p v-if="fieldMessage('licensePhoto')" class="mt-1 text-xs text-red-500">{{ fieldMessage('licensePhoto') }}</p>
               </div>
             </div>
             <img v-if="licensePreview" :src="licensePreview" alt="License preview" class="h-36 rounded-xl object-cover border border-gray-200 dark:border-gray-700" />
@@ -191,14 +198,39 @@
               <div>
                 <label class="label">{{ store.t('expiryDate') }} *</label>
                 <input v-model="medCardExpiry" class="input-field" :class="inputClass('medCardExpiry')" type="date" required />
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ medicalCardExpiryHint }}</p>
                 <p v-if="fieldMessage('medCardExpiry')" class="mt-1 text-xs text-red-500">{{ fieldMessage('medCardExpiry') }}</p>
               </div>
             </div>
             <div>
               <label class="label">{{ store.t('medicalCardPhoto') }}</label>
-              <input type="file" accept="image/*" class="input-field text-sm" @change="onMedicalSelected" />
+              <input type="file" accept="image/*" class="input-field text-sm" :class="inputClass('medicalPhoto')" @change="onMedicalSelected" />
+              <p v-if="fieldMessage('medicalPhoto')" class="mt-1 text-xs text-red-500">{{ fieldMessage('medicalPhoto') }}</p>
             </div>
             <img v-if="medicalPreview" :src="medicalPreview" alt="Medical card preview" class="h-36 rounded-xl object-cover border border-gray-200 dark:border-gray-700" />
+          </section>
+
+          <section class="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4">
+            <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ store.t('employment') }}</h2>
+            <div class="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label class="label">{{ store.t('hireDate') }} *</label>
+                <input v-model="hireDate" class="input-field" :class="inputClass('hireDate')" type="date" :max="todayIso" required />
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ store.t('hireDateHint') }}</p>
+                <p v-if="fieldMessage('hireDate')" class="mt-1 text-xs text-red-500">{{ fieldMessage('hireDate') }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4">
+            <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ store.t('driverSignature') }}</h2>
+            <div>
+              <label class="label">{{ store.t('uploadSignature') }} *</label>
+              <input type="file" accept="image/*" class="input-field text-sm" :class="inputClass('signature')" @change="onSignatureSelected" />
+              <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ store.t('signatureUploadHint') }}</p>
+              <p v-if="fieldMessage('signature')" class="mt-1 text-xs text-red-500">{{ fieldMessage('signature') }}</p>
+            </div>
+            <img v-if="signaturePreview" :src="signaturePreview" alt="Signature preview" class="h-28 rounded-xl border border-gray-200 bg-white object-contain p-2 dark:border-gray-700" />
           </section>
 
           <section class="space-y-4">
@@ -279,6 +311,7 @@ const postalCode = ref('')
 const streetAddress = ref('')
 const emergencyName = ref('')
 const emergencyPhone = ref('')
+const hireDate = ref('')
 const licenseNo = ref('')
 const licenseClass = ref('')
 const licenseExpiry = ref('')
@@ -290,19 +323,32 @@ const confirmPassword = ref('')
 const avatarFile = ref<File | null>(null)
 const licenseFile = ref<File | null>(null)
 const medicalFile = ref<File | null>(null)
+const signatureFile = ref<File | null>(null)
 const avatarPreview = ref('')
 const licensePreview = ref('')
 const medicalPreview = ref('')
+const signaturePreview = ref('')
 const invalidFields = reactive<Record<string, boolean>>({})
 const errorMessages = reactive<Record<string, string>>({})
 
 const licenseClasses = ['Class A CDL', 'Class B CDL', 'Class C CDL', 'Class D', 'Class E', 'Motorcycle']
 const prioritizedCountries = computed(() => getPrioritizedCountries(store.language, browserLocale))
 const businessCountryOption = computed(() => getCountryOption(businessCountry.value || country.value))
+const todayIso = new Date().toISOString().split('T')[0]
+const signInJoinLink = computed(() => {
+  const normalizedCode = inviteCode.value.trim().toUpperCase()
+  return normalizedCode ? `/login?code=${encodeURIComponent(normalizedCode)}` : '/login'
+})
 const ageRequirementHint = computed(() => {
   return licenseClass.value.includes('CDL')
     ? store.t('driverMustBe21ForCommercial')
     : store.t('driverMustBe18')
+})
+const latestAllowedBirthday = computed(() => subtractYearsFromToday(getRequiredAge()))
+const medicalCardExpiryHint = computed(() => {
+  return businessCountryOption.value.code === 'US'
+    ? store.t('medicalCardExpiryRuleUs')
+    : store.t('medicalCardExpiryRuleGeneric')
 })
 const fullAddress = computed(() => {
   return [
@@ -341,6 +387,30 @@ function markInvalid(field: string, message = '') {
   }
 }
 
+function clearFieldError(field: string) {
+  delete invalidFields[field]
+  delete errorMessages[field]
+}
+
+function fileIdentity(file: File | null) {
+  if (!file) return ''
+  return `${file.name}-${file.size}-${file.lastModified}`
+}
+
+function validateDistinctDocumentPhotos(nextLicenseFile: File | null, nextMedicalFile: File | null) {
+  if (nextLicenseFile && nextMedicalFile && fileIdentity(nextLicenseFile) === fileIdentity(nextMedicalFile)) {
+    const message = store.t('driverDocumentsMustDiffer')
+    markInvalid('licensePhoto', message)
+    markInvalid('medicalPhoto', message)
+    localError.value = message
+    return false
+  }
+
+  clearFieldError('licensePhoto')
+  clearFieldError('medicalPhoto')
+  return true
+}
+
 function formatPhoneValue(value: string) {
   return formatPhoneByCountry(value, businessCountry.value || country.value)
 }
@@ -358,6 +428,18 @@ function handlePhoneInput(target: 'phone' | 'emergencyPhone', event: Event) {
 
 function getRequiredAge() {
   return licenseClass.value.includes('CDL') ? 21 : 18
+}
+
+function subtractYearsFromToday(years: number) {
+  const date = new Date()
+  date.setFullYear(date.getFullYear() - years)
+  return date.toISOString().split('T')[0]
+}
+
+function addYearsToDate(dateValue: string, years: number) {
+  const date = new Date(dateValue)
+  date.setFullYear(date.getFullYear() + years)
+  return date.toISOString().split('T')[0]
 }
 
 function getAge(dateValue: string) {
@@ -395,6 +477,7 @@ function validateForm() {
     ['streetAddress', streetAddress.value.trim()],
     ['emergencyName', emergencyName.value.trim()],
     ['emergencyPhone', emergencyPhone.value.trim()],
+    ['hireDate', hireDate.value],
     ['licenseNo', licenseNo.value.trim()],
     ['licenseClass', licenseClass.value.trim()],
     ['licenseExpiry', licenseExpiry.value],
@@ -410,6 +493,10 @@ function validateForm() {
     }
   })
 
+  if (!signatureFile.value) {
+    markInvalid('signature', store.t('signatureRequired'))
+  }
+
   if (birthday.value) {
     const minAge = getRequiredAge()
     const actualAge = getAge(birthday.value)
@@ -418,6 +505,20 @@ function validateForm() {
       markInvalid('birthday', minAge === 21 ? store.t('driverMustBe21ForCommercial') : store.t('driverMustBe18'))
     }
   }
+
+  if (hireDate.value && hireDate.value > todayIso) {
+    markInvalid('hireDate', store.t('hireDateCannotBeFuture'))
+  }
+
+  if (medCardExpiry.value) {
+    if (medCardExpiry.value <= todayIso) {
+      markInvalid('medCardExpiry', store.t('medicalCardMustBeFuture'))
+    } else if (businessCountryOption.value.code === 'US' && medCardExpiry.value > addYearsToDate(todayIso, 2)) {
+      markInvalid('medCardExpiry', store.t('medicalCardMaxTwoYearsUs'))
+    }
+  }
+
+  validateDistinctDocumentPhotos(licenseFile.value, medicalFile.value)
 
   if (phone.value.trim() && !isPhoneValid(phone.value.trim())) {
     markInvalid('phone', store.t('phoneMustMatchBusinessCountry'))
@@ -451,14 +552,36 @@ function onAvatarSelected(event: Event) {
 
 function onLicenseSelected(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0] || null
+
+  if (!validateDistinctDocumentPhotos(file, medicalFile.value)) {
+    ;(event.target as HTMLInputElement).value = ''
+    return
+  }
+
   licenseFile.value = file
   licensePreview.value = file ? URL.createObjectURL(file) : ''
 }
 
 function onMedicalSelected(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0] || null
+
+  if (!validateDistinctDocumentPhotos(licenseFile.value, file)) {
+    ;(event.target as HTMLInputElement).value = ''
+    return
+  }
+
   medicalFile.value = file
   medicalPreview.value = file ? URL.createObjectURL(file) : ''
+}
+
+function onSignatureSelected(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0] || null
+  signatureFile.value = file
+  signaturePreview.value = file ? URL.createObjectURL(file) : ''
+
+  if (file) {
+    clearFieldError('signature')
+  }
 }
 
 async function resolveInvite() {
@@ -545,6 +668,7 @@ async function handleSubmit() {
       phone: phone.value.trim(),
       password: password.value,
       birthday: birthday.value || undefined,
+      hire_date: hireDate.value || undefined,
       address: fullAddress.value,
       emergency_name: emergencyName.value.trim(),
       emergency_phone: emergencyPhone.value.trim(),
@@ -553,9 +677,6 @@ async function handleSubmit() {
       license_expiry: licenseExpiry.value || undefined,
       med_card_no: medCardNo.value.trim(),
       med_card_expiry: medCardExpiry.value || undefined,
-      avatar_url: null,
-      license_photo_url: null,
-      med_card_photo_url: null,
     })
 
     if (success) {
@@ -568,7 +689,7 @@ async function handleSubmit() {
 }
 
 async function uploadDriverAssetsAfterRegistration() {
-  if (!avatarFile.value && !licenseFile.value && !medicalFile.value) {
+  if (!avatarFile.value && !licenseFile.value && !medicalFile.value && !signatureFile.value) {
     return
   }
 
@@ -582,11 +703,21 @@ async function uploadDriverAssetsAfterRegistration() {
   const avatarUrl = avatarFile.value ? await uploadDriverAvatar(avatarFile.value, uploadKey) : null
   const licensePhotoUrl = licenseFile.value ? await uploadDriverDocument(licenseFile.value, uploadKey, 'licenses') : null
   const medCardPhotoUrl = medicalFile.value ? await uploadDriverDocument(medicalFile.value, uploadKey, 'medical-cards') : null
+  const signatureUrl = signatureFile.value ? await uploadDriverDocument(signatureFile.value, uploadKey, 'signatures') : null
 
-  if (avatarUrl) {
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('avatar_url, signature_url')
+    .eq('auth_user_id', userId)
+    .maybeSingle()
+
+  if (avatarUrl || signatureUrl) {
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ avatar_url: avatarUrl })
+      .update({
+        avatar_url: avatarUrl || existingProfile?.avatar_url || null,
+        signature_url: signatureUrl || existingProfile?.signature_url || null,
+      })
       .eq('auth_user_id', userId)
 
     if (profileError) {

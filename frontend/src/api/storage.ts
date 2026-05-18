@@ -39,7 +39,7 @@ export async function uploadDriverAvatar(file: File, ownerKey: string) {
   return uploadPublicAsset('driver-documents', filePath, file)
 }
 
-export async function uploadDriverDocument(file: File, ownerKey: string, kind: 'licenses' | 'medical-cards') {
+export async function uploadDriverDocument(file: File, ownerKey: string, kind: 'licenses' | 'medical-cards' | 'signatures') {
   const fileExt = file.name.split('.').pop()
   const fileName = `${crypto.randomUUID()}.${fileExt}`
   const filePath = `${normalizeOwnerKey(ownerKey)}/${kind}/${fileName}`

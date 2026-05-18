@@ -56,6 +56,16 @@
           </section>
 
           <section class="card p-5 space-y-4">
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ store.t('driverSignature') }}</h3>
+            <div>
+              <label class="label">{{ store.t('uploadSignature') }}</label>
+              <input type="file" accept="image/*" class="input-field text-sm" @change="onSignatureSelected" />
+              <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">{{ store.t('signatureUploadHint') }}</p>
+            </div>
+            <img v-if="signaturePreview" :src="signaturePreview" alt="Driver signature" class="h-32 rounded-xl border border-gray-200 bg-white object-contain p-3 dark:border-gray-700" />
+          </section>
+
+          <section class="card p-5 space-y-4">
             <h3 class="text-sm font-semibold text-red-600 dark:text-red-400">{{ store.t('emergencyContact') }}</h3>
             <div class="grid sm:grid-cols-2 gap-4">
               <div><label class="label">{{ store.t('contactName') }} *</label><input v-model="form.emergency_name" class="input-field" required /></div>
@@ -164,9 +174,11 @@ const driverId = ref<string | null>(null)
 const avatarFile = ref<File | null>(null)
 const licenseFile = ref<File | null>(null)
 const medicalFile = ref<File | null>(null)
+const signatureFile = ref<File | null>(null)
 const avatarPreview = ref('')
 const licensePreview = ref('')
 const medicalPreview = ref('')
+const signaturePreview = ref('')
 
 const form = reactive({
   email: '',
@@ -210,16 +222,47 @@ function onAvatarSelected(event: Event) {
   avatarPreview.value = file ? URL.createObjectURL(file) : avatarPreview.value
 }
 
+function fileIdentity(file: File | null) {
+  if (!file) return ''
+  return `${file.name}-${file.size}-${file.lastModified}`
+}
+
+function hasDuplicateDocumentFiles(license: File | null, medical: File | null) {
+  return Boolean(license && medical && fileIdentity(license) === fileIdentity(medical))
+}
+
 function onLicenseSelected(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0] || null
+
+  if (hasDuplicateDocumentFiles(file, medicalFile.value)) {
+    localError.value = store.t('driverDocumentsMustDiffer')
+    ;(event.target as HTMLInputElement).value = ''
+    return
+  }
+
+  localError.value = ''
   licenseFile.value = file
   licensePreview.value = file ? URL.createObjectURL(file) : licensePreview.value
 }
 
 function onMedicalSelected(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0] || null
+
+  if (hasDuplicateDocumentFiles(licenseFile.value, file)) {
+    localError.value = store.t('driverDocumentsMustDiffer')
+    ;(event.target as HTMLInputElement).value = ''
+    return
+  }
+
+  localError.value = ''
   medicalFile.value = file
   medicalPreview.value = file ? URL.createObjectURL(file) : medicalPreview.value
+}
+
+function onSignatureSelected(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0] || null
+  signatureFile.value = file
+  signaturePreview.value = file ? URL.createObjectURL(file) : signaturePreview.value
 }
 
 async function loadDriverProfile() {
@@ -261,6 +304,7 @@ async function loadDriverProfile() {
   form.license_photo_url = driverData.license_photo_url || ''
   form.med_card_photo_url = driverData.med_card_photo_url || ''
   avatarPreview.value = authStore.profile?.avatar_url || ''
+  signaturePreview.value = authStore.profile?.signature_url || ''
   licensePreview.value = form.license_photo_url
   medicalPreview.value = form.med_card_photo_url
 }
@@ -276,10 +320,17 @@ async function saveProfile() {
   message.value = ''
 
   try {
+    if (hasDuplicateDocumentFiles(licenseFile.value, medicalFile.value)) {
+      localError.value = store.t('driverDocumentsMustDiffer')
+      saving.value = false
+      return
+    }
+
     const uploadKey = authStore.user.id
     const avatarUrl = avatarFile.value ? await uploadDriverAvatar(avatarFile.value, uploadKey) : authStore.profile?.avatar_url || null
     const licensePhotoUrl = licenseFile.value ? await uploadDriverDocument(licenseFile.value, uploadKey, 'licenses') : form.license_photo_url || null
     const medCardPhotoUrl = medicalFile.value ? await uploadDriverDocument(medicalFile.value, uploadKey, 'medical-cards') : form.med_card_photo_url || null
+    const signatureUrl = signatureFile.value ? await uploadDriverDocument(signatureFile.value, uploadKey, 'signatures') : authStore.profile?.signature_url || null
 
     const { error: profileError } = await supabase
       .from('profiles')
@@ -288,6 +339,7 @@ async function saveProfile() {
         last_name: form.last_name.trim(),
         phone: form.phone.trim(),
         avatar_url: avatarUrl,
+        signature_url: signatureUrl,
       })
       .eq('auth_user_id', authStore.user.id)
 
@@ -322,6 +374,7 @@ async function saveProfile() {
 
     await authStore.fetchProfile()
     avatarPreview.value = avatarUrl || ''
+    signaturePreview.value = signatureUrl || ''
     licensePreview.value = licensePhotoUrl || ''
     medicalPreview.value = medCardPhotoUrl || ''
     form.license_photo_url = licensePhotoUrl || ''

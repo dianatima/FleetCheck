@@ -144,6 +144,7 @@ function getUserProfileSeed(user: any) {
     first_name: metadata.first_name || firstName || null,
     last_name: metadata.last_name || lastNameParts.join(' ') || null,
     phone: metadata.phone || null,
+    signature_url: null,
     role: 'owner',
     status: 'active',
     company_id: null,
@@ -478,6 +479,7 @@ export const useAuthStore = defineStore('auth', () => {
     phone?: string
     password: string
     birthday?: string
+    hire_date?: string
     address?: string
     emergency_name?: string
     emergency_phone?: string
@@ -547,12 +549,24 @@ export const useAuthStore = defineStore('auth', () => {
 
     const { data: existingDriver, error: existingDriverError } = await supabase
       .from('drivers')
-      .select('id, owner_user_id, status')
+      .select('id, owner_user_id, status, license_photo_url, med_card_photo_url')
       .eq('auth_user_id', accountUser.id)
       .maybeSingle()
 
     if (existingDriverError) {
       error.value = existingDriverError.message
+      loading.value = false
+      return false
+    }
+
+    const { data: existingProfile, error: existingProfileError } = await supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('auth_user_id', accountUser.id)
+      .maybeSingle()
+
+    if (existingProfileError) {
+      error.value = existingProfileError.message
       loading.value = false
       return false
     }
@@ -569,7 +583,7 @@ export const useAuthStore = defineStore('auth', () => {
         last_name: payload.last_name,
         email: payload.email.trim(),
         phone: payload.phone?.trim() || null,
-        avatar_url: payload.avatar_url || null,
+        avatar_url: payload.avatar_url ?? existingProfile?.avatar_url ?? null,
         status: driverStatus,
       }, { onConflict: 'auth_user_id' })
 
@@ -608,6 +622,7 @@ export const useAuthStore = defineStore('auth', () => {
       email: payload.email.trim(),
       phone: payload.phone?.trim() || null,
       birthday: payload.birthday || null,
+      hire_date: payload.hire_date || null,
       address: payload.address?.trim() || null,
       emergency_name: payload.emergency_name?.trim() || null,
       emergency_phone: payload.emergency_phone?.trim() || null,
@@ -616,8 +631,8 @@ export const useAuthStore = defineStore('auth', () => {
       license_expiry: payload.license_expiry || null,
       med_card_no: payload.med_card_no?.trim() || null,
       med_card_expiry: payload.med_card_expiry || null,
-      license_photo_url: payload.license_photo_url || null,
-      med_card_photo_url: payload.med_card_photo_url || null,
+      license_photo_url: payload.license_photo_url ?? existingDriver?.license_photo_url ?? null,
+      med_card_photo_url: payload.med_card_photo_url ?? existingDriver?.med_card_photo_url ?? null,
       status: driverStatus,
     }
 
@@ -859,6 +874,35 @@ export const useAuthStore = defineStore('auth', () => {
       return profile.value
     }
 
+    if (data.role === 'driver') {
+      const { data: driverData, error: driverError } = await supabase
+        .from('drivers')
+        .select('id, status, license_expiry, med_card_expiry')
+        .eq('auth_user_id', user.value.id)
+        .maybeSingle()
+
+      const documentsExpired = Boolean(
+        driverData
+        && driverData.status !== 'inactive'
+        && ((driverData.license_expiry && driverData.license_expiry < new Date().toISOString().split('T')[0])
+          || (driverData.med_card_expiry && driverData.med_card_expiry < new Date().toISOString().split('T')[0])),
+      )
+
+      if (!driverError && driverData && documentsExpired && data.status !== 'pending') {
+        await supabase
+          .from('drivers')
+          .update({ status: 'pending' })
+          .eq('id', driverData.id)
+
+        await supabase
+          .from('profiles')
+          .update({ status: 'pending' })
+          .eq('auth_user_id', user.value.id)
+
+        data.status = 'pending'
+      }
+    }
+
     profile.value = data
     error.value = null
     await fetchCompanyMemberships()
@@ -890,14 +934,18 @@ export const useAuthStore = defineStore('auth', () => {
     return true
   }
 
-  async function loginWithGoogle() {
+  async function loginWithGoogle(joinCode?: string | null) {
     loading.value = true
     error.value = null
+
+    const redirectTo = joinCode
+      ? `${window.location.origin}/auth/callback?code=${encodeURIComponent(joinCode)}`
+      : `${window.location.origin}/auth/callback`
 
     const { error: googleError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo,
       },
     })
 

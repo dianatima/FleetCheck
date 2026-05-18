@@ -16,6 +16,9 @@
           </div>
         </div>
         <div class="max-h-80 overflow-y-auto">
+          <div v-if="notifications.length === 0" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            {{ copy.noNotifications }}
+          </div>
           <div
             v-for="n in notifications"
             :key="n.id"
@@ -42,31 +45,115 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Bell, X, CheckCircle, AlertTriangle, Clock, Wrench, UserPlus, FileText } from 'lucide-vue-next'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { Bell, X, Cake } from 'lucide-vue-next'
 import { useAppStore } from '../../stores/app'
+import { useAuthStore } from '../../stores/authStore'
+import { supabase } from '@/lib/supabase'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 const open = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 
-const notifications = [
-  { id: 1, icon: UserPlus, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20', title: 'New driver pending approval', desc: 'John Smith is waiting for approval', time: '2m ago', unread: true },
-  { id: 2, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20', title: 'Failed inspection submitted', desc: 'Unit #1042 - Brake issue reported', time: '15m ago', unread: true },
-  { id: 3, icon: Wrench, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20', title: 'Repair request completed', desc: 'Unit #2031 - Oil change done', time: '1h ago', unread: true },
-  { id: 4, icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-900/20', title: 'Driver license expiring soon', desc: "Maria Garcia's license expires in 14 days", time: '2h ago', unread: false },
-  { id: 5, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20', title: 'Vehicle marked out of service', desc: 'Unit #0521 has been grounded', time: '3h ago', unread: false },
-  { id: 6, icon: FileText, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-900/20', title: 'Inspection overdue', desc: 'Unit #3012 has not been inspected in 48h', time: '5h ago', unread: false },
-  { id: 7, icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-900/20', title: 'Repair completed', desc: 'Unit #1099 is ready for operation', time: 'Yesterday', unread: false },
-]
+type NotificationItem = {
+  id: string
+  icon: any
+  color: string
+  bg: string
+  title: string
+  desc: string
+  time: string
+  unread: boolean
+}
 
-const unreadCount = computed(() => notifications.filter(n => n.unread).length)
+const copyByLanguage = {
+  en: { birthdayToday: 'Birthday today', noNotifications: 'No notifications yet.', today: 'Today', turns: 'turns' },
+  uk: { birthdayToday: 'День народження сьогодні', noNotifications: 'Сповіщень поки немає.', today: 'Сьогодні', turns: 'виповнюється' },
+  es: { birthdayToday: 'Cumpleaños hoy', noNotifications: 'Aún no hay notificaciones.', today: 'Hoy', turns: 'cumple' },
+  fr: { birthdayToday: 'Anniversaire aujourd’hui', noNotifications: 'Aucune notification pour le moment.', today: 'Aujourd’hui', turns: 'a' },
+} as const
+
+const copy = computed(() => copyByLanguage[(store.language as keyof typeof copyByLanguage) || 'en'] || copyByLanguage.en)
+const notifications = ref<NotificationItem[]>([])
+
+function ageToday(birthday: string) {
+  if (!birthday) return null
+  const birthDate = new Date(birthday)
+  if (Number.isNaN(birthDate.getTime())) return null
+  return new Date().getFullYear() - birthDate.getFullYear()
+}
+
+function isBirthdayToday(birthday: string) {
+  if (!birthday) return false
+  const birthDate = new Date(birthday)
+  if (Number.isNaN(birthDate.getTime())) return false
+  const today = new Date()
+  return birthDate.getDate() === today.getDate() && birthDate.getMonth() === today.getMonth()
+}
+
+async function loadNotifications() {
+  if (!authStore.companyId) {
+    notifications.value = []
+    return
+  }
+
+  const { data: memberships, error: membershipError } = await supabase
+    .from('company_memberships')
+    .select('user_id')
+    .eq('company_id', authStore.companyId)
+    .eq('role', 'driver')
+
+  if (membershipError) {
+    notifications.value = []
+    return
+  }
+
+  const userIds = (memberships || []).map((membership) => membership.user_id).filter(Boolean)
+
+  if (!userIds.length) {
+    notifications.value = []
+    return
+  }
+
+  const { data: drivers } = await supabase
+    .from('drivers')
+    .select('id, auth_user_id, first_name, last_name, birthday')
+    .in('auth_user_id', userIds)
+
+  notifications.value = (drivers || [])
+    .filter((driver) => isBirthdayToday(driver.birthday || ''))
+    .map((driver) => {
+      const name = [driver.first_name, driver.last_name].filter(Boolean).join(' ').trim() || 'Driver'
+      const age = ageToday(driver.birthday || '')
+
+      return {
+        id: `birthday-${driver.id}`,
+        icon: Cake,
+        color: 'text-pink-500',
+        bg: 'bg-pink-50 dark:bg-pink-900/20',
+        title: copy.value.birthdayToday,
+        desc: age ? `${name} ${copy.value.turns} ${age}` : name,
+        time: copy.value.today,
+        unread: true,
+      } satisfies NotificationItem
+    })
+}
+
+const unreadCount = computed(() => notifications.value.filter(n => n.unread).length)
 
 function onOutside(e: MouseEvent) {
   if (containerRef.value && !containerRef.value.contains(e.target as Node)) open.value = false
 }
-onMounted(() => document.addEventListener('mousedown', onOutside))
+onMounted(() => {
+  document.addEventListener('mousedown', onOutside)
+  loadNotifications()
+})
 onUnmounted(() => document.removeEventListener('mousedown', onOutside))
+
+watch(() => [authStore.companyId, store.language], () => {
+  loadNotifications()
+})
 </script>
 
 <style scoped>

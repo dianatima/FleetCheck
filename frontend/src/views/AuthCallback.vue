@@ -6,14 +6,21 @@
 
 <script setup lang="ts">
 import { onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/authStore";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 
 onMounted(async () => {
   await authStore.loadSession();
+
+  const joinCode = typeof route.query.code === 'string' ? route.query.code.trim().toUpperCase() : '';
+
+  if (joinCode && authStore.profile?.role === 'driver') {
+    await authStore.joinDriverCompanyWithCode(joinCode);
+  }
 
   if (authStore.profile?.role === "driver" && authStore.profile?.status === 'pending') {
     router.replace('/pending');

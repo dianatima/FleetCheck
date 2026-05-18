@@ -35,10 +35,14 @@ create table if not exists public.profiles (
   email text,
   phone text,
   avatar_url text,
+  signature_url text,
   status text not null default 'active',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  add column if not exists signature_url text;
 
 create index if not exists profiles_company_id_idx on public.profiles(company_id);
 create index if not exists profiles_role_idx on public.profiles(role);
@@ -239,6 +243,192 @@ create index if not exists inspections_company_id_idx on public.inspections(comp
 create index if not exists inspections_operation_id_idx on public.inspections(operation_id);
 create index if not exists inspections_vehicle_id_idx on public.inspections(vehicle_id);
 create index if not exists inspections_driver_id_idx on public.inspections(driver_id);
+
+alter table public.company_memberships enable row level security;
+alter table public.profiles enable row level security;
+alter table public.drivers enable row level security;
+alter table public.driver_company_assignments enable row level security;
+alter table public.vehicle_company_assignments enable row level security;
+
+drop policy if exists "Authenticated users can manage company memberships" on public.company_memberships;
+create policy "Authenticated users can manage company memberships"
+on public.company_memberships for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Users can read their own profile or owners can read company driver profiles" on public.profiles;
+create policy "Users can read their own profile or owners can read company driver profiles"
+on public.profiles for select
+to authenticated
+using (
+  auth.uid() = auth_user_id
+  or exists (
+    select 1
+    from public.company_memberships owner_membership
+    where owner_membership.user_id = auth.uid()
+      and owner_membership.company_id = profiles.company_id
+      and owner_membership.role = 'owner'
+  )
+);
+
+drop policy if exists "Users can insert their own profile" on public.profiles;
+create policy "Users can insert their own profile"
+on public.profiles for insert
+to authenticated
+with check (auth.uid() = auth_user_id);
+
+drop policy if exists "Users can update their own profile or owners can update company driver profiles" on public.profiles;
+create policy "Users can update their own profile or owners can update company driver profiles"
+on public.profiles for update
+to authenticated
+using (
+  auth.uid() = auth_user_id
+  or exists (
+    select 1
+    from public.company_memberships owner_membership
+    where owner_membership.user_id = auth.uid()
+      and owner_membership.company_id = profiles.company_id
+      and owner_membership.role = 'owner'
+  )
+)
+with check (
+  auth.uid() = auth_user_id
+  or exists (
+    select 1
+    from public.company_memberships owner_membership
+    where owner_membership.user_id = auth.uid()
+      and owner_membership.company_id = profiles.company_id
+      and owner_membership.role = 'owner'
+  )
+);
+
+drop policy if exists "Drivers can read their row and owners can read company drivers" on public.drivers;
+create policy "Drivers can read their row and owners can read company drivers"
+on public.drivers for select
+to authenticated
+using (
+  auth.uid() = auth_user_id
+  or exists (
+    select 1
+    from public.company_memberships owner_membership
+    join public.company_memberships driver_membership
+      on driver_membership.user_id = drivers.auth_user_id
+     and driver_membership.company_id = owner_membership.company_id
+     and driver_membership.role = 'driver'
+    where owner_membership.user_id = auth.uid()
+      and owner_membership.role = 'owner'
+  )
+);
+
+drop policy if exists "Drivers can insert their own row" on public.drivers;
+create policy "Drivers can insert their own row"
+on public.drivers for insert
+to authenticated
+with check (auth.uid() = auth_user_id);
+
+drop policy if exists "Drivers can update their row and owners can update company drivers" on public.drivers;
+create policy "Drivers can update their row and owners can update company drivers"
+on public.drivers for update
+to authenticated
+using (
+  auth.uid() = auth_user_id
+  or exists (
+    select 1
+    from public.company_memberships owner_membership
+    join public.company_memberships driver_membership
+      on driver_membership.user_id = drivers.auth_user_id
+     and driver_membership.company_id = owner_membership.company_id
+     and driver_membership.role = 'driver'
+    where owner_membership.user_id = auth.uid()
+      and owner_membership.role = 'owner'
+  )
+)
+with check (
+  auth.uid() = auth_user_id
+  or exists (
+    select 1
+    from public.company_memberships owner_membership
+    join public.company_memberships driver_membership
+      on driver_membership.user_id = drivers.auth_user_id
+     and driver_membership.company_id = owner_membership.company_id
+     and driver_membership.role = 'driver'
+    where owner_membership.user_id = auth.uid()
+      and owner_membership.role = 'owner'
+  )
+);
+
+drop policy if exists "Company members can read driver assignments" on public.driver_company_assignments;
+create policy "Company members can read driver assignments"
+on public.driver_company_assignments for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = driver_company_assignments.company_id
+  )
+);
+
+drop policy if exists "Company owners can manage driver assignments" on public.driver_company_assignments;
+create policy "Company owners can manage driver assignments"
+on public.driver_company_assignments for all
+to authenticated
+using (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = driver_company_assignments.company_id
+      and membership.role = 'owner'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = driver_company_assignments.company_id
+      and membership.role = 'owner'
+  )
+);
+
+drop policy if exists "Company members can read vehicle assignments" on public.vehicle_company_assignments;
+create policy "Company members can read vehicle assignments"
+on public.vehicle_company_assignments for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = vehicle_company_assignments.company_id
+  )
+);
+
+drop policy if exists "Company owners can manage vehicle assignments" on public.vehicle_company_assignments;
+create policy "Company owners can manage vehicle assignments"
+on public.vehicle_company_assignments for all
+to authenticated
+using (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = vehicle_company_assignments.company_id
+      and membership.role = 'owner'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = vehicle_company_assignments.company_id
+      and membership.role = 'owner'
+  )
+);
 
 -- Example RLS idea:
 -- allow read/write when auth.uid() is a member of the same company via company_memberships.

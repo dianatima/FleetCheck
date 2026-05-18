@@ -151,8 +151,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { Truck, Eye, EyeOff, LogIn } from "lucide-vue-next";
 
 import { useAppStore } from "../stores/app";
@@ -163,10 +163,12 @@ import ThemeToggle from "../components/shared/ThemeToggle.vue";
 const store = useAppStore();
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 
 const email = ref("");
 const password = ref("");
 const showPass = ref(false);
+const pendingJoinCode = computed(() => typeof route.query.code === 'string' ? route.query.code.trim().toUpperCase() : '');
 
 function redirectByRole() {
   if (authStore.profile?.role === "driver" && authStore.profile?.status === 'pending') {
@@ -183,13 +185,17 @@ function redirectByRole() {
 }
 
 async function handleGoogle() {
-  await authStore.loginWithGoogle();
+  await authStore.loginWithGoogle(pendingJoinCode.value || null);
 }
 
 async function handleSubmit() {
   const success = await authStore.loginWithEmail(email.value, password.value);
 
   if (!success) return;
+
+  if (pendingJoinCode.value && authStore.profile?.role === 'driver') {
+    await authStore.joinDriverCompanyWithCode(pendingJoinCode.value);
+  }
 
   redirectByRole();
 }
