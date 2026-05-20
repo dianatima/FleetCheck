@@ -170,6 +170,7 @@ import AppLayout from '../components/layout/AppLayout.vue'
 import { supabase } from '@/lib/supabase'
 import { normalizeVehicleType } from '@/lib/vehicleCatalog'
 import { defaultDimensionUnitForCountry, defaultDistanceUnitForCountry, type DimensionUnit, type DistanceUnit } from '@/lib/measurementUnits'
+import { normalizeSupabaseSchemaErrorMessage } from '@/lib/supabaseErrors'
 
 const props = defineProps<{ isPostTrip?: boolean }>()
 const store = useAppStore()
@@ -314,7 +315,7 @@ async function loadInspectionTemplates() {
     .order('updated_at', { ascending: false })
 
   if (error) {
-    templateError.value = error.message
+    templateError.value = normalizeSupabaseSchemaErrorMessage(error.message) || error.message
     templateOptions.value = []
     selectedTemplateId.value = ''
     applySelectedTemplate()

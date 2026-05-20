@@ -458,6 +458,7 @@ import { formatPhoneByCountry, getCountryOption, getPreferredCountryCode, getPri
 import { supabase } from '@/lib/supabase'
 import { vehicleTypeOptions } from '@/lib/vehicleCatalog'
 import { defaultDimensionUnitForCountry, defaultDistanceUnitForCountry, dimensionUnitLabel, dimensionUnitOptions, distanceUnitLabel, distanceUnitOptions } from '@/lib/measurementUnits'
+import { normalizeSupabaseSchemaErrorMessage } from '@/lib/supabaseErrors'
 
 const store = useAppStore()
 const authStore = useAuthStore()
@@ -756,7 +757,7 @@ async function fetchInspectionTemplates() {
     .order('updated_at', { ascending: false })
 
   if (error) {
-    templatesError.value = error.message
+    templatesError.value = normalizeSupabaseSchemaErrorMessage(error.message) || error.message
     inspectionTemplates.value = []
     templatesLoading.value = false
     return
@@ -825,7 +826,7 @@ async function saveInspectionTemplate() {
   const { error } = await query
 
   if (error) {
-    templatesError.value = error.message
+    templatesError.value = normalizeSupabaseSchemaErrorMessage(error.message) || error.message
     return
   }
 
@@ -844,7 +845,7 @@ async function deleteInspectionTemplate(templateId: string) {
     .eq('id', templateId)
 
   if (error) {
-    templatesError.value = error.message
+    templatesError.value = normalizeSupabaseSchemaErrorMessage(error.message) || error.message
     return
   }
 
