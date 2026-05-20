@@ -152,6 +152,10 @@ insert into storage.buckets (id, name, public)
 values ('driver-documents', 'driver-documents', true)
 on conflict (id) do nothing;
 
+insert into storage.buckets (id, name, public)
+values ('vehicle-photos', 'vehicle-photos', true)
+on conflict (id) do nothing;
+
 drop policy if exists "Driver documents are public" on storage.objects;
 create policy "Driver documents are public"
 on storage.objects for select
@@ -175,6 +179,30 @@ create policy "Authenticated users can delete driver documents"
 on storage.objects for delete
 to authenticated
 using (bucket_id = 'driver-documents');
+
+drop policy if exists "Vehicle photos are public" on storage.objects;
+create policy "Vehicle photos are public"
+on storage.objects for select
+using (bucket_id = 'vehicle-photos');
+
+drop policy if exists "Authenticated users can upload vehicle photos" on storage.objects;
+create policy "Authenticated users can upload vehicle photos"
+on storage.objects for insert
+to authenticated
+with check (bucket_id = 'vehicle-photos');
+
+drop policy if exists "Authenticated users can update vehicle photos" on storage.objects;
+create policy "Authenticated users can update vehicle photos"
+on storage.objects for update
+to authenticated
+using (bucket_id = 'vehicle-photos')
+with check (bucket_id = 'vehicle-photos');
+
+drop policy if exists "Authenticated users can delete vehicle photos" on storage.objects;
+create policy "Authenticated users can delete vehicle photos"
+on storage.objects for delete
+to authenticated
+using (bucket_id = 'vehicle-photos');
 
 create table if not exists public.driver_company_assignments (
   id uuid primary key default gen_random_uuid(),
@@ -235,20 +263,53 @@ create table if not exists public.inspections (
   performed_by_user_id uuid not null references auth.users(id) on delete cascade,
   inspection_type text not null check (inspection_type in ('pre-trip', 'post-trip')),
   result text not null check (result in ('pass', 'fail')),
+  vehicle_odometer numeric,
+  vehicle_engine_hours numeric,
+  distance_unit text,
+  dimension_unit text,
   notes text,
   created_at timestamptz not null default now()
 );
+
+alter table public.inspections add column if not exists responses jsonb not null default '[]'::jsonb;
+alter table public.inspections add column if not exists vehicle_odometer numeric;
+alter table public.inspections add column if not exists vehicle_engine_hours numeric;
+alter table public.inspections add column if not exists distance_unit text;
+alter table public.inspections add column if not exists dimension_unit text;
 
 create index if not exists inspections_company_id_idx on public.inspections(company_id);
 create index if not exists inspections_operation_id_idx on public.inspections(operation_id);
 create index if not exists inspections_vehicle_id_idx on public.inspections(vehicle_id);
 create index if not exists inspections_driver_id_idx on public.inspections(driver_id);
 
+create table if not exists public.inspection_templates (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  created_by_user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  vehicle_type text not null,
+  inspection_type text not null default 'pre-trip' check (inspection_type in ('pre-trip', 'post-trip')),
+  is_active boolean not null default true,
+  distance_unit text not null default 'km',
+  dimension_unit text not null default 'm',
+  items jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.inspection_templates add column if not exists distance_unit text not null default 'km';
+alter table public.inspection_templates add column if not exists dimension_unit text not null default 'm';
+
+create index if not exists inspection_templates_company_id_idx on public.inspection_templates(company_id);
+create index if not exists inspection_templates_vehicle_type_idx on public.inspection_templates(vehicle_type);
+create index if not exists inspection_templates_inspection_type_idx on public.inspection_templates(inspection_type);
+
 alter table public.company_memberships enable row level security;
 alter table public.profiles enable row level security;
 alter table public.drivers enable row level security;
 alter table public.driver_company_assignments enable row level security;
 alter table public.vehicle_company_assignments enable row level security;
+alter table public.inspection_templates enable row level security;
 
 drop policy if exists "Authenticated users can manage company memberships" on public.company_memberships;
 create policy "Authenticated users can manage company memberships"
@@ -300,6 +361,42 @@ with check (
     where owner_membership.user_id = auth.uid()
       and owner_membership.company_id = profiles.company_id
       and owner_membership.role = 'owner'
+  )
+);
+
+drop policy if exists "Company members can read inspection templates" on public.inspection_templates;
+create policy "Company members can read inspection templates"
+on public.inspection_templates for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = inspection_templates.company_id
+  )
+);
+
+drop policy if exists "Owners managers inspectors can manage inspection templates" on public.inspection_templates;
+create policy "Owners managers inspectors can manage inspection templates"
+on public.inspection_templates for all
+to authenticated
+using (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = inspection_templates.company_id
+      and membership.role in ('owner', 'manager', 'inspector')
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.company_memberships membership
+    where membership.user_id = auth.uid()
+      and membership.company_id = inspection_templates.company_id
+      and membership.role in ('owner', 'manager', 'inspector')
   )
 );
 
@@ -407,8 +504,9 @@ using (
   )
 );
 
+drop policy if exists "Company owners and managers can manage vehicle assignments" on public.vehicle_company_assignments;
 drop policy if exists "Company owners can manage vehicle assignments" on public.vehicle_company_assignments;
-create policy "Company owners can manage vehicle assignments"
+create policy "Company owners and managers can manage vehicle assignments"
 on public.vehicle_company_assignments for all
 to authenticated
 using (
@@ -417,7 +515,7 @@ using (
     from public.company_memberships membership
     where membership.user_id = auth.uid()
       and membership.company_id = vehicle_company_assignments.company_id
-      and membership.role = 'owner'
+      and membership.role in ('owner', 'manager')
   )
 )
 with check (
@@ -426,7 +524,7 @@ with check (
     from public.company_memberships membership
     where membership.user_id = auth.uid()
       and membership.company_id = vehicle_company_assignments.company_id
-      and membership.role = 'owner'
+      and membership.role in ('owner', 'manager')
   )
 );
 

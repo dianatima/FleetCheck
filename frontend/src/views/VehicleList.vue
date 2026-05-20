@@ -31,7 +31,7 @@
         </select>
       </div>
 
-      <button @click="showModal = true" class="btn-primary gap-2 text-sm">
+      <button @click="openCreateModal" class="btn-primary gap-2 text-sm">
         <Plus :size="16" /> {{ store.t("addVehicle") }}
       </button>
     </div>
@@ -53,6 +53,10 @@
 
     <div v-else-if="vehicleStore.error" class="card p-6 text-sm text-red-500">
       {{ vehicleStore.error }}
+    </div>
+
+    <div v-else-if="saveNotice" class="card p-6 text-sm text-amber-700 dark:text-amber-300">
+      {{ saveNotice }}
     </div>
 
     <template v-else>
@@ -324,8 +328,63 @@
 
             <!-- Form -->
             <form @submit.prevent="handleSave" class="p-6 space-y-5">
+              <div v-if="authStore.currentCompany" class="rounded-xl bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-700 dark:text-blue-200">
+                <p class="font-medium">This vehicle will be assigned to {{ authStore.currentCompany.company_name }}.</p>
+                <p class="mt-1 text-xs text-blue-600 dark:text-blue-300">
+                  If the same vehicle already exists under this owner, FleetCheck will link it to the active business instead of creating a duplicate record.
+                </p>
+              </div>
+
+              <div v-if="editingId" class="rounded-xl bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">
+                <p class="font-medium">Only business-specific fields can be edited here.</p>
+                <p class="mt-1 text-xs text-amber-600 dark:text-amber-300">
+                  VIN, make, model, type, year, odometer, and engine hours are locked. Odometer and engine hours are updated by inspections so all businesses see the latest actual values.
+                </p>
+              </div>
+
+              <div v-if="!editingId" class="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 dark:bg-gray-800 p-1">
+                <button type="button" class="rounded-lg px-4 py-2 text-sm font-medium transition-colors" :class="modalMode === 'new' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'" @click="modalMode = 'new'">
+                  New vehicle
+                </button>
+                <button type="button" class="rounded-lg px-4 py-2 text-sm font-medium transition-colors" :class="modalMode === 'existing' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'" @click="switchToExistingMode">
+                  Existing vehicle
+                </button>
+              </div>
+
+              <div v-if="!editingId && modalMode === 'existing'" class="space-y-4">
+                <div class="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 p-4">
+                  <div class="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                      <h3 class="font-medium text-gray-900 dark:text-white">Add from my fleet</h3>
+                      <p class="text-sm text-gray-500 dark:text-gray-400">Choose a vehicle that already belongs to one of your businesses and link it to the active business.</p>
+                    </div>
+                  </div>
+
+                  <div v-if="existingVehiclesLoading" class="text-sm text-gray-500 dark:text-gray-400">Loading your fleet...</div>
+                  <div v-else-if="existingFleetVehicles.length === 0" class="text-sm text-gray-500 dark:text-gray-400">No reusable vehicles found for this owner.</div>
+                  <div v-else class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    <button
+                      v-for="vehicle in existingFleetVehicles"
+                      :key="vehicle.id"
+                      type="button"
+                      class="w-full rounded-xl border px-4 py-3 text-left transition-colors"
+                      :class="selectedExistingVehicleId === vehicle.id ? 'border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'"
+                      @click="selectedExistingVehicleId = vehicle.id"
+                    >
+                      <div class="flex items-start justify-between gap-3">
+                        <div>
+                          <p class="font-medium text-gray-900 dark:text-white">{{ vehicle.make }} {{ vehicle.model }}</p>
+                          <p class="text-xs text-gray-500 dark:text-gray-400">{{ vehicle.type }} · {{ vehicle.unit }} · {{ vehicle.plate }}</p>
+                        </div>
+                        <span class="badge-gray">{{ vehicle.year || '—' }}</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <!-- Photo upload -->
-              <div>
+              <div v-if="editingId || modalMode === 'new'">
                 <label class="label">{{ store.t("vehiclePhoto") }}</label>
 
                 <div
@@ -379,7 +438,7 @@
                 </div>
               </div>
 
-              <div class="grid sm:grid-cols-2 gap-4">
+              <div v-if="editingId || modalMode === 'new'" class="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label class="label">
                     {{ store.t("vehicleNumber") }}
@@ -398,7 +457,7 @@
                     {{ store.t("type") }}
                     <span class="text-red-500">*</span>
                   </label>
-                  <select v-model="form.type" class="input-field" required>
+                  <select v-model="form.type" class="input-field" required @change="handleTypeChange" :disabled="Boolean(editingId)">
                     <option value="" disabled>
                       {{ store.t("selectType") }}
                     </option>
@@ -416,7 +475,10 @@
                   <input
                     v-model="form.make"
                     class="input-field"
-                    placeholder="Toyota"
+                    list="vehicle-makes"
+                    placeholder="Select or type a make"
+                    @change="handleMakeChange"
+                    :disabled="Boolean(editingId)"
                     required
                   />
                 </div>
@@ -429,7 +491,9 @@
                   <input
                     v-model="form.model"
                     class="input-field"
-                    placeholder="Camry"
+                    list="vehicle-models"
+                    placeholder="Select or type a model"
+                    :disabled="Boolean(editingId)"
                     required
                   />
                 </div>
@@ -439,15 +503,9 @@
                     {{ store.t("year") }}
                     <span class="text-red-500">*</span>
                   </label>
-                  <input
-                    v-model.number="form.year"
-                    class="input-field"
-                    type="number"
-                    placeholder="2023"
-                    min="1990"
-                    :max="new Date().getFullYear() + 1"
-                    required
-                  />
+                  <select v-model.number="form.year" class="input-field" required :disabled="Boolean(editingId)">
+                    <option v-for="year in vehicleYearOptions" :key="year" :value="year">{{ year }}</option>
+                  </select>
                 </div>
 
                 <div>
@@ -469,6 +527,7 @@
                     v-model="form.vin"
                     class="input-field"
                     placeholder="1HGBH41JXMN109186"
+                    :disabled="Boolean(editingId)"
                   />
                 </div>
 
@@ -480,6 +539,7 @@
                     type="number"
                     placeholder="0"
                     min="0"
+                    :disabled="Boolean(editingId)"
                   />
                 </div>
 
@@ -492,6 +552,7 @@
                     placeholder="0"
                     min="0"
                     step="0.1"
+                    :disabled="Boolean(editingId)"
                   />
                 </div>
 
@@ -512,6 +573,14 @@
                 </div>
               </div>
 
+              <datalist v-if="editingId || modalMode === 'new'" id="vehicle-makes">
+                <option v-for="make in availableMakes" :key="make" :value="make" />
+              </datalist>
+
+              <datalist v-if="editingId || modalMode === 'new'" id="vehicle-models">
+                <option v-for="model in availableModels" :key="model" :value="model" />
+              </datalist>
+
               <div
                 class="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800"
               >
@@ -528,6 +597,75 @@
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="deleteTargetVehicle"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          @click.self="closeDeleteModal"
+        >
+          <div class="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-y-auto">
+            <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800">
+              <h2 class="text-lg font-bold text-gray-900 dark:text-white">Remove vehicle from business</h2>
+
+              <button
+                @click="closeDeleteModal"
+                class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X :size="18" />
+              </button>
+            </div>
+
+            <div class="p-6 space-y-5">
+              <div class="rounded-xl bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-200">
+                <p class="font-medium">This removes the vehicle only from {{ authStore.currentCompany?.company_name || 'the active business' }}.</p>
+                <p class="mt-1 text-xs text-red-600 dark:text-red-300">The vehicle record stays in the database and can still belong to other businesses under the same owner.</p>
+              </div>
+
+              <div class="space-y-1">
+                <p class="font-medium text-gray-900 dark:text-white">{{ deleteTargetVehicle.make }} {{ deleteTargetVehicle.model }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Unit {{ deleteTargetVehicle.unit }} · Plate {{ deleteTargetVehicle.plate }} · VIN {{ deleteTargetVehicle.vin || 'Not set' }}</p>
+              </div>
+
+              <div v-if="deleteError" class="rounded-xl bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+                {{ deleteError }}
+              </div>
+
+              <div>
+                <label class="label">Confirm with your password</label>
+                <input v-model="deletePassword" type="password" class="input-field" placeholder="Current password" />
+              </div>
+
+              <div>
+                <label class="label">Type the VIN to confirm</label>
+                <input
+                  v-model="deleteVinConfirmation"
+                  class="input-field"
+                  :placeholder="deleteTargetVehicle.vin || 'VIN is not set on this vehicle'"
+                  :disabled="!deleteTargetVehicle.vin"
+                />
+                <p v-if="!deleteTargetVehicle.vin" class="mt-1 text-xs text-amber-600 dark:text-amber-300">
+                  Add a VIN to this vehicle before requiring VIN-based removal confirmation.
+                </p>
+              </div>
+
+              <div class="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                <button type="button" @click="closeDeleteModal" class="btn-secondary px-5 py-2.5">Cancel</button>
+                <button
+                  type="button"
+                  class="px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                  :disabled="deleteLoading || !deletePassword || !deleteTargetVehicle.vin || deleteVinConfirmation.trim() !== deleteTargetVehicle.vin"
+                  @click="handleDeleteVehicle"
+                >
+                  {{ deleteLoading ? 'Removing...' : 'Remove from business' }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </Transition>
@@ -554,6 +692,8 @@ import { useAppStore } from "../stores/app";
 import { useVehicleStore } from "@/stores/vehicleStore";
 import { uploadVehiclePhoto } from "@/api/storage";
 import { useAuthStore } from "@/stores/authStore";
+import { getMakesForVehicleType, getModelsForMake, vehicleTypeOptions, yearOptions } from "@/lib/vehicleCatalog";
+import { supabase } from "@/lib/supabase";
 
 type VehicleStatus = "active" | "needs-attention" | "blocked" | "in-repair";
 
@@ -579,15 +719,35 @@ type Vehicle = {
   created_at?: string;
 };
 
+type ExistingFleetVehicle = {
+  id: string;
+  unit: string;
+  type: string;
+  make: string;
+  model: string;
+  year?: number | null;
+  plate: string;
+};
+
 const store = useAppStore();
 const vehicleStore = useVehicleStore();
 const router = useRouter();
 const authStore = useAuthStore();
 const showModal = ref(false);
 const editingId = ref<string | null>(null);
+const modalMode = ref<"new" | "existing">("new");
 const photoPreview = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedPhotoFile = ref<File | null>(null);
+const existingFleetVehicles = ref<ExistingFleetVehicle[]>([]);
+const existingVehiclesLoading = ref(false);
+const selectedExistingVehicleId = ref("");
+const deleteTargetVehicle = ref<Vehicle | null>(null);
+const deletePassword = ref("");
+const deleteVinConfirmation = ref("");
+const deleteError = ref("");
+const deleteLoading = ref(false);
+const saveNotice = ref("");
 
 const localSearch = ref(vehicleStore.search);
 
@@ -607,16 +767,8 @@ onMounted(() => {
 
 const vehicles = computed<Vehicle[]>(() => vehicleStore.vehicles as Vehicle[]);
 
-const vehicleTypes = [
-  "Truck",
-  "Van",
-  "Car",
-  "Equipment",
-  "Bus",
-  "Trailer",
-  "Pickup",
-  "Other",
-];
+const vehicleTypes = vehicleTypeOptions;
+const vehicleYearOptions = yearOptions();
 
 const vehicleStatuses = computed(() => [
   { value: "active", label: store.t("statusActive") },
@@ -640,13 +792,64 @@ const defaultForm = () => ({
 });
 
 const form = ref(defaultForm());
+const availableMakes = computed(() => getMakesForVehicleType(form.value.type));
+const availableModels = computed(() => getModelsForMake(form.value.type, form.value.make));
+
+function handleTypeChange() {
+  const nextMakes = getMakesForVehicleType(form.value.type);
+  if (nextMakes.length > 0 && !nextMakes.includes(form.value.make)) {
+    form.value.make = "";
+  }
+
+  handleMakeChange();
+}
+
+function handleMakeChange() {
+  const nextModels = getModelsForMake(form.value.type, form.value.make);
+  if (nextModels.length > 0 && !nextModels.includes(form.value.model)) {
+    form.value.model = "";
+  }
+}
 
 function closeModal() {
   showModal.value = false;
   editingId.value = null;
+  modalMode.value = "new";
   form.value = defaultForm();
   photoPreview.value = null;
   selectedPhotoFile.value = null;
+  existingFleetVehicles.value = [];
+  selectedExistingVehicleId.value = "";
+}
+
+function closeDeleteModal() {
+  deleteTargetVehicle.value = null;
+  deletePassword.value = "";
+  deleteVinConfirmation.value = "";
+  deleteError.value = "";
+  deleteLoading.value = false;
+}
+
+async function loadExistingFleetVehicles() {
+  existingVehiclesLoading.value = true;
+
+  try {
+    existingFleetVehicles.value = (await vehicleStore.fetchOwnedFleetVehicles()) as ExistingFleetVehicle[];
+    selectedExistingVehicleId.value = existingFleetVehicles.value[0]?.id || "";
+  } finally {
+    existingVehiclesLoading.value = false;
+  }
+}
+
+function openCreateModal() {
+  saveNotice.value = "";
+  closeModal();
+  showModal.value = true;
+}
+
+async function switchToExistingMode() {
+  modalMode.value = "existing";
+  await loadExistingFleetVehicles();
 }
 
 function getVehicleName(v: Vehicle) {
@@ -704,6 +907,7 @@ function getAvailabilityBadgeClass(v: Vehicle) {
 }
 
 function startEdit(v: Vehicle) {
+  saveNotice.value = "";
   form.value = {
     unit: v.unit || "",
     type: v.type || "",
@@ -720,13 +924,62 @@ function startEdit(v: Vehicle) {
 
   photoPreview.value = v.photo_url || null;
   editingId.value = v.id;
+  modalMode.value = "new";
   showModal.value = true;
+  handleTypeChange();
 }
 
 async function confirmDelete(v: Vehicle) {
-  if (confirm(`Delete "${getVehicleName(v)}" (${v.unit})?`)) {
-    await vehicleStore.deleteVehicle(v.id);
+  if (!authStore.currentCompany || !["owner", "manager"].includes(authStore.currentCompany.role)) {
+    vehicleStore.error = "Only an owner or administrator can remove a vehicle from a business.";
+    return;
   }
+
+  deleteTargetVehicle.value = v;
+  deletePassword.value = "";
+  deleteVinConfirmation.value = "";
+  deleteError.value = "";
+}
+
+async function handleDeleteVehicle() {
+  if (!deleteTargetVehicle.value || !authStore.user?.email) {
+    return;
+  }
+
+  deleteError.value = "";
+
+  if (!deleteTargetVehicle.value.vin) {
+    deleteError.value = "This vehicle must have a VIN before VIN-based removal confirmation can be used.";
+    return;
+  }
+
+  if (deleteVinConfirmation.value.trim() !== deleteTargetVehicle.value.vin) {
+    deleteError.value = "VIN confirmation does not match this vehicle.";
+    return;
+  }
+
+  deleteLoading.value = true;
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: authStore.user.email,
+    password: deletePassword.value,
+  });
+
+  if (error) {
+    deleteError.value = error.message || "Password confirmation failed.";
+    deleteLoading.value = false;
+    return;
+  }
+
+  const removed = await vehicleStore.deleteVehicle(deleteTargetVehicle.value.id);
+  deleteLoading.value = false;
+
+  if (!removed) {
+    deleteError.value = vehicleStore.error || "Unable to remove vehicle from this business.";
+    return;
+  }
+
+  closeDeleteModal();
 }
 
 function triggerFileInput() {
@@ -760,10 +1013,37 @@ function hideBrokenImage(e: Event) {
 }
 
 async function handleSave() {
+  if (!authStore.companyId) {
+    vehicleStore.error = "Select an active business before saving a vehicle.";
+    return;
+  }
+
+  saveNotice.value = "";
+
+  if (!editingId.value && modalMode.value === "existing") {
+    if (!selectedExistingVehicleId.value) {
+      vehicleStore.error = "Select an existing vehicle to link to this business.";
+      return;
+    }
+
+    const linked = await vehicleStore.assignExistingVehicleToBusiness(selectedExistingVehicleId.value);
+    if (!linked) {
+      return;
+    }
+
+    closeModal();
+    return;
+  }
+
   let photoUrl = form.value.photo_url || null;
 
   if (selectedPhotoFile.value) {
-    photoUrl = await uploadVehiclePhoto(selectedPhotoFile.value);
+    try {
+      photoUrl = await uploadVehiclePhoto(selectedPhotoFile.value);
+    } catch (uploadError: any) {
+      saveNotice.value = uploadError?.message || "Vehicle photo could not be uploaded. The vehicle was saved without a photo.";
+      photoUrl = form.value.photo_url || null;
+    }
   }
 
   const vehiclePayload = {
@@ -788,9 +1068,15 @@ async function handleSave() {
   };
 
   if (editingId.value) {
-    await vehicleStore.updateVehicle(editingId.value, vehiclePayload);
+    const updated = await vehicleStore.updateVehicle(editingId.value, vehiclePayload);
+    if (!updated) {
+      return;
+    }
   } else {
-    await vehicleStore.createVehicle(vehiclePayload);
+    const created = await vehicleStore.createVehicle(vehiclePayload);
+    if (!created) {
+      return;
+    }
   }
 
   closeModal();

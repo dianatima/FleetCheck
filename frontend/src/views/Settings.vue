@@ -185,6 +185,219 @@
       </div>
     </div>
 
+    <!-- Inspection Templates -->
+    <div v-else-if="activeTab === 'templates'" class="space-y-5">
+      <div class="card p-6">
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div>
+            <h2 class="font-bold text-gray-900 dark:text-white mb-2">Inspection Templates</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+              Build reusable pre-trip and post-trip checklists for each vehicle type. Drivers can then use the right checklist instead of one static template for everything.
+            </p>
+          </div>
+          <button type="button" class="btn-primary text-sm px-4 py-2 gap-2" @click="startCreateTemplate">
+            <Plus :size="15" /> New template
+          </button>
+        </div>
+
+        <div v-if="templatesError" class="mt-4 rounded-xl bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+          {{ templatesError }}
+        </div>
+        <div v-else-if="templatesMessage" class="mt-4 rounded-xl bg-green-50 dark:bg-green-900/20 px-4 py-3 text-sm text-green-700 dark:text-green-300">
+          {{ templatesMessage }}
+        </div>
+      </div>
+
+      <div class="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <div class="card p-5">
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <h3 class="font-semibold text-gray-900 dark:text-white">Saved templates</h3>
+            <span class="text-xs text-gray-400 dark:text-gray-500">{{ inspectionTemplates.length }} total</span>
+          </div>
+
+          <div v-if="templatesLoading" class="text-sm text-gray-500 dark:text-gray-400">Loading templates...</div>
+          <div v-else-if="inspectionTemplates.length === 0" class="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            No templates yet. Create your first checklist for a vehicle type.
+          </div>
+
+          <div v-else class="space-y-3">
+            <div
+              v-for="template in inspectionTemplates"
+              :key="template.id"
+              class="rounded-2xl border px-4 py-4 transition-colors"
+              :class="editingTemplateId === template.id
+                ? 'border-blue-300 bg-blue-50/70 dark:border-blue-700 dark:bg-blue-900/20'
+                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2 mb-1">
+                    <h4 class="font-semibold text-gray-900 dark:text-white truncate">{{ template.name }}</h4>
+                    <span class="badge-blue">{{ template.vehicle_type }}</span>
+                    <span class="badge-gray">{{ template.inspection_type }}</span>
+                    <span class="badge-gray">{{ distanceUnitLabel(template.distance_unit) }}</span>
+                    <span class="badge-gray">{{ dimensionUnitLabel(template.dimension_unit) }}</span>
+                    <span v-if="template.is_active" class="badge-green">Active</span>
+                  </div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ template.items.filter((item) => item.enabled).length }} enabled items</p>
+                </div>
+
+                <div class="flex items-center gap-1">
+                  <button type="button" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors" @click="startEditTemplate(template)">
+                    <Pencil :size="14" />
+                  </button>
+                  <button type="button" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" @click="deleteInspectionTemplate(template.id)">
+                    <Trash2 :size="14" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card p-5 space-y-5">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ editingTemplateId ? 'Edit template' : 'Create template' }}</h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400">Choose a vehicle type, then switch checklist items on or off.</p>
+            </div>
+            <button type="button" class="btn-secondary text-sm px-4 py-2" @click="resetTemplateForm">Reset</button>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">Template name *</label>
+              <input v-model="templateForm.name" class="input-field" placeholder="e.g. My Fleet Semi Config" />
+            </div>
+            <div>
+              <label class="label">Vehicle type *</label>
+              <select v-model="templateForm.vehicle_type" class="input-field" @change="applyTemplatePreset(templateForm.vehicle_type)">
+                <option v-for="vehicleType in vehicleTypeOptions" :key="vehicleType" :value="vehicleType">{{ vehicleType }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Inspection type</label>
+              <select v-model="templateForm.inspection_type" class="input-field">
+                <option value="pre-trip">Pre-trip</option>
+                <option value="post-trip">Post-trip</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Distance unit</label>
+              <select v-model="templateForm.distance_unit" class="input-field">
+                <option v-for="option in distanceUnitOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Length unit</label>
+              <select v-model="templateForm.dimension_unit" class="input-field">
+                <option v-for="option in dimensionUnitOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </div>
+            <label class="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+              <input v-model="templateForm.is_active" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              Template is active and visible to drivers
+            </label>
+          </div>
+
+          <div class="grid sm:grid-cols-3 gap-3">
+            <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
+              <p class="text-xs uppercase tracking-wide text-blue-500 dark:text-blue-300">Checklist items</p>
+              <p class="text-2xl font-bold text-blue-700 dark:text-blue-200">{{ templateForm.items.length }}</p>
+            </div>
+            <div class="rounded-2xl bg-green-50 dark:bg-green-900/20 px-4 py-3">
+              <p class="text-xs uppercase tracking-wide text-green-500 dark:text-green-300">Required items</p>
+              <p class="text-2xl font-bold text-green-700 dark:text-green-200">{{ templateForm.items.filter((item) => item.enabled && item.required).length }}</p>
+            </div>
+            <div class="rounded-2xl bg-purple-50 dark:bg-fuchsia-900/20 px-4 py-3">
+              <p class="text-xs uppercase tracking-wide text-fuchsia-500 dark:text-fuchsia-300">Enabled items</p>
+              <p class="text-2xl font-bold text-fuchsia-700 dark:text-fuchsia-200">{{ templateForm.items.filter((item) => item.enabled).length }}</p>
+            </div>
+          </div>
+
+          <div class="space-y-3 max-h-[560px] overflow-y-auto pr-1">
+            <div v-for="item in templateForm.items" :key="item.id" class="rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+              <div class="grid md:grid-cols-[0.8fr_1.3fr_auto] gap-3 items-center">
+                <input v-model="item.section" class="input-field" placeholder="Section" />
+                <input v-model="item.label" class="input-field" placeholder="Checklist item" />
+                <button type="button" class="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" @click="removeTemplateItem(item.id)">
+                  <Trash2 :size="14" />
+                </button>
+              </div>
+              <div class="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                <label class="inline-flex items-center gap-2">
+                  <input v-model="item.required" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  Required
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input v-model="item.enabled" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  Enabled
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input v-model="item.photoEnabled" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  Allow photo
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input v-model="item.photoRequired" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" :disabled="!item.photoEnabled" />
+                  Photo required
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-4 space-y-3">
+            <h4 class="font-medium text-gray-900 dark:text-white">Add custom checklist item</h4>
+            <div class="grid md:grid-cols-[0.8fr_1.3fr_auto] gap-3 items-center">
+              <input v-model="customItemSection" class="input-field" placeholder="Custom section" />
+              <input v-model="customItemLabel" class="input-field" placeholder="Add custom checklist item..." @keydown.enter.prevent="addCustomTemplateItem" />
+              <button type="button" class="btn-primary px-4 py-2 text-sm gap-2" @click="addCustomTemplateItem">
+                <Plus :size="14" /> Add
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+            <button type="button" class="btn-secondary px-5 py-2.5" @click="resetTemplateForm">Cancel</button>
+            <button type="button" class="btn-primary px-6 py-2.5 gap-2" @click="saveInspectionTemplate">
+              <Save :size="16" /> {{ editingTemplateId ? 'Save template' : 'Create template' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fleet -->
+    <div v-else-if="activeTab === 'fleet'" class="space-y-5">
+      <div class="card p-6">
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div>
+            <h2 class="font-bold text-gray-900 dark:text-white mb-2">Fleet Vehicles</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+              Each business keeps its own fleet. Add vehicles to the active business, then drivers will select from that fleet and the correct template will be matched by vehicle type.
+            </p>
+          </div>
+          <RouterLink to="/vehicles" class="btn-primary text-sm px-4 py-2 gap-2 inline-flex">
+            <Plus :size="15" /> Open fleet vehicles
+          </RouterLink>
+        </div>
+      </div>
+
+      <div class="card p-5">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <h3 class="font-semibold text-gray-900 dark:text-white">Supported vehicle categories</h3>
+          <span class="text-xs text-gray-400 dark:text-gray-500">{{ vehicleTypeOptions.length }} types</span>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <span v-for="vehicleType in vehicleTypeOptions" :key="vehicleType" class="badge-blue">{{ vehicleType }}</span>
+        </div>
+
+        <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+          Templates are business-scoped and vehicle-scoped: one business can have its own sedan template, while another business can keep a completely different sedan checklist.
+        </p>
+      </div>
+    </div>
+
     <!-- Language -->
     <div v-else-if="activeTab === 'language'" class="card p-5">
       <h2 class="font-bold text-gray-900 dark:text-white mb-1">{{ store.t('languageSettings') }}</h2>
@@ -234,14 +447,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
-import { Building2, Globe, Sun, Moon, Check } from 'lucide-vue-next'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { Building2, Globe, Sun, Moon, Check, ClipboardList, Plus, Pencil, Trash2, Save } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
 import type { Language } from '../stores/app'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAuthStore } from '../stores/authStore'
 import AddressAutocomplete from '../components/shared/AddressAutocomplete.vue'
 import { formatPhoneByCountry, getCountryOption, getPreferredCountryCode, getPrioritizedCountries } from '@/lib/companyForm'
+import { supabase } from '@/lib/supabase'
+import { vehicleTypeOptions } from '@/lib/vehicleCatalog'
+import { defaultDimensionUnitForCountry, defaultDistanceUnitForCountry, dimensionUnitLabel, dimensionUnitOptions, distanceUnitLabel, distanceUnitOptions } from '@/lib/measurementUnits'
 
 const store = useAppStore()
 const authStore = useAuthStore()
@@ -255,9 +471,117 @@ const defaultCountry = getCountryOption(getPreferredCountryCode(store.language, 
 
 const tabs = computed(() => [
   { id: 'company',  icon: Building2, label: store.t('companyProfile') },
+  { id: 'templates', icon: ClipboardList, label: 'Inspection Templates' },
+  { id: 'fleet', icon: Building2, label: 'Fleet Vehicles' },
   { id: 'language', icon: Globe,     label: store.t('languageSettings') },
   { id: 'theme',    icon: Sun,       label: store.t('appearance') },
 ])
+
+type TemplateInspectionType = 'pre-trip' | 'post-trip'
+
+type TemplateItemDraft = {
+  id: string
+  section: string
+  label: string
+  required: boolean
+  enabled: boolean
+  photoEnabled?: boolean
+  photoRequired?: boolean
+}
+
+type InspectionTemplateRecord = {
+  id: string
+  name: string
+  vehicle_type: string
+  inspection_type: TemplateInspectionType
+  is_active: boolean
+  distance_unit: 'mi' | 'km'
+  dimension_unit: 'ft' | 'yd' | 'm'
+  items: TemplateItemDraft[]
+  updated_at?: string
+}
+
+const presetTemplates: Record<string, TemplateItemDraft[]> = {
+  'Sedan': [
+    { id: crypto.randomUUID(), section: 'Tires', label: 'Tire pressure', required: true, enabled: true, photoEnabled: true, photoRequired: false },
+    { id: crypto.randomUUID(), section: 'Lights', label: 'Headlights', required: true, enabled: true, photoEnabled: false, photoRequired: false },
+    { id: crypto.randomUUID(), section: 'Brakes', label: 'Brake pedal', required: true, enabled: true, photoEnabled: false, photoRequired: false },
+    { id: crypto.randomUUID(), section: 'Fluids', label: 'Engine oil', required: true, enabled: true, photoEnabled: true, photoRequired: false },
+    { id: crypto.randomUUID(), section: 'Documents', label: 'Insurance', required: true, enabled: true, photoEnabled: true, photoRequired: true },
+  ],
+  'SUV': [
+    { id: crypto.randomUUID(), section: 'Tires', label: 'Tread depth', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Lights', label: 'Turn signals', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Safety', label: 'Seat belts', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Interior', label: 'Interior cleanliness', required: false, enabled: true },
+  ],
+  'Pickup Truck': [
+    { id: crypto.randomUUID(), section: 'Bed', label: 'Cargo area secure', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Brakes', label: 'Parking brake', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Lights', label: 'Brake lights', required: true, enabled: true },
+  ],
+  'Van': [
+    { id: crypto.randomUUID(), section: 'Doors', label: 'Cargo doors', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Lights', label: 'Hazard lights', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Documents', label: 'Registration', required: true, enabled: true },
+  ],
+  'Box Truck': [
+    { id: crypto.randomUUID(), section: 'Cargo', label: 'Lift gate', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Cargo', label: 'Cargo area secure', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Lights', label: 'Marker lights', required: true, enabled: true },
+  ],
+  'Semi Truck': [
+    { id: crypto.randomUUID(), section: 'Tires', label: 'Tire pressure', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Lights', label: 'Headlights', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Brakes', label: 'Brake pedal', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Fluids', label: 'Engine oil', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Windshield', label: 'Wipers', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Mirrors', label: 'Left mirror', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Mirrors', label: 'Right mirror', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Documents', label: 'Registration', required: true, enabled: true },
+  ],
+  'Taxi': [
+    { id: crypto.randomUUID(), section: 'Interior', label: 'Passenger cabin cleanliness', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Safety', label: 'Seat belts', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Lights', label: 'Interior dome lights', required: false, enabled: true },
+  ],
+  'Construction Equipment': [
+    { id: crypto.randomUUID(), section: 'Hydraulics', label: 'Hydraulic hoses', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Safety', label: 'Backup alarm', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Exterior', label: 'Boom / arm condition', required: true, enabled: true },
+  ],
+  'Boom Lift': [
+    { id: crypto.randomUUID(), section: 'Safety', label: 'Emergency stop', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Safety', label: 'Harness anchor points', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Hydraulics', label: 'Hydraulic leaks', required: true, enabled: true },
+  ],
+  'Crane': [
+    { id: crypto.randomUUID(), section: 'Rigging', label: 'Hook latch', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Rigging', label: 'Cable condition', required: true, enabled: true },
+    { id: crypto.randomUUID(), section: 'Safety', label: 'Outriggers', required: true, enabled: true },
+  ],
+  'Custom Vehicle': [
+    { id: crypto.randomUUID(), section: 'General', label: 'Main operational check', required: true, enabled: true, photoEnabled: true, photoRequired: false },
+  ],
+}
+
+const inspectionTemplates = ref<InspectionTemplateRecord[]>([])
+const templatesLoading = ref(false)
+const templatesMessage = ref('')
+const templatesError = ref('')
+const editingTemplateId = ref<string | null>(null)
+const customItemLabel = ref('')
+const customItemSection = ref('Custom')
+const templateForm = reactive<InspectionTemplateRecord>({
+  id: '',
+  name: '',
+  vehicle_type: 'Semi Truck',
+  inspection_type: 'pre-trip',
+  is_active: true,
+  distance_unit: defaultDistanceUnitForCountry(authStore.currentCompany?.country),
+  dimension_unit: defaultDimensionUnitForCountry(authStore.currentCompany?.country),
+  items: [],
+})
 
 const languages = [
   { code: 'en' as Language, flag: '🇺🇸', name: 'English',   native: 'English' },
@@ -297,6 +621,14 @@ onMounted(async () => {
   if (!authStore.companyMemberships.length) {
     await authStore.fetchCompanyMemberships()
   }
+
+  resetTemplateForm()
+  await fetchInspectionTemplates()
+})
+
+watch(() => authStore.companyId, async () => {
+  resetTemplateForm()
+  await fetchInspectionTemplates()
 })
 
 function resetCreateCompanyForm() {
@@ -330,6 +662,198 @@ function handleCreateCompanyCountryChange() {
 
 function handleCreateCompanyPhoneInput(event: Event) {
   createCompanyForm.phone = formatPhoneByCountry((event.target as HTMLInputElement).value, createCompanyForm.country)
+}
+
+function cloneTemplateItems(items: TemplateItemDraft[]) {
+  return items.map((item) => ({
+    id: crypto.randomUUID(),
+    section: item.section,
+    label: item.label,
+    required: item.required,
+    enabled: item.enabled,
+    photoEnabled: item.photoEnabled ?? false,
+    photoRequired: item.photoRequired ?? false,
+  }))
+}
+
+function resetTemplateForm() {
+  editingTemplateId.value = null
+  templateForm.id = ''
+  templateForm.name = ''
+  templateForm.vehicle_type = 'Semi Truck'
+  templateForm.inspection_type = 'pre-trip'
+  templateForm.is_active = true
+  templateForm.distance_unit = defaultDistanceUnitForCountry(authStore.currentCompany?.country)
+  templateForm.dimension_unit = defaultDimensionUnitForCountry(authStore.currentCompany?.country)
+  templateForm.items = cloneTemplateItems(presetTemplates['Semi Truck'] || [])
+  customItemLabel.value = ''
+  customItemSection.value = 'Custom'
+  templatesError.value = ''
+}
+
+function startCreateTemplate() {
+  resetTemplateForm()
+  templatesMessage.value = ''
+}
+
+function startEditTemplate(template: InspectionTemplateRecord) {
+  editingTemplateId.value = template.id
+  templateForm.id = template.id
+  templateForm.name = template.name
+  templateForm.vehicle_type = template.vehicle_type
+  templateForm.inspection_type = template.inspection_type
+  templateForm.is_active = template.is_active
+  templateForm.distance_unit = template.distance_unit || defaultDistanceUnitForCountry(authStore.currentCompany?.country)
+  templateForm.dimension_unit = template.dimension_unit || defaultDimensionUnitForCountry(authStore.currentCompany?.country)
+  templateForm.items = cloneTemplateItems(template.items || [])
+  templatesError.value = ''
+  templatesMessage.value = ''
+}
+
+function applyTemplatePreset(vehicleType: string) {
+  if (editingTemplateId.value) {
+    return
+  }
+
+  templateForm.items = cloneTemplateItems(presetTemplates[vehicleType] || presetTemplates['Custom Vehicle'] || [])
+}
+
+function addCustomTemplateItem() {
+  if (!customItemLabel.value.trim()) {
+    return
+  }
+
+  templateForm.items.push({
+    id: crypto.randomUUID(),
+    section: customItemSection.value.trim() || 'Custom',
+    label: customItemLabel.value.trim(),
+    required: true,
+    enabled: true,
+    photoEnabled: false,
+    photoRequired: false,
+  })
+
+  customItemLabel.value = ''
+}
+
+function removeTemplateItem(itemId: string) {
+  templateForm.items = templateForm.items.filter((item) => item.id !== itemId)
+}
+
+async function fetchInspectionTemplates() {
+  if (!authStore.companyId) {
+    inspectionTemplates.value = []
+    return
+  }
+
+  templatesLoading.value = true
+  templatesError.value = ''
+
+  const { data, error } = await supabase
+    .from('inspection_templates')
+    .select('id, name, vehicle_type, inspection_type, is_active, distance_unit, dimension_unit, items, updated_at')
+    .eq('company_id', authStore.companyId)
+    .order('updated_at', { ascending: false })
+
+  if (error) {
+    templatesError.value = error.message
+    inspectionTemplates.value = []
+    templatesLoading.value = false
+    return
+  }
+
+  inspectionTemplates.value = (data || []).map((template) => ({
+    id: template.id,
+    name: template.name,
+    vehicle_type: template.vehicle_type,
+    inspection_type: template.inspection_type as TemplateInspectionType,
+    is_active: template.is_active,
+    distance_unit: (template.distance_unit || defaultDistanceUnitForCountry(authStore.currentCompany?.country)) as 'mi' | 'km',
+    dimension_unit: (template.dimension_unit || defaultDimensionUnitForCountry(authStore.currentCompany?.country)) as 'ft' | 'yd' | 'm',
+    items: Array.isArray(template.items) ? template.items as TemplateItemDraft[] : [],
+    updated_at: template.updated_at,
+  }))
+
+  templatesLoading.value = false
+}
+
+async function saveInspectionTemplate() {
+  templatesError.value = ''
+  templatesMessage.value = ''
+
+  if (!authStore.user?.id || !authStore.companyId) {
+    templatesError.value = 'Sign in and choose an active company first.'
+    return
+  }
+
+  if (!templateForm.name.trim()) {
+    templatesError.value = 'Template name is required.'
+    return
+  }
+
+  if (templateForm.items.filter((item) => item.enabled && item.label.trim()).length === 0) {
+    templatesError.value = 'Add at least one enabled checklist item.'
+    return
+  }
+
+  const payload = {
+    company_id: authStore.companyId,
+    created_by_user_id: authStore.user.id,
+    name: templateForm.name.trim(),
+    vehicle_type: templateForm.vehicle_type,
+    inspection_type: templateForm.inspection_type,
+    is_active: templateForm.is_active,
+    distance_unit: templateForm.distance_unit,
+    dimension_unit: templateForm.dimension_unit,
+    items: templateForm.items
+      .map((item) => ({
+        id: item.id,
+        section: item.section.trim() || 'General',
+        label: item.label.trim(),
+        required: item.required,
+        enabled: item.enabled,
+        photoEnabled: item.photoEnabled ?? false,
+        photoRequired: item.photoRequired ?? false,
+      }))
+      .filter((item) => item.label),
+  }
+
+  const query = editingTemplateId.value
+    ? supabase.from('inspection_templates').update(payload).eq('id', editingTemplateId.value)
+    : supabase.from('inspection_templates').insert(payload)
+
+  const { error } = await query
+
+  if (error) {
+    templatesError.value = error.message
+    return
+  }
+
+  templatesMessage.value = editingTemplateId.value ? 'Template updated.' : 'Template created.'
+  await fetchInspectionTemplates()
+  resetTemplateForm()
+}
+
+async function deleteInspectionTemplate(templateId: string) {
+  templatesError.value = ''
+  templatesMessage.value = ''
+
+  const { error } = await supabase
+    .from('inspection_templates')
+    .delete()
+    .eq('id', templateId)
+
+  if (error) {
+    templatesError.value = error.message
+    return
+  }
+
+  if (editingTemplateId.value === templateId) {
+    resetTemplateForm()
+  }
+
+  templatesMessage.value = 'Template deleted.'
+  await fetchInspectionTemplates()
 }
 
 function switchCompany(companyId: string) {

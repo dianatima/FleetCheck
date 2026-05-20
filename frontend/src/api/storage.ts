@@ -1,5 +1,23 @@
 import { supabase } from '@/lib/supabase'
 
+function normalizeStorageErrorMessage(bucket: string, message?: string | null) {
+  if (!message) {
+    return `Unable to upload file to ${bucket}.`
+  }
+
+  const normalizedMessage = message.toLowerCase()
+
+  if (normalizedMessage.includes('bucket') && (normalizedMessage.includes('not found') || normalizedMessage.includes('does not exist'))) {
+    return `Storage bucket ${bucket} is not configured yet. Run docs/multi-company-schema.sql in Supabase and try again.`
+  }
+
+  if (normalizedMessage.includes('row-level security') || normalizedMessage.includes('permission')) {
+    return `Storage access for ${bucket} is not configured yet. Run docs/multi-company-schema.sql in Supabase and try again.`
+  }
+
+  return message
+}
+
 async function uploadPublicAsset(bucket: string, filePath: string, file: File) {
   const { error } = await supabase.storage
     .from(bucket)
@@ -9,7 +27,7 @@ async function uploadPublicAsset(bucket: string, filePath: string, file: File) {
     })
 
   if (error) {
-    throw error
+    throw new Error(normalizeStorageErrorMessage(bucket, error.message))
   }
 
   const { data } = supabase.storage

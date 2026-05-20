@@ -15,6 +15,10 @@
       {{ vehicleStore.error }}
     </div>
 
+    <div v-else-if="saveNotice" class="card p-6 text-sm text-amber-700 dark:text-amber-300">
+      {{ saveNotice }}
+    </div>
+
     <div v-else-if="!vehicle" class="card p-6 text-sm text-gray-500">
       Vehicle not found.
     </div>
@@ -241,6 +245,13 @@
             </div>
 
             <form @submit.prevent="saveEdit" class="p-6 space-y-5">
+              <div class="rounded-xl bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">
+                <p class="font-medium">Only business-specific vehicle fields can be edited.</p>
+                <p class="mt-1 text-xs text-amber-600 dark:text-amber-300">
+                  You can change the internal unit number, license plate, status, and photo. VIN, make, model, type, year, odometer, and engine hours stay locked to preserve one shared vehicle history across businesses.
+                </p>
+              </div>
+
               <!-- Main vehicle photo -->
               <div>
                 <label class="label">{{ store.t("vehiclePhoto") }}</label>
@@ -308,7 +319,7 @@
                     {{ store.t("type") }}
                     <span class="text-red-500">*</span>
                   </label>
-                  <select v-model="editForm.type" class="input-field" required>
+                  <select v-model="editForm.type" class="input-field" required disabled>
                     <option v-for="t in vehicleTypes" :key="t" :value="t">
                       {{ t }}
                     </option>
@@ -320,7 +331,7 @@
                     {{ store.t("make") }}
                     <span class="text-red-500">*</span>
                   </label>
-                  <input v-model="editForm.make" class="input-field" required />
+                  <input v-model="editForm.make" class="input-field" required disabled />
                 </div>
 
                 <div>
@@ -331,6 +342,7 @@
                   <input
                     v-model="editForm.model"
                     class="input-field"
+                    disabled
                     required
                   />
                 </div>
@@ -346,6 +358,7 @@
                     type="number"
                     min="1990"
                     :max="new Date().getFullYear() + 1"
+                    disabled
                     required
                   />
                 </div>
@@ -364,7 +377,7 @@
 
                 <div>
                   <label class="label">{{ store.t("vin") }}</label>
-                  <input v-model="editForm.vin" class="input-field" />
+                  <input v-model="editForm.vin" class="input-field" disabled />
                 </div>
 
                 <div>
@@ -374,6 +387,7 @@
                     class="input-field"
                     type="number"
                     min="0"
+                    disabled
                   />
                 </div>
 
@@ -385,6 +399,7 @@
                     type="number"
                     min="0"
                     step="0.1"
+                    disabled
                   />
                 </div>
 
@@ -455,6 +470,7 @@ import AppLayout from "../components/layout/AppLayout.vue";
 import { useAppStore } from "../stores/app";
 import { useVehicleStore } from "@/stores/vehicleStore";
 import { uploadVehiclePhoto } from "@/api/storage";
+import { vehicleTypeOptions } from "@/lib/vehicleCatalog";
 
 type VehicleStatus = "active" | "needs-attention" | "blocked" | "in-repair";
 
@@ -483,21 +499,13 @@ const vehicleId = computed(() => route.params.id as string);
 const vehicle = computed<Vehicle | null>(
   () => vehicleStore.selectedVehicle as Vehicle | null
 );
+const saveNotice = ref("");
 
 onMounted(() => {
   vehicleStore.fetchVehicleById(vehicleId.value);
 });
 
-const vehicleTypes = [
-  "Truck",
-  "Van",
-  "Car",
-  "Equipment",
-  "Bus",
-  "Trailer",
-  "Pickup",
-  "Other",
-];
+const vehicleTypes = vehicleTypeOptions;
 
 const vehicleStatuses = computed(() => [
   { value: "active", label: store.t("statusActive") },
@@ -637,6 +645,8 @@ const editForm = ref({
 function openEdit() {
   if (!vehicle.value) return;
 
+  saveNotice.value = "";
+
   editForm.value = {
     unit: vehicle.value.unit || "",
     type: vehicle.value.type || "",
@@ -679,32 +689,28 @@ function removePhoto() {
 async function saveEdit() {
   if (!vehicle.value) return;
 
+  saveNotice.value = "";
   let photoUrl = editForm.value.photo_url || null;
 
   if (selectedPhotoFile.value) {
-    photoUrl = await uploadVehiclePhoto(selectedPhotoFile.value);
+    try {
+      photoUrl = await uploadVehiclePhoto(selectedPhotoFile.value);
+    } catch (uploadError: any) {
+      saveNotice.value = uploadError?.message || "Vehicle photo could not be uploaded. The vehicle was saved without a photo.";
+      photoUrl = editForm.value.photo_url || null;
+    }
   }
 
-  await vehicleStore.updateVehicle(vehicle.value.id, {
+  const updated = await vehicleStore.updateVehicle(vehicle.value.id, {
     unit: editForm.value.unit,
-    type: editForm.value.type,
-    make: editForm.value.make,
-    model: editForm.value.model,
-    year: Number(editForm.value.year),
     plate: editForm.value.plate,
-    vin: editForm.value.vin || null,
-    odometer:
-      editForm.value.odometer !== null && editForm.value.odometer !== undefined
-        ? Number(editForm.value.odometer)
-        : null,
-    engine_hours:
-      editForm.value.engine_hours !== null &&
-      editForm.value.engine_hours !== undefined
-        ? Number(editForm.value.engine_hours)
-        : null,
     status: editForm.value.status,
     photo_url: photoUrl,
   });
+
+  if (!updated) {
+    return;
+  }
 
   await vehicleStore.fetchVehicleById(vehicle.value.id);
 

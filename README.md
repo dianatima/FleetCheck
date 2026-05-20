@@ -54,6 +54,35 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - **Persisted pre-trip inspections** — PreTrip inspection форма тепер записує inspections у базу замість локального demo-flow.
 - **Driver activity badges** — owner/admin бачить стани `pre-trip done today`, `pre-trip pending` і `inactive 5d+` на основі inspection history та останньої активності.
 
+## Inspection Templates And Units
+
+- **Business-scoped inspection templates** — кожен бізнес має власні inspection templates для окремих типів транспорту, без спільного глобального чекліста на всіх.
+- **Vehicle-type matching** — template автоматично підбирається під category вибраного авто (`Sedan`, `Semi Truck`, `Crane`, `Boom Lift`, etc.).
+- **Photo rules per checklist item** — для кожного пункту template можна вмикати `Allow photo` і `Photo required`.
+- **Distance and dimension units** — template підтримує переключалки одиниць виміру (`mi/km`, `ft/yd/m`) залежно від бізнесу або країни.
+- **Fallback checklist** — якщо для типу авто template не знайдено, driver отримує default checklist замість помилкового або випадкового template.
+
+## Shared Fleet Across Businesses
+
+- **One vehicle, multiple businesses** — один і той самий vehicle record може бути підв’язаний до кількох бізнесів одного owner через `vehicle_company_assignments`.
+- **Explicit existing-vehicle link flow** — owner може не створювати дубль авто, а вибрати `Existing vehicle` і додати вже наявне авто в інший бізнес.
+- **Business-scoped fleet list** — список Fleet Vehicles показує лише авто, прив’язані до поточного active business, навіть якщо фізично це той самий shared vehicle.
+- **Legacy assignment backfill** — старі авто, що були створені до vehicle assignment flow, автоматично отримують assignment для поточного бізнеса, щоб не зникати зі списку.
+
+## Vehicle Integrity Rules
+
+- **Immutable vehicle identity** — у vehicle не можна змінювати `VIN`, `year`, `make`, `model`, `type`, `odometer` та `engine_hours` вручну з owner/admin UI.
+- **Editable business fields only** — owner/admin може змінювати лише `unit`, `plate`, `status` і `photo`.
+- **Protected removal from business** — видалення авто більше не стирає `vehicles` record з БД, а лише відчіпляє його від активного бізнеса.
+- **Manual destructive confirmation** — remove-from-business flow тепер вимагає ручного підтвердження через current password і точний `VIN` авто.
+
+## Shared Vehicle Telemetry
+
+- **Current odometer and engine hours in inspection** — driver під час inspection вказує поточний odometer і engine hours для вибраного авто.
+- **Cross-business latest reading** — після submit inspection система оновлює сам `vehicles` record, тому наступний бізнес бачить останнє фактичне значення по авто.
+- **Rollback protection** — inspection не дає зберегти odometer або engine hours менші за останні зафіксовані значення.
+- **Telemetry saved into inspections** — inspection record зберігає `vehicle_odometer`, `vehicle_engine_hours`, `distance_unit`, `dimension_unit` і structured `responses`.
+
 ## Multi-Business Access
 
 - **Один driver account, кілька бізнесів** — один і той самий водій може бути доданий до кількох бізнесів.
@@ -67,12 +96,15 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 
 Це створює або оновлює:
 
-- `companies`, `company_memberships`, `drivers`, `driver_company_assignments`, `vehicle_company_assignments`, `operations`, `inspections`
+- `companies`, `company_memberships`, `drivers`, `driver_company_assignments`, `vehicle_company_assignments`, `operations`, `inspections`, `inspection_templates`
 - `companies.driver_invite_code`
 - поля документів у `drivers`
 - `profiles.signature_url`
+- `inspections.responses`, `inspections.vehicle_odometer`, `inspections.vehicle_engine_hours`, `inspections.distance_unit`, `inspections.dimension_unit`
+- `inspection_templates.distance_unit`, `inspection_templates.dimension_unit`
 - storage bucket `driver-documents`
 - storage policies для читання, завантаження, оновлення і видалення driver documents
+- RLS policies для business-scoped inspection templates і shared vehicle assignments
 
 Якщо SQL не виконаний, можливі такі помилки:
 
@@ -86,4 +118,6 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - Driver registration is a two-step flow: спочатку auth signup/join business, потім upload avatar/documents/signature, щоб не ламатися на storage RLS.
 - Не можна передавати placeholder `null` asset URLs у driver registration save-flow, інакше вже збережені avatar/license/medical links можуть бути затерті до етапу upload.
 - Для dev/test сценаріїв Supabase Auth може тимчасово повертати email rate limit errors після великої кількості signup attempts.
+- Shared vehicles should be linked between businesses через `vehicle_company_assignments`, а не дублюватися новими `vehicles` rows без потреби.
+- Vehicle odometer and engine hours повинні оновлюватися з inspection flow, щоб усі бізнеси бачили останні фактичні значення по shared vehicle.
 
