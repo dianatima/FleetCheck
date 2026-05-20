@@ -1,16 +1,18 @@
 <template>
   <AppLayout :title="store.t('settings')">
-
-    <!-- Horizontal tabs -->
-    <div class="flex items-center gap-1 mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+    <div
+      class="flex items-center gap-1 mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto"
+    >
       <button
         v-for="tab in tabs"
         :key="tab.id"
         @click="activeTab = tab.id"
         class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all border-b-2 -mb-px"
-        :class="activeTab === tab.id
-          ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+        :class="
+          activeTab === tab.id
+            ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+        "
       >
         <component :is="tab.icon" :size="15" />
         {{ tab.label }}
@@ -18,71 +20,213 @@
     </div>
 
     <!-- Company Profile -->
-    <div v-if="activeTab === 'company'" class="card p-6">
-      <h2 class="font-bold text-gray-900 dark:text-white mb-5">{{ store.t('companyProfile') }}</h2>
+    <div v-if="activeTab === 'company'" class="space-y-5">
+      <div class="card p-6">
+        <div class="flex items-center justify-between gap-3 mb-5">
+          <div>
+            <h2 class="font-bold text-gray-900 dark:text-white">
+              Company Profile
+            </h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              Current company information.
+            </p>
+          </div>
 
-      <div class="grid sm:grid-cols-2 gap-4 mb-4">
-        <div>
-          <label class="label">{{ store.t('companyName') }}</label>
-          <input v-model="companyForm.companyName" class="input-field" placeholder="Acme Trucking Inc." />
+          <button @click="openAddCompany" class="btn-primary text-sm">
+            <Plus :size="15" />
+            Add company
+          </button>
         </div>
-        <div>
-          <label class="label">{{ store.t('phone') }}</label>
-          <input v-model="companyForm.phone" class="input-field" type="tel" placeholder="+1 (555) 000-0000" />
+
+        <div
+          v-if="authStore.ownerCompanies.length === 0"
+          class="text-sm text-gray-500"
+        >
+          No companies found.
+        </div>
+
+        <div v-else class="space-y-3">
+          <div
+            v-for="company in authStore.ownerCompanies"
+            :key="company.company_id"
+            class="border border-gray-100 dark:border-gray-700 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+            :class="
+              company.company_id === authStore.companyId
+                ? 'bg-blue-50/60 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800'
+                : 'bg-white dark:bg-gray-900'
+            "
+          >
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-semibold text-gray-900 dark:text-white">
+                  {{ company.company_name }}
+                </h3>
+
+                <span
+                  v-if="company.company_id === authStore.companyId"
+                  class="badge-blue"
+                >
+                  Current
+                </span>
+              </div>
+
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {{ company.industry || "No industry" }}
+              </p>
+
+              <p class="text-xs text-gray-400 mt-1">
+                {{ formatCompanyAddress(company) }}
+              </p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button
+                v-if="company.company_id !== authStore.companyId"
+                @click="setCurrentCompany(company.company_id)"
+                class="btn-secondary text-sm px-3 py-2"
+              >
+                Set current
+              </button>
+
+              <button
+                @click="openEditCompany(company)"
+                class="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+              >
+                <Pencil :size="15" />
+              </button>
+
+              <button
+                @click="deleteCompany(company)"
+                class="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+              >
+                <Trash2 :size="15" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
 
-      <div class="mb-4">
-        <label class="label">{{ store.t('address') }}</label>
-        <input v-model="companyForm.address" class="input-field" placeholder="123 Fleet Street" />
-      </div>
+    <!-- User Profile -->
+    <div v-else-if="activeTab === 'user'" class="card p-6">
+      <h2 class="font-bold text-gray-900 dark:text-white mb-1">User Profile</h2>
 
-      <div class="mb-6">
-        <label class="label">{{ store.t('industryType') }}</label>
-        <select v-model="companyForm.industry" class="input-field">
-          <option v-for="o in industryOptions" :key="o">{{ o }}</option>
-        </select>
-      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
+        Edit your personal account information.
+      </p>
 
-      <div class="border-t border-gray-100 dark:border-gray-700 pt-5 mb-5">
-        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">{{ store.t('fleetManager') }}</h3>
+      <form @submit.prevent="saveUserProfile" class="space-y-5">
+        <div class="flex items-center gap-4">
+          <div
+            class="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/40 overflow-hidden flex items-center justify-center"
+          >
+            <img
+              v-if="userForm.avatar_url"
+              :src="userForm.avatar_url"
+              class="w-full h-full object-cover"
+            />
+
+            <span
+              v-else
+              class="text-blue-600 dark:text-blue-400 font-bold text-xl"
+            >
+              {{ userInitial }}
+            </span>
+          </div>
+
+          <div>
+            <input
+              ref="avatarInput"
+              type="file"
+              accept="image/*"
+              class="hidden"
+              @change="handleAvatarChange"
+            />
+
+            <button
+              type="button"
+              @click="avatarInput?.click()"
+              class="btn-secondary text-sm"
+            >
+              Upload avatar
+            </button>
+
+            <button
+              v-if="userForm.avatar_url"
+              type="button"
+              @click="removeAvatar"
+              class="ml-2 text-sm text-red-500 hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+
         <div class="grid sm:grid-cols-2 gap-4">
           <div>
-            <label class="label">{{ store.t('firstName') }}</label>
-            <input v-model="managerForm.firstName" class="input-field" placeholder="John" />
+            <label class="label">First name</label>
+            <input v-model="userForm.first_name" class="input-field" />
           </div>
+
           <div>
-            <label class="label">{{ store.t('lastName') }}</label>
-            <input v-model="managerForm.lastName" class="input-field" placeholder="Smith" />
+            <label class="label">Last name</label>
+            <input v-model="userForm.last_name" class="input-field" />
           </div>
-          <div class="sm:col-span-2">
-            <label class="label">{{ store.t('phone') }}</label>
-            <input v-model="managerForm.phone" class="input-field" type="tel" placeholder="+1 (555) 000-0000" />
+
+          <div>
+            <label class="label">Email</label>
+            <input v-model="userForm.email" class="input-field" type="email" />
+          </div>
+
+          <div>
+            <label class="label">Phone</label>
+            <input v-model="userForm.phone" class="input-field" />
           </div>
         </div>
-      </div>
 
-      <button class="btn-primary text-sm">{{ store.t('save') }}</button>
+        <button type="submit" class="btn-primary text-sm" :disabled="saving">
+          {{ saving ? "Saving..." : "Save profile" }}
+        </button>
+      </form>
     </div>
 
     <!-- Language -->
     <div v-else-if="activeTab === 'language'" class="card p-5">
-      <h2 class="font-bold text-gray-900 dark:text-white mb-1">{{ store.t('languageSettings') }}</h2>
-      <p class="text-gray-500 dark:text-gray-400 text-sm mb-6">{{ store.t('chooseLanguage') }}</p>
+      <h2 class="font-bold text-gray-900 dark:text-white mb-1">
+        {{ store.t("languageSettings") }}
+      </h2>
+
+      <p class="text-gray-500 dark:text-gray-400 text-sm mb-6">
+        {{ store.t("chooseLanguage") }}
+      </p>
+
       <div class="space-y-2">
         <button
           v-for="lang in languages"
           :key="lang.code"
           @click="store.setLanguage(lang.code)"
           class="w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all"
-          :class="store.language === lang.code ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'"
+          :class="
+            store.language === lang.code
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+              : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
+          "
         >
           <span class="text-2xl">{{ lang.flag }}</span>
+
           <div class="flex-1 text-left">
-            <p class="font-medium" :class="store.language === lang.code ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-white'">{{ lang.name }}</p>
-            <p class="text-sm text-gray-500 dark:text-gray-400">{{ lang.native }}</p>
+            <p class="font-medium">
+              {{ lang.name }}
+            </p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              {{ lang.native }}
+            </p>
           </div>
-          <div v-if="store.language === lang.code" class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+
+          <div
+            v-if="store.language === lang.code"
+            class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center"
+          >
             <Check :size="13" class="text-white" />
           </div>
         </button>
@@ -91,75 +235,346 @@
 
     <!-- Theme -->
     <div v-else-if="activeTab === 'theme'" class="card p-5">
-      <h2 class="font-bold text-gray-900 dark:text-white mb-1">{{ store.t('appearance') }}</h2>
-      <p class="text-gray-500 dark:text-gray-400 text-sm mb-6">{{ store.t('customizeAppearance') }}</p>
+      <h2 class="font-bold text-gray-900 dark:text-white mb-1">
+        {{ store.t("appearance") }}
+      </h2>
+
+      <p class="text-gray-500 dark:text-gray-400 text-sm mb-6">
+        {{ store.t("customizeAppearance") }}
+      </p>
+
       <div class="grid grid-cols-2 gap-3">
         <button
           v-for="opt in themeOptions"
           :key="opt.id"
           @click="selectTheme(opt.id)"
           class="p-4 rounded-xl border-2 flex flex-col items-center gap-3 transition-all"
-          :class="appTheme === opt.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'"
+          :class="
+            appTheme === opt.id
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+              : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
+          "
         >
-          <div class="w-full h-16 rounded-lg border flex items-center justify-center overflow-hidden" :class="opt.preview">
+          <div
+            class="w-full h-16 rounded-lg border flex items-center justify-center overflow-hidden"
+            :class="opt.preview"
+          >
             <component :is="opt.icon" :size="20" :class="opt.iconClass" />
           </div>
-          <span class="text-sm font-medium" :class="appTheme === opt.id ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'">{{ opt.label }}</span>
-          <div v-if="appTheme === opt.id" class="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center"><Check :size="11" class="text-white" /></div>
+
+          <span class="text-sm font-medium">
+            {{ opt.label }}
+          </span>
+
+          <div
+            v-if="appTheme === opt.id"
+            class="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center"
+          >
+            <Check :size="11" class="text-white" />
+          </div>
         </button>
       </div>
     </div>
 
+    <CompanyFormModal
+      v-model="showCompanyModal"
+      :company="editingCompany"
+      :loading="saving"
+      @save="saveCompany"
+    />
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-import { Building2, Globe, Sun, Moon, Check } from 'lucide-vue-next'
-import { useAppStore } from '../stores/app'
-import type { Language } from '../stores/app'
-import AppLayout from '../components/layout/AppLayout.vue'
+import { ref, reactive, computed, onMounted, watch } from "vue";
+import {
+  Building2,
+  Globe,
+  Sun,
+  Moon,
+  Check,
+  User,
+  Plus,
+  Pencil,
+  Trash2,
+} from "lucide-vue-next";
 
-const store = useAppStore()
-const activeTab = ref('company')
-const appTheme = ref<'light' | 'dark'>('light')
+import { supabase } from "@/lib/supabase";
+import { useAppStore } from "../stores/app";
+import { useAuthStore } from "@/stores/authStore";
+import type { Language } from "../stores/app";
+import AppLayout from "../components/layout/AppLayout.vue";
+import CompanyFormModal from "@/components/settings/CompanyFormModal.vue";
+
+const store = useAppStore();
+const authStore = useAuthStore();
+
+const activeTab = ref("company");
+const appTheme = ref<"light" | "dark">(store.theme as "light" | "dark");
+const saving = ref(false);
+
+const showCompanyModal = ref(false);
+const editingCompany = ref<any | null>(null);
+
+const avatarInput = ref<HTMLInputElement | null>(null);
+const selectedAvatarFile = ref<File | null>(null);
 
 const tabs = computed(() => [
-  { id: 'company',  icon: Building2, label: store.t('companyProfile') },
-  { id: 'language', icon: Globe,     label: store.t('languageSettings') },
-  { id: 'theme',    icon: Sun,       label: store.t('appearance') },
-])
+  { id: "company", icon: Building2, label: "Company Profile" },
+  { id: "user", icon: User, label: "User Profile" },
+  { id: "language", icon: Globe, label: store.t("languageSettings") },
+  { id: "theme", icon: Sun, label: store.t("appearance") },
+]);
 
 const languages = [
-  { code: 'en' as Language, flag: '🇺🇸', name: 'English',   native: 'English' },
-  { code: 'uk' as Language, flag: '🇺🇦', name: 'Ukrainian', native: 'Українська' },
-  { code: 'es' as Language, flag: '🇪🇸', name: 'Spanish',   native: 'Español' },
-  { code: 'fr' as Language, flag: '🇫🇷', name: 'French',    native: 'Français' },
-]
+  { code: "en" as Language, flag: "🇺🇸", name: "English", native: "English" },
+  {
+    code: "uk" as Language,
+    flag: "🇺🇦",
+    name: "Ukrainian",
+    native: "Українська",
+  },
+  { code: "es" as Language, flag: "🇪🇸", name: "Spanish", native: "Español" },
+  { code: "fr" as Language, flag: "🇫🇷", name: "French", native: "Français" },
+];
 
 const themeOptions = computed(() => [
-  { id: 'light', icon: Sun,  label: store.t('lightMode'), preview: 'bg-white border-gray-200',    iconClass: 'text-gray-700' },
-  { id: 'dark',  icon: Moon, label: store.t('darkMode'),  preview: 'bg-gray-900 border-gray-700', iconClass: 'text-gray-200' },
-])
+  {
+    id: "light",
+    icon: Sun,
+    label: store.t("lightMode"),
+    preview: "bg-white border-gray-200",
+    iconClass: "text-gray-700",
+  },
+  {
+    id: "dark",
+    icon: Moon,
+    label: store.t("darkMode"),
+    preview: "bg-gray-900 border-gray-700",
+    iconClass: "text-gray-200",
+  },
+]);
 
-function selectTheme(id: string) {
-  appTheme.value = id as 'light' | 'dark'
-  if (id === 'light' && store.theme === 'dark') store.toggleTheme()
-  if (id === 'dark'  && store.theme === 'light') store.toggleTheme()
+const userForm = reactive({
+  first_name: "",
+  last_name: "",
+  email: "",
+  phone: "",
+  avatar_url: "",
+});
+
+const userInitial = computed(() => {
+  return (userForm.first_name || userForm.email || "U").charAt(0).toUpperCase();
+});
+
+watch(
+  () => authStore.profile,
+  () => fillUserForm(),
+  { immediate: true }
+);
+
+onMounted(async () => {
+  if (!authStore.profile) {
+    await authStore.fetchProfile();
+  }
+
+  await authStore.fetchOwnerCompanies();
+  fillUserForm();
+});
+
+function fillUserForm() {
+  if (!authStore.profile) return;
+
+  userForm.first_name = authStore.profile.first_name || "";
+  userForm.last_name = authStore.profile.last_name || "";
+  userForm.email = authStore.profile.email || "";
+  userForm.phone = authStore.profile.phone || "";
+  userForm.avatar_url = authStore.profile.avatar_url || "";
 }
 
-const industryOptions = ['Trucking / Freight', 'Construction Equipment', 'Boom Lift Rental', 'Delivery Fleet', 'Taxi / Passenger', 'Service Vehicles', 'Other']
+function selectTheme(id: string) {
+  appTheme.value = id as "light" | "dark";
 
-const companyForm = reactive({
-  companyName: 'Acme Trucking Inc.',
-  phone: '+1 (555) 234-5678',
-  address: '456 Fleet Ave, Los Angeles, CA',
-  industry: 'Trucking / Freight',
-})
+  if (id === "light" && store.theme === "dark") store.toggleTheme();
+  if (id === "dark" && store.theme === "light") store.toggleTheme();
+}
 
-const managerForm = reactive({
-  firstName: 'James',
-  lastName: 'Davis',
-  phone: '+1 (555) 987-6543',
-})
+function formatCompanyAddress(company: any) {
+  return (
+    [company.country, company.state, company.city, company.address]
+      .filter(Boolean)
+      .join(", ") || "No address"
+  );
+}
+
+function openAddCompany() {
+  editingCompany.value = null;
+  showCompanyModal.value = true;
+}
+
+function openEditCompany(company: any) {
+  editingCompany.value = company;
+  showCompanyModal.value = true;
+}
+
+async function saveCompany(payload: any) {
+  console.log("SAVE COMPANY PAYLOAD", payload);
+  console.log("EDITING COMPANY", editingCompany.value);
+
+  saving.value = true;
+  authStore.error = null;
+
+  let ok = true;
+
+  if (editingCompany.value) {
+    const { error } = await supabase
+      .from("companies")
+      .update(payload)
+      .eq("id", editingCompany.value.company_id);
+
+    if (error) {
+      authStore.error = error.message;
+      ok = false;
+    }
+  } else {
+    ok = await authStore.createCompany(payload);
+  }
+
+  if (!ok) {
+    saving.value = false;
+    return;
+  }
+
+  await authStore.fetchProfile();
+  await authStore.fetchOwnerCompanies();
+  await authStore.fetchProfile();
+
+  saving.value = false;
+  showCompanyModal.value = false;
+  editingCompany.value = null;
+}
+
+function setCurrentCompany(companyId: string) {
+  authStore.setActiveCompany(companyId);
+  window.location.reload();
+}
+
+async function deleteCompany(company: any) {
+  if (!confirm(`Delete company "${company.company_name}"?`)) return;
+
+  saving.value = true;
+
+  const { error: ownerError } = await supabase
+    .from("company_owners")
+    .delete()
+    .eq("company_id", company.company_id)
+    .eq("profile_id", authStore.profile.id);
+
+  if (ownerError) {
+    authStore.error = ownerError.message;
+    saving.value = false;
+    return;
+  }
+
+  const { error: companyError } = await supabase
+    .from("companies")
+    .delete()
+    .eq("id", company.company_id);
+
+  if (companyError) {
+    authStore.error = companyError.message;
+    saving.value = false;
+    return;
+  }
+
+  await authStore.fetchOwnerCompanies();
+
+  if (authStore.companyId === company.company_id) {
+    const nextCompanyId = authStore.ownerCompanies[0]?.company_id || null;
+
+    if (nextCompanyId) {
+      authStore.setActiveCompany(nextCompanyId);
+    }
+  }
+
+  saving.value = false;
+  window.location.reload();
+}
+
+function handleAvatarChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+
+  selectedAvatarFile.value = file;
+  userForm.avatar_url = URL.createObjectURL(file);
+}
+
+function removeAvatar() {
+  selectedAvatarFile.value = null;
+  userForm.avatar_url = "";
+}
+
+async function uploadAvatarIfNeeded() {
+  if (!selectedAvatarFile.value || !authStore.user?.id) {
+    return userForm.avatar_url || null;
+  }
+
+  const file = selectedAvatarFile.value;
+  const ext = file.name.split(".").pop();
+  const path = `profiles/${authStore.user.id}-${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("avatars")
+    .upload(path, file, {
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw uploadError;
+  }
+
+  const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+
+  return data.publicUrl;
+}
+
+async function saveUserProfile() {
+  if (!authStore.user?.id) return;
+
+  saving.value = true;
+
+  try {
+    const avatarUrl = await uploadAvatarIfNeeded();
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        first_name: userForm.first_name || null,
+        last_name: userForm.last_name || null,
+        email: userForm.email || null,
+        phone: userForm.phone || null,
+        avatar_url: avatarUrl,
+      })
+      .eq("auth_user_id", authStore.user.id);
+
+    if (error) {
+      authStore.error = error.message;
+      saving.value = false;
+      return;
+    }
+
+    await authStore.fetchProfile();
+    selectedAvatarFile.value = null;
+  } catch (e: any) {
+    authStore.error = e.message || "Avatar upload failed";
+  }
+
+  saving.value = false;
+}
 </script>
+
+<style scoped>
+.badge-blue {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400;
+}
+</style>
