@@ -55,11 +55,11 @@
       {{ vehicleStore.error }}
     </div>
 
-    <div v-else-if="saveNotice" class="card p-6 text-sm text-amber-700 dark:text-amber-300">
-      {{ saveNotice }}
-    </div>
-
     <template v-else>
+      <div v-if="saveNotice" class="card p-6 mb-5 text-sm text-amber-700 dark:text-amber-300">
+        {{ saveNotice }}
+      </div>
+
       <!-- Summary badges for current page -->
       <div class="flex flex-wrap gap-2 mb-5">
         <span class="badge-green">

@@ -15,15 +15,15 @@
       {{ vehicleStore.error }}
     </div>
 
-    <div v-else-if="saveNotice" class="card p-6 text-sm text-amber-700 dark:text-amber-300">
-      {{ saveNotice }}
-    </div>
-
     <div v-else-if="!vehicle" class="card p-6 text-sm text-gray-500">
       Vehicle not found.
     </div>
 
     <template v-else>
+      <div v-if="saveNotice" class="card p-6 mb-5 text-sm text-amber-700 dark:text-amber-300">
+        {{ saveNotice }}
+      </div>
+
       <div class="card overflow-hidden mb-5">
         <div
           class="h-48 sm:h-64 bg-gray-100 dark:bg-gray-700 relative overflow-hidden"
