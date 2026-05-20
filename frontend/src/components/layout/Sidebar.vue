@@ -71,6 +71,7 @@ const authStore = useAuthStore()
 
 const managerItems = [
   { icon: LayoutDashboard, label: 'dashboard', to: '/dashboard' },
+  { icon: ClipboardList, label: 'inspections', to: '/inspect/pre' },
   { icon: Truck, label: 'vehicles', to: '/vehicles' },
   { icon: Users, label: 'drivers', to: '/drivers' },
   { icon: FileText, label: 'reports', to: '/reports' },

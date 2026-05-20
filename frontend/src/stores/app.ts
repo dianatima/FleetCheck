@@ -2078,6 +2078,7 @@ export const useAppStore = defineStore('app', () => {
   const language = ref<Language>((localStorage.getItem('lang') as Language) ?? 'en')
   const role = ref<Role>(null)
   const inspectionResult = ref<'pass' | 'fail' | null>(null)
+  const inspectionContext = ref<any | null>(null)
 
   watch(theme, (val) => {
     const root = document.documentElement
@@ -2106,9 +2107,13 @@ export const useAppStore = defineStore('app', () => {
     inspectionResult.value = r
   }
 
+  function setInspectionContext(context: any | null) {
+    inspectionContext.value = context
+  }
+
   function t(key: string): string {
     return translations[language.value][key] ?? translations['en'][key] ?? key
   }
 
-  return { theme, language, role, inspectionResult, toggleTheme, setLanguage, setRole, setInspectionResult, t }
+  return { theme, language, role, inspectionResult, inspectionContext, toggleTheme, setLanguage, setRole, setInspectionResult, setInspectionContext, t }
 })

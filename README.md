@@ -52,6 +52,9 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 ## Inspection Activity
 
 - **Persisted pre-trip inspections** — PreTrip inspection форма тепер записує inspections у базу замість локального demo-flow.
+- **Driver and admin inspection submissions** — pre-trip і post-trip можуть виконувати як водії, так і owner/admin користувачі в межах active business.
+- **Shared inspection entry points** — inspection доступний з driver dashboard cards, mobile bottom nav і desktop sidebar, щоб однаково відкриватися на планшеті та desktop.
+- **Performer attribution** — inspection result і reports UI окремо показують прив’язаного driver та того, хто фактично виконав і відправив inspection.
 - **Driver activity badges** — owner/admin бачить стани `pre-trip done today`, `pre-trip pending` і `inactive 5d+` на основі inspection history та останньої активності.
 
 ## Inspection Templates And Units
@@ -83,6 +86,13 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - **Rollback protection** — inspection не дає зберегти odometer або engine hours менші за останні зафіксовані значення.
 - **Telemetry saved into inspections** — inspection record зберігає `vehicle_odometer`, `vehicle_engine_hours`, `distance_unit`, `dimension_unit` і structured `responses`.
 
+## Driver Fleet Visibility
+
+- **Live driver vehicles page** — `/driver/vehicles` більше не використовує demo data і показує реальний fleet поточного active business через `vehicle_company_assignments`.
+- **Live dashboard fleet preview** — блок `Available vehicles` на driver dashboard також підтягує реальні авто бізнесу, а не статичні mock cards.
+- **Live driver reports surfaces** — driver dashboard `Recent Reports` і сторінка `/driver/reports` тепер читають реальні inspections із Supabase замість placeholder таблиць.
+- **Template visibility during inspection** — driver бачить active vehicle template прямо у `/inspect/pre` та `/inspect/post`, де template підбирається під тип вибраного авто.
+
 ## Multi-Business Access
 
 - **Один driver account, кілька бізнесів** — один і той самий водій може бути доданий до кількох бізнесів.
@@ -102,8 +112,9 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - `profiles.signature_url`
 - `inspections.responses`, `inspections.vehicle_odometer`, `inspections.vehicle_engine_hours`, `inspections.distance_unit`, `inspections.dimension_unit`
 - `inspection_templates.distance_unit`, `inspection_templates.dimension_unit`
-- storage bucket `driver-documents`
+- storage buckets `driver-documents`, `vehicle-photos`
 - storage policies для читання, завантаження, оновлення і видалення driver documents
+- storage policies для vehicle photos upload/update/delete
 - RLS policies для business-scoped inspection templates і shared vehicle assignments
 
 Якщо SQL не виконаний, можливі такі помилки:

@@ -23,25 +23,26 @@
       <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4">{{ store.t('inspectionSummary') }}</h3>
       <div class="grid grid-cols-3 gap-3 mb-4">
         <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center">
-          <div class="text-2xl font-bold text-green-600 dark:text-green-400">54</div>
+          <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ inspectionContext?.passedCount ?? 0 }}</div>
           <div class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('statusPassed') }}</div>
         </div>
         <div class="bg-red-50 dark:bg-red-900/20 rounded-xl p-3 text-center">
-          <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ failedItems.length }}</div>
+          <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ inspectionContext?.failedCount ?? failedItems.length }}</div>
           <div class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('statusFailed') }}</div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
-          <div class="text-2xl font-bold text-gray-600 dark:text-gray-300">4</div>
+          <div class="text-2xl font-bold text-gray-600 dark:text-gray-300">{{ inspectionContext?.naCount ?? 0 }}</div>
           <div class="text-xs text-gray-500 dark:text-gray-400">N/A</div>
         </div>
       </div>
       <div class="grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('vehicle') }}:</span> Kenworth T680 · #1042</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('driver') }}:</span> John Smith</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('type') }}:</span> Pre-Trip Inspection</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('time') }}:</span> May 12, 2026 7:24 AM</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('duration') }}:</span> 18 minutes</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('photosTaken') }}:</span> 3</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('vehicle') }}:</span> {{ inspectionContext?.vehicle || '—' }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('driver') }}:</span> {{ inspectionContext?.driver || '—' }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('reportedBy') }}:</span> {{ inspectionContext?.performedBy || '—' }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('type') }}:</span> {{ inspectionContext?.type || '—' }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('time') }}:</span> {{ inspectionContext?.time || '—' }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('duration') }}:</span> {{ inspectionContext?.duration || '—' }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('photosTaken') }}:</span> {{ inspectionContext?.photosTaken ?? 0 }}</div>
       </div>
     </div>
 
@@ -93,6 +94,7 @@ import AppLayout from '../components/layout/AppLayout.vue'
 
 const store = useAppStore()
 const passed = computed(() => store.inspectionResult !== 'fail')
+const inspectionContext = computed(() => store.inspectionContext)
 
 const failedItems = [
   { section: 'Tires & Wheels', item: 'Left rear tire pressure', severity: 'high', comment: 'Tire pressure at 65 PSI, minimum required 80 PSI' },

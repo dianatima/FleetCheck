@@ -178,7 +178,7 @@ const authStore = useAuthStore()
 const router = useRouter()
 
 type State = 'pass' | 'fail' | null
-type VehicleSummary = { id: string; unit: string; type: string; make: string; model: string; plate: string; odometer?: number | null; engine_hours?: number | null }
+type VehicleSummary = { id: string; unit: string; type: string; make: string; model: string; plate: string; odometer?: number | null; engine_hours?: number | null; assigned_driver_id?: string | null; assigned_driver_name?: string | null }
 interface Item { id: string; section: string; label: string; icon: unknown; state: State; note: string; photos: string[]; required: boolean; photoEnabled: boolean; photoRequired: boolean }
 interface TemplateItem { id?: string; section?: string; label: string; required?: boolean; enabled?: boolean; photoEnabled?: boolean; photoRequired?: boolean }
 interface TemplateOption { id: string; name: string; vehicleType: string; distanceUnit: DistanceUnit; dimensionUnit: DimensionUnit; items: TemplateItem[] }
@@ -349,7 +349,7 @@ async function loadVehicles() {
 
   const { data: assignments, error: assignmentsError } = await supabase
     .from('vehicle_company_assignments')
-    .select('vehicle_id')
+    .select('vehicle_id, assigned_driver_id')
     .eq('company_id', authStore.companyId)
 
   if (assignmentsError) {
@@ -361,6 +361,7 @@ async function loadVehicles() {
   }
 
   const vehicleIds = (assignments || []).map((assignment) => assignment.vehicle_id)
+  const assignedDriverIds = [...new Set((assignments || []).map((assignment) => assignment.assigned_driver_id).filter(Boolean))]
 
   if (vehicleIds.length === 0) {
     vehiclesLoading.value = false
@@ -370,22 +371,34 @@ async function loadVehicles() {
     return
   }
 
-  const { data, error } = await supabase
-    .from('vehicles')
-    .select('id, unit, type, make, model, plate, odometer, engine_hours')
-    .in('id', vehicleIds)
-    .order('make', { ascending: true })
+  const [{ data, error }, { data: drivers, error: driversError }] = await Promise.all([
+    supabase
+      .from('vehicles')
+      .select('id, unit, type, make, model, plate, odometer, engine_hours')
+      .in('id', vehicleIds)
+      .order('make', { ascending: true }),
+    assignedDriverIds.length
+      ? supabase.from('drivers').select('id, first_name, last_name').in('id', assignedDriverIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
 
   vehiclesLoading.value = false
 
-  if (error) {
-    submitError.value = error.message
+  if (error || driversError) {
+    submitError.value = error?.message || driversError?.message || 'Unable to load vehicles.'
     availableVehicles.value = []
     selectedVehicleId.value = ''
     return
   }
 
-  availableVehicles.value = (data || []) as VehicleSummary[]
+  const assignmentMap = new Map((assignments || []).map((assignment) => [assignment.vehicle_id, assignment.assigned_driver_id || null]))
+  const driverNameMap = new Map((drivers || []).map((driver: any) => [driver.id, `${driver.first_name || ''} ${driver.last_name || ''}`.trim() || 'Assigned driver']))
+
+  availableVehicles.value = ((data || []) as VehicleSummary[]).map((vehicle) => ({
+    ...vehicle,
+    assigned_driver_id: assignmentMap.get(vehicle.id) || null,
+    assigned_driver_name: assignmentMap.get(vehicle.id) ? (driverNameMap.get(assignmentMap.get(vehicle.id) as string) || null) : null,
+  }))
   selectedVehicleId.value = availableVehicles.value[0]?.id || ''
   syncVehicleTelemetry()
 }
@@ -452,6 +465,10 @@ async function handleSubmit() {
         .eq('auth_user_id', authStore.user.id)
         .maybeSingle()
 
+      const inspectionDriverId = driverRecord?.id || selectedVehicle.value.assigned_driver_id || null
+      const performerRole = authStore.currentCompany?.role || authStore.profile?.role || 'user'
+      const performerName = driverDisplayName.value
+
       const notes = items
         .value
         .filter((item) => item.state === 'fail' && item.note.trim())
@@ -474,7 +491,7 @@ async function handleSubmit() {
         .from('inspections')
         .insert({
           company_id: authStore.companyId,
-          driver_id: driverRecord?.id || null,
+          driver_id: inspectionDriverId,
           vehicle_id: selectedVehicle.value.id,
           performed_by_user_id: authStore.user.id,
           inspection_type: props.isPostTrip ? 'post-trip' : 'pre-trip',
@@ -502,6 +519,24 @@ async function handleSubmit() {
     }
   }
 
+  store.setInspectionContext({
+    vehicle: `${selectedVehicle.value.make} ${selectedVehicle.value.model} · #${selectedVehicle.value.unit}`,
+    driver: selectedVehicle.value.assigned_driver_name || driverDisplayName.value,
+    performedBy: `${performerName} (${performerRole})`,
+    type: props.isPostTrip ? 'Post-Trip Inspection' : 'Pre-Trip Inspection',
+    time: new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date()),
+    photosTaken: items.value.reduce((total, item) => total + item.photos.length, 0),
+    passedCount: items.value.filter((item) => item.state === 'pass').length,
+    failedCount: failCount.value,
+    naCount: items.value.filter((item) => item.state === null).length,
+    duration: `${Math.max(1, Math.round(items.value.length / 3))} minutes`,
+  })
   store.setInspectionResult(failCount.value > 0 ? 'fail' : 'pass')
   router.push('/inspect/result')
 }

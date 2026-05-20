@@ -1,14 +1,12 @@
 <template>
   <AppLayout title="Vehicles">
-    <!-- Summary badges -->
     <div class="flex flex-wrap gap-2 mb-5">
-      <span class="badge-green">{{ vehicles.filter(v => v.status === 'active').length }} {{ store.t('statusActive') }}</span>
-      <span class="badge-orange">{{ vehicles.filter(v => v.status === 'needs-attention').length }} {{ store.t('statusNeedsAttention') }}</span>
-      <span class="badge-red">{{ vehicles.filter(v => v.status === 'blocked').length }} {{ store.t('statusBlocked') }}</span>
-      <span class="badge-gray">{{ vehicles.filter(v => v.status === 'in-repair').length }} {{ store.t('statusInRepair') }}</span>
+      <span class="badge-green">{{ vehicles.filter((v) => v.status === 'active').length }} {{ store.t('statusActive') }}</span>
+      <span class="badge-orange">{{ vehicles.filter((v) => v.status === 'needs-attention').length }} {{ store.t('statusNeedsAttention') }}</span>
+      <span class="badge-red">{{ vehicles.filter((v) => v.status === 'blocked').length }} {{ store.t('statusBlocked') }}</span>
+      <span class="badge-gray">{{ vehicles.filter((v) => v.status === 'in-repair').length }} {{ store.t('statusInRepair') }}</span>
     </div>
 
-    <!-- Search & filter -->
     <div class="flex flex-wrap items-center gap-3 mb-5">
       <div class="relative flex-1 min-w-48">
         <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -26,8 +24,15 @@
       </div>
     </div>
 
-    <!-- Table -->
-    <div class="card overflow-hidden">
+    <div v-if="loading" class="card p-6 text-sm text-gray-500">
+      Loading vehicles...
+    </div>
+
+    <div v-else-if="error" class="card p-6 text-sm text-red-500">
+      {{ error }}
+    </div>
+
+    <div v-else class="card overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
@@ -45,10 +50,10 @@
               <td class="px-4 py-3">
                 <div class="flex items-center gap-3">
                   <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0">
-                    <img v-if="v.photo" :src="v.photo" alt="" class="w-full h-full object-cover" @error="(e) => (e.target as HTMLImageElement).style.display = 'none'" />
+                    <img v-if="v.photo_url" :src="v.photo_url" alt="" class="w-full h-full object-cover" @error="(e) => (e.target as HTMLImageElement).style.display = 'none'" />
                   </div>
                   <div>
-                    <p class="text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">{{ v.name }}</p>
+                    <p class="text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">{{ getVehicleName(v) }}</p>
                     <p class="text-xs font-mono text-gray-400">{{ v.unit }}</p>
                   </div>
                 </div>
@@ -56,9 +61,9 @@
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ v.type }}</td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ v.year ?? '—' }}</td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ v.plate }}</td>
-              <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">{{ v.vin !== 'N/A' ? v.vin.substring(0, 12) + '…' : '—' }}</td>
+              <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">{{ v.vin ? v.vin.substring(0, 12) + '…' : '—' }}</td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ v.odometer != null ? v.odometer.toLocaleString() + ' mi' : '—' }}</td>
-              <td class="px-4 py-3"><span :class="statusConfig[v.status].badge">{{ statusConfig[v.status].label }}</span></td>
+              <td class="px-4 py-3"><span :class="statusConfig[v.status]?.badge || 'badge-gray'">{{ statusConfig[v.status]?.label || v.status }}</span></td>
             </tr>
           </tbody>
         </table>
@@ -68,14 +73,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Search, Filter } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
+import { fetchCompanyVehicles, type CompanyVehicle } from '@/lib/companyVehicles'
+
 const store = useAppStore()
+const authStore = useAuthStore()
 
 const search = ref('')
 const filterStatus = ref('all')
+const loading = ref(false)
+const error = ref('')
+const vehicles = ref<CompanyVehicle[]>([])
 
 const statusConfig = computed<Record<string, { label: string; badge: string }>>(() => ({
   active: { label: store.t('statusActive'), badge: 'badge-green' },
@@ -84,19 +96,43 @@ const statusConfig = computed<Record<string, { label: string; badge: string }>>(
   'in-repair': { label: store.t('statusInRepair'), badge: 'badge-gray' },
 }))
 
-const vehicles = ref([
-  { id: 1, unit: '#1042', name: 'Kenworth T680',        plate: 'ABC-1234', vin: '1XKAD49X1EJ301042', type: 'Truck',     year: 2022, odometer: 84200,  status: 'active',          photo: 'https://images.pexels.com/photos/1638459/pexels-photo-1638459.jpeg?w=200' },
-  { id: 2, unit: '#0781', name: 'Peterbilt 579',         plate: 'XYZ-5678', vin: '1XPWD49X2EN781234', type: 'Truck',     year: 2021, odometer: 123500, status: 'needs-attention', photo: 'https://images.pexels.com/photos/6873111/pexels-photo-6873111.jpeg?w=200' },
-  { id: 3, unit: '#2210', name: 'Freightliner Cascadia', plate: 'DEF-9012', vin: '3AKJGLD57ESDC2210', type: 'Truck',     year: 2023, odometer: 47800,  status: 'active',          photo: 'https://images.pexels.com/photos/5025642/pexels-photo-5025642.jpeg?w=200' },
-  { id: 4, unit: '#0521', name: 'Volvo VNL 860',         plate: 'GHI-3456', vin: '4V4NC9EH4EN521096', type: 'Truck',     year: 2020, odometer: 198000, status: 'blocked',         photo: 'https://images.pexels.com/photos/9463534/pexels-photo-9463534.jpeg?w=200' },
-  { id: 5, unit: '#3305', name: 'Ford F-350',            plate: 'JKL-7890', vin: '1FT8W3BT5NEC33050', type: 'Pickup',    year: 2024, odometer: 12300,  status: 'active',          photo: 'https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg?w=200' },
-  { id: 6, unit: '#1099', name: 'Genie S-65 Boom Lift',  plate: 'N/A',      vin: 'GS65A109900199',    type: 'Equipment', year: 2019, odometer: 0,      status: 'in-repair',       photo: 'https://images.pexels.com/photos/1216589/pexels-photo-1216589.jpeg?w=200' },
-])
+function getVehicleName(vehicle: CompanyVehicle) {
+  return `${vehicle.make || ''} ${vehicle.model || ''}`.trim() || vehicle.unit
+}
 
-const filtered = computed(() => vehicles.value.filter(v => {
+async function loadVehicles() {
+  error.value = ''
+
+  if (!authStore.companyId) {
+    vehicles.value = []
+    return
+  }
+
+  loading.value = true
+
+  try {
+    vehicles.value = await fetchCompanyVehicles(authStore.companyId, {
+      assignedToAuthUserId: authStore.user?.id || null,
+    })
+  } catch (loadError: any) {
+    error.value = loadError?.message || 'Unable to load vehicles.'
+    vehicles.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadVehicles)
+
+watch(() => authStore.companyId, loadVehicles)
+
+const filtered = computed(() => vehicles.value.filter((vehicle) => {
   const q = search.value.toLowerCase()
-  const matchSearch = v.name.toLowerCase().includes(q) || v.unit.includes(q) || v.plate.toLowerCase().includes(q)
-  return matchSearch && (filterStatus.value === 'all' || v.status === filterStatus.value)
+  const matchSearch = getVehicleName(vehicle).toLowerCase().includes(q)
+    || vehicle.unit.toLowerCase().includes(q)
+    || vehicle.plate.toLowerCase().includes(q)
+
+  return matchSearch && (filterStatus.value === 'all' || vehicle.status === filterStatus.value)
 }))
 </script>
 
