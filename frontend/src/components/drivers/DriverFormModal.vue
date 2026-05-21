@@ -31,12 +31,45 @@
                 {{ store.t("personalInformation") }}
               </h3>
 
+              <div class="mb-5">
+                <label class="label">Avatar</label>
+
+                <div class="flex items-center gap-4">
+                  <div
+                    class="w-20 h-20 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center"
+                  >
+                    <img
+                      v-if="avatarPreview || driver?.avatar_url"
+                      :src="avatarPreview || driver?.avatar_url || ''"
+                      class="w-full h-full object-cover"
+                    />
+                    <User v-else :size="26" class="text-gray-400" />
+                  </div>
+
+                  <input
+                    ref="avatarInput"
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    @change="handleAvatar"
+                  />
+                  <button
+                    type="button"
+                    class="btn-secondary gap-2"
+                    @click="avatarInput?.click()"
+                  >
+                    <Camera :size="16" />
+                    Add Photo
+                  </button>
+                </div>
+              </div>
+
               <div class="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label class="label"
-                    >{{ store.t("firstName") }}
-                    <span class="text-red-500">*</span></label
-                  >
+                  <label class="label">
+                    {{ store.t("firstName") }}
+                    <span class="text-red-500">*</span>
+                  </label>
                   <input
                     v-model="form.firstName"
                     class="input-field"
@@ -45,18 +78,18 @@
                 </div>
 
                 <div>
-                  <label class="label"
-                    >{{ store.t("lastName") }}
-                    <span class="text-red-500">*</span></label
-                  >
+                  <label class="label">
+                    {{ store.t("lastName") }}
+                    <span class="text-red-500">*</span>
+                  </label>
                   <input v-model="form.lastName" class="input-field" required />
                 </div>
 
                 <div>
-                  <label class="label"
-                    >{{ store.t("emailField") }}
-                    <span class="text-red-500">*</span></label
-                  >
+                  <label class="label">
+                    {{ store.t("emailField") }}
+                    <span class="text-red-500">*</span>
+                  </label>
                   <input
                     v-model="form.email"
                     class="input-field"
@@ -80,16 +113,12 @@
                 </div>
 
                 <div>
-                  <label class="label">{{ store.t("status") }}</label>
-                  <select v-model="form.status" class="input-field" required>
-                    <option
-                      v-for="s in driverStatuses"
-                      :key="s.value"
-                      :value="s.value"
-                    >
-                      {{ s.label }}
-                    </option>
-                  </select>
+                  <label class="label">{{ store.t("hireDate") }}</label>
+                  <input
+                    v-model="form.hireDate"
+                    class="input-field"
+                    type="date"
+                  />
                 </div>
               </div>
 
@@ -159,6 +188,85 @@
                   />
                 </div>
               </div>
+
+              <div class="mt-4">
+                <label class="label">Driver License Photos</label>
+                <input
+                  ref="licensePhotoInput"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  class="hidden"
+                  @change="handleLicensePhotos"
+                />
+                <button
+                  type="button"
+                  class="btn-secondary gap-2"
+                  @click="licensePhotoInput?.click()"
+                >
+                  <Camera :size="16" />
+                  Add Photo
+                </button>
+                <p class="text-xs text-gray-400 mt-2">
+                  You can upload multiple license photos.
+                </p>
+
+                <div
+                  v-if="
+                    existingLicensePhotos.length || licensePhotoFiles.length
+                  "
+                  class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3"
+                >
+                  <div
+                    v-for="photo in existingLicensePhotos"
+                    :key="photo"
+                    class="photo-preview"
+                  >
+                    <a
+                      :href="photo"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="block h-full"
+                    >
+                      <img
+                        :src="photo"
+                        alt="Driver license photo"
+                        class="w-full h-full object-cover"
+                      />
+                    </a>
+                    <button
+                      type="button"
+                      class="photo-remove"
+                      title="Remove photo"
+                      aria-label="Remove driver license photo"
+                      @click="removeExistingLicensePhoto(photo)"
+                    >
+                      <Trash2 :size="14" />
+                    </button>
+                  </div>
+
+                  <div
+                    v-for="photo in licensePhotoFiles"
+                    :key="photo.previewUrl"
+                    class="photo-preview"
+                  >
+                    <img
+                      :src="photo.previewUrl"
+                      :alt="photo.file.name"
+                      class="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      class="photo-remove"
+                      title="Remove photo"
+                      aria-label="Remove driver license photo"
+                      @click="removeLicensePhotoFile(photo.previewUrl)"
+                    >
+                      <Trash2 :size="14" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </section>
 
             <section
@@ -186,22 +294,83 @@
                   />
                 </div>
               </div>
-            </section>
 
-            <section>
-              <h3 class="section-title">
-                <Briefcase :size="15" class="text-blue-500" />
-                {{ store.t("employment") }}
-              </h3>
+              <div class="mt-4">
+                <label class="label">Medical Card Photos</label>
+                <input
+                  ref="medCardPhotoInput"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  class="hidden"
+                  @change="handleMedCardPhotos"
+                />
+                <button
+                  type="button"
+                  class="btn-secondary gap-2"
+                  @click="medCardPhotoInput?.click()"
+                >
+                  <Camera :size="16" />
+                  Add Photo
+                </button>
+                <p class="text-xs text-gray-400 mt-2">
+                  You can upload multiple medical card photos.
+                </p>
 
-              <div class="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label class="label">{{ store.t("hireDate") }}</label>
-                  <input
-                    v-model="form.hireDate"
-                    class="input-field"
-                    type="date"
-                  />
+                <div
+                  v-if="
+                    existingMedCardPhotos.length || medCardPhotoFiles.length
+                  "
+                  class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3"
+                >
+                  <div
+                    v-for="photo in existingMedCardPhotos"
+                    :key="photo"
+                    class="photo-preview"
+                  >
+                    <a
+                      :href="photo"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="block h-full"
+                    >
+                      <img
+                        :src="photo"
+                        alt="Medical card photo"
+                        class="w-full h-full object-cover"
+                      />
+                    </a>
+                    <button
+                      type="button"
+                      class="photo-remove"
+                      title="Remove photo"
+                      aria-label="Remove medical card photo"
+                      @click="removeExistingMedCardPhoto(photo)"
+                    >
+                      <Trash2 :size="14" />
+                    </button>
+                  </div>
+
+                  <div
+                    v-for="photo in medCardPhotoFiles"
+                    :key="photo.previewUrl"
+                    class="photo-preview"
+                  >
+                    <img
+                      :src="photo.previewUrl"
+                      :alt="photo.file.name"
+                      class="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      class="photo-remove"
+                      title="Remove photo"
+                      aria-label="Remove medical card photo"
+                      @click="removeMedCardPhotoFile(photo.previewUrl)"
+                    >
+                      <Trash2 :size="14" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -220,10 +389,10 @@
               <button
                 type="submit"
                 class="btn-primary px-6 py-2.5 gap-2"
-                :disabled="loading"
+                :disabled="loading || uploading"
               >
                 <Save :size="16" />
-                {{ loading ? "Saving..." : store.t("saveDriver") }}
+                {{ loading || uploading ? "Saving..." : store.t("saveDriver") }}
               </button>
             </div>
           </form>
@@ -234,7 +403,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch, computed } from "vue";
+import { reactive, watch, ref } from "vue";
 import {
   X,
   Save,
@@ -242,11 +411,14 @@ import {
   MapPin,
   Heart,
   FileText,
-  Briefcase,
+  Trash2,
+  Camera,
 } from "lucide-vue-next";
-import { useAppStore } from "@/stores/app";
 
-type DriverStatus = "active" | "pending" | "inactive";
+import { useAppStore } from "@/stores/app";
+import { supabase } from "@/lib/supabase";
+
+type DriverStatus = "new" | "active" | "pending" | "inactive";
 
 type Driver = {
   id: string;
@@ -264,6 +436,9 @@ type Driver = {
   med_card_expiry?: string | null;
   hire_date?: string | null;
   status: DriverStatus;
+  avatar_url?: string | null;
+  license_photo_urls?: string[] | null;
+  med_card_photo_urls?: string[] | null;
 };
 
 const props = defineProps<{
@@ -279,6 +454,23 @@ const emit = defineEmits<{
 
 const store = useAppStore();
 
+const uploading = ref(false);
+const avatarInput = ref<HTMLInputElement | null>(null);
+const licensePhotoInput = ref<HTMLInputElement | null>(null);
+const medCardPhotoInput = ref<HTMLInputElement | null>(null);
+
+type NewPhoto = {
+  file: File;
+  previewUrl: string;
+};
+
+const avatarFile = ref<File | null>(null);
+const licensePhotoFiles = ref<NewPhoto[]>([]);
+const medCardPhotoFiles = ref<NewPhoto[]>([]);
+const existingLicensePhotos = ref<string[]>([]);
+const existingMedCardPhotos = ref<string[]>([]);
+const avatarPreview = ref("");
+
 const licenseClasses = [
   "Class A",
   "Class B",
@@ -287,12 +479,6 @@ const licenseClasses = [
   "Class E",
   "CDL",
 ];
-
-const driverStatuses = computed(() => [
-  { value: "active", label: store.t("statusActive") },
-  { value: "pending", label: store.t("statusPending") },
-  { value: "inactive", label: store.t("statusInactive") },
-]);
 
 const form = reactive({
   firstName: "",
@@ -309,7 +495,6 @@ const form = reactive({
   medCardNo: "",
   medCardExpiry: "",
   hireDate: "",
-  status: "active" as DriverStatus,
 });
 
 function splitName(name: string) {
@@ -319,7 +504,26 @@ function splitName(name: string) {
   return { firstName, lastName };
 }
 
+function resetFiles() {
+  licensePhotoFiles.value.forEach((photo) =>
+    URL.revokeObjectURL(photo.previewUrl)
+  );
+  medCardPhotoFiles.value.forEach((photo) =>
+    URL.revokeObjectURL(photo.previewUrl)
+  );
+  if (avatarPreview.value) URL.revokeObjectURL(avatarPreview.value);
+
+  avatarFile.value = null;
+  licensePhotoFiles.value = [];
+  medCardPhotoFiles.value = [];
+  existingLicensePhotos.value = [];
+  existingMedCardPhotos.value = [];
+  avatarPreview.value = "";
+}
+
 function resetForm() {
+  resetFiles();
+
   const current = props.driver;
 
   if (current) {
@@ -340,8 +544,10 @@ function resetForm() {
       medCardNo: current.med_card_no || "",
       medCardExpiry: current.med_card_expiry || "",
       hireDate: current.hire_date || "",
-      status: current.status || "active",
     });
+
+    existingLicensePhotos.value = [...(current.license_photo_urls || [])];
+    existingMedCardPhotos.value = [...(current.med_card_photo_urls || [])];
 
     return;
   }
@@ -361,14 +567,18 @@ function resetForm() {
     medCardNo: "",
     medCardExpiry: "",
     hireDate: "",
-    status: "active",
   });
 }
 
 watch(
   () => [props.modelValue, props.driver],
   () => {
-    if (props.modelValue) resetForm();
+    if (props.modelValue) {
+      resetForm();
+      return;
+    }
+
+    resetFiles();
   },
   { immediate: true }
 );
@@ -377,29 +587,155 @@ function close() {
   emit("update:modelValue", false);
 }
 
-function submitForm() {
-  emit("save", {
-    name: `${form.firstName} ${form.lastName}`.trim(),
-    email: form.email,
-    phone: form.phone || null,
-    birthday: form.birthday || null,
-    address: form.address || null,
-    emergency_name: form.emergencyName || null,
-    emergency_phone: form.emergencyPhone || null,
-    license_no: form.licenseNo || null,
-    license_class: form.licenseClass || null,
-    license_expiry: form.licenseExpiry || null,
-    med_card_no: form.medCardNo || null,
-    med_card_expiry: form.medCardExpiry || null,
-    hire_date: form.hireDate || null,
-    status: form.status,
-  });
+function handleAvatar(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  if (avatarPreview.value) URL.revokeObjectURL(avatarPreview.value);
+
+  avatarFile.value = file;
+  avatarPreview.value = URL.createObjectURL(file);
+  input.value = "";
+}
+
+function handleLicensePhotos(e: Event) {
+  const input = e.target as HTMLInputElement;
+
+  licensePhotoFiles.value.push(...createNewPhotos(input.files));
+  input.value = "";
+}
+
+function handleMedCardPhotos(e: Event) {
+  const input = e.target as HTMLInputElement;
+
+  medCardPhotoFiles.value.push(...createNewPhotos(input.files));
+  input.value = "";
+}
+
+function createNewPhotos(files: FileList | null) {
+  return Array.from(files || []).map((file) => ({
+    file,
+    previewUrl: URL.createObjectURL(file),
+  }));
+}
+
+function removeExistingLicensePhoto(photo: string) {
+  existingLicensePhotos.value = existingLicensePhotos.value.filter(
+    (currentPhoto) => currentPhoto !== photo
+  );
+}
+
+function removeExistingMedCardPhoto(photo: string) {
+  existingMedCardPhotos.value = existingMedCardPhotos.value.filter(
+    (currentPhoto) => currentPhoto !== photo
+  );
+}
+
+function removeNewPhoto(photos: NewPhoto[], previewUrl: string) {
+  const photo = photos.find(
+    (currentPhoto) => currentPhoto.previewUrl === previewUrl
+  );
+  if (photo) URL.revokeObjectURL(photo.previewUrl);
+
+  return photos.filter((currentPhoto) => currentPhoto.previewUrl !== previewUrl);
+}
+
+function removeLicensePhotoFile(previewUrl: string) {
+  licensePhotoFiles.value = removeNewPhoto(licensePhotoFiles.value, previewUrl);
+}
+
+function removeMedCardPhotoFile(previewUrl: string) {
+  medCardPhotoFiles.value = removeNewPhoto(medCardPhotoFiles.value, previewUrl);
+}
+
+async function uploadSingleFile(file: File, folder: string) {
+  const ext = file.name.split(".").pop();
+  const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("driver-files")
+    .upload(path, file);
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from("driver-files").getPublicUrl(path);
+
+  return data.publicUrl;
+}
+
+async function uploadMultipleFiles(files: File[], folder: string) {
+  const urls: string[] = [];
+
+  for (const file of files) {
+    const url = await uploadSingleFile(file, folder);
+    urls.push(url);
+  }
+
+  return urls;
+}
+
+async function submitForm() {
+  uploading.value = true;
+
+  try {
+    let avatarUrl = props.driver?.avatar_url || null;
+
+    if (avatarFile.value) {
+      avatarUrl = await uploadSingleFile(avatarFile.value, "driver-avatars");
+    }
+
+    const uploadedLicensePhotos = await uploadMultipleFiles(
+      licensePhotoFiles.value.map((photo) => photo.file),
+      "license-photos"
+    );
+
+    const uploadedMedCardPhotos = await uploadMultipleFiles(
+      medCardPhotoFiles.value.map((photo) => photo.file),
+      "med-card-photos"
+    );
+
+    emit("save", {
+      name: `${form.firstName} ${form.lastName}`.trim(),
+      email: form.email,
+      phone: form.phone || null,
+      birthday: form.birthday || null,
+      address: form.address || null,
+      emergency_name: form.emergencyName || null,
+      emergency_phone: form.emergencyPhone || null,
+      license_no: form.licenseNo || null,
+      license_class: form.licenseClass || null,
+      license_expiry: form.licenseExpiry || null,
+      med_card_no: form.medCardNo || null,
+      med_card_expiry: form.medCardExpiry || null,
+      hire_date: form.hireDate || null,
+      avatar_url: avatarUrl,
+      license_photo_urls: [
+        ...existingLicensePhotos.value,
+        ...uploadedLicensePhotos,
+      ],
+      med_card_photo_urls: [
+        ...existingMedCardPhotos.value,
+        ...uploadedMedCardPhotos,
+      ],
+    });
+  } finally {
+    uploading.value = false;
+  }
 }
 </script>
 
 <style scoped>
 .section-title {
   @apply text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2;
+}
+
+.photo-preview {
+  @apply relative aspect-[4/3] overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800;
+}
+
+.photo-remove {
+  @apply absolute right-1.5 top-1.5 w-7 h-7 rounded-lg bg-black/65 text-white flex items-center justify-center hover:bg-red-600 transition-colors;
 }
 
 .modal-enter-active,

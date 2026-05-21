@@ -14,11 +14,8 @@ const authStore = useAuthStore();
 
 onMounted(async () => {
   await authStore.loadSession();
+  await authStore.acceptDriverInvitation({ reportError: false });
 
-  if (authStore.profile?.role === "driver") {
-    router.replace("/driver");
-  } else {
-    router.replace("/dashboard");
-  }
+  router.replace(authStore.redirectPath);
 });
 </script>

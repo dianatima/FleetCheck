@@ -21,6 +21,7 @@
           class="input-field py-2 text-sm w-auto"
         >
           <option value="all">{{ store.t("allStatus") }}</option>
+          <option value="new">New</option>
           <option value="active">{{ store.t("statusActive") }}</option>
           <option value="pending">{{ store.t("statusPending") }}</option>
           <option value="inactive">{{ store.t("statusInactive") }}</option>
@@ -42,6 +43,10 @@
 
     <template v-else>
       <div class="flex flex-wrap gap-2 mb-5">
+        <span class="badge-blue">
+          {{ drivers.filter((d) => d.status === "new").length }}
+          New
+        </span>
         <span class="badge-green">
           {{ drivers.filter((d) => d.status === "active").length }}
           {{ store.t("statusActive") }}
@@ -166,10 +171,35 @@
                   <span :class="statusConfig[d.status]?.badge || 'badge-gray'">
                     {{ statusConfig[d.status]?.label || d.status }}
                   </span>
+                  <p
+                    v-if="invitationMessage(d)"
+                    class="text-xs text-gray-400 mt-1 whitespace-nowrap"
+                  >
+                    {{ invitationMessage(d) }}
+                  </p>
                 </td>
 
                 <td class="px-4 py-3" @click.stop>
                   <div class="flex items-center gap-1">
+                    <button
+                      v-if="canInviteDriver(d)"
+                      @click="sendInvitation(d)"
+                      class="btn-secondary gap-1.5 px-2 py-1.5 text-xs whitespace-nowrap"
+                      :disabled="invitingDriverId === d.id"
+                    >
+                      <MailPlus :size="14" />
+                      {{ inviteLabel(d) }}
+                    </button>
+
+                    <button
+                      v-if="canActivateDriver(d)"
+                      @click="activateDriver(d)"
+                      class="btn-primary px-2 py-1.5 text-xs whitespace-nowrap"
+                      :disabled="statusUpdatingDriverId === d.id"
+                    >
+                      Activate
+                    </button>
+
                     <button
                       @click="startEdit(d)"
                       class="icon-btn hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30"
@@ -278,6 +308,7 @@ import {
   Pencil,
   Trash2,
   AlertCircle,
+  MailPlus,
 } from "lucide-vue-next";
 import AppLayout from "../components/layout/AppLayout.vue";
 import DriverFormModal from "@/components/drivers/DriverFormModal.vue";
@@ -294,8 +325,11 @@ type Driver = {
   license_class?: string | null;
   license_expiry?: string | null;
   med_card_expiry?: string | null;
-  status: "active" | "pending" | "inactive";
+  status: "new" | "active" | "pending" | "inactive";
   avatar_color?: string | null;
+  user_id?: string | null;
+  invitation_sent_at?: string | null;
+  invitation_accepted_at?: string | null;
 };
 
 const store = useAppStore();
@@ -305,6 +339,8 @@ const router = useRouter();
 
 const showModal = ref(false);
 const editingDriver = ref<Driver | null>(null);
+const invitingDriverId = ref<string | null>(null);
+const statusUpdatingDriverId = ref<string | null>(null);
 const localSearch = ref(driverStore.search);
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -328,6 +364,7 @@ watch(
 const drivers = computed<Driver[]>(() => driverStore.drivers as Driver[]);
 
 const statusConfig = computed(() => ({
+  new: { label: "New", badge: "badge-blue" },
   active: { label: store.t("statusActive"), badge: "badge-green" },
   pending: { label: store.t("statusPending"), badge: "badge-yellow" },
   inactive: { label: store.t("statusInactive"), badge: "badge-gray" },
@@ -374,6 +411,48 @@ function startEdit(driver: Driver) {
   showModal.value = true;
 }
 
+function canInviteDriver(driver: Driver) {
+  return (
+    driver.status === "new" ||
+    (driver.status === "pending" && !driver.invitation_accepted_at)
+  );
+}
+
+function inviteLabel(driver: Driver) {
+  return driver.status === "new" ? "Send Invitation" : "Resend Invitation";
+}
+
+function canActivateDriver(driver: Driver) {
+  return driver.status === "pending" && !!driver.invitation_accepted_at;
+}
+
+function invitationMessage(driver: Driver) {
+  if (driver.status !== "pending") return "";
+  if (driver.invitation_accepted_at) return "Invitation accepted";
+  if (driver.invitation_sent_at) return "Invitation sent";
+  return "";
+}
+
+async function sendInvitation(driver: Driver) {
+  invitingDriverId.value = driver.id;
+
+  try {
+    await driverStore.sendDriverInvitation(driver.id);
+  } finally {
+    invitingDriverId.value = null;
+  }
+}
+
+async function activateDriver(driver: Driver) {
+  statusUpdatingDriverId.value = driver.id;
+
+  try {
+    await driverStore.updateDriverStatus(driver.id, "active");
+  } finally {
+    statusUpdatingDriverId.value = null;
+  }
+}
+
 async function confirmDelete(driver: Driver) {
   if (confirm(`Delete driver "${driver.name}"?`)) {
     await driverStore.deleteDriver(driver.id);
@@ -412,7 +491,7 @@ async function handleSave(payload: any) {
 
 <style scoped>
 .icon-btn {
-  @apply w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 transition-colors;
+  @apply w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .badge-yellow {

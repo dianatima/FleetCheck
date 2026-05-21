@@ -157,15 +157,6 @@ const email = ref("");
 const password = ref("");
 const showPass = ref(false);
 
-function redirectByRole() {
-  if (authStore.profile?.role === "driver") {
-    router.push("/driver");
-    return;
-  }
-
-  router.push("/dashboard");
-}
-
 async function handleGoogle() {
   await authStore.loginWithGoogle();
 }
@@ -175,6 +166,6 @@ async function handleSubmit() {
 
   if (!success) return;
 
-  redirectByRole();
+  router.push(authStore.redirectPath);
 }
 </script>

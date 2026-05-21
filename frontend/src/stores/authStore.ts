@@ -61,8 +61,24 @@ export const useAuthStore = defineStore('auth', () => {
     return role.value === 'owner' && ownerCompanies.value.length > 1
   })
 
+  const passwordSetAt = computed<string | null>(() => {
+    if (role.value !== 'driver') return null
+
+    return (
+      profile.value?.password_set_at ||
+      user.value?.user_metadata?.password_set_at ||
+      null
+    )
+  })
+
   const redirectPath = computed(() => {
-    if (role.value === 'driver') return '/driver'
+    if (role.value === 'driver') {
+      if (!passwordSetAt.value) return '/password-setup'
+      if (profile.value?.status === 'active') return '/driver'
+      if (profile.value?.status === 'inactive') return '/inactive'
+      return '/pending'
+    }
+
     if (role.value === 'owner') return '/dashboard'
     return '/login'
   })
@@ -247,6 +263,111 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     return true
+  }
+
+  async function updatePassword(password: string) {
+    loading.value = true
+    error.value = null
+
+    const nextPasswordSetAt = new Date().toISOString()
+    const { data: authData, error: updateError } = await supabase.auth.updateUser({
+      password,
+      data: {
+        password_set_at: nextPasswordSetAt,
+      },
+    })
+
+    if (updateError || !authData.user) {
+      error.value = updateError?.message || 'Password could not be saved'
+      loading.value = false
+      return false
+    }
+
+    const { data: updatedProfile, error: profileError } = await supabase
+      .from('profiles')
+      .update({ password_set_at: nextPasswordSetAt })
+      .eq('auth_user_id', user.value?.id)
+      .select(`
+        *,
+        companies (
+          id,
+          name
+        )
+      `)
+      .single()
+
+    user.value = authData.user
+    session.value = session.value
+      ? {
+          ...session.value,
+          user: authData.user,
+        }
+      : session.value
+
+    if (profileError || !updatedProfile) {
+      if (isMissingPasswordSetAtColumn(profileError)) {
+        profile.value = profile.value
+          ? {
+              ...profile.value,
+              password_set_at: nextPasswordSetAt,
+            }
+          : profile.value
+        error.value = null
+        loading.value = false
+        return true
+      }
+
+      error.value = profileError?.message || 'Password status could not be saved'
+      loading.value = false
+      return false
+    }
+
+    profile.value = {
+      ...updatedProfile,
+      company_name: updatedProfile.companies?.name || null,
+    }
+
+    loading.value = false
+    return true
+  }
+
+  function isMissingPasswordSetAtColumn(profileError: any) {
+    return (
+      profileError?.code === 'PGRST204' ||
+      profileError?.message?.includes("password_set_at") ||
+      profileError?.message?.includes("schema cache")
+    )
+  }
+
+  async function acceptDriverInvitation(options: { reportError?: boolean } = {}) {
+    const token = session.value?.access_token
+    const reportError = options.reportError ?? true
+
+    if (!token) return false
+
+    const response = await fetch('/api/drivers/accept-invite', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    const result = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      if (reportError) {
+        error.value = result?.error || 'Driver invitation could not be accepted'
+      }
+      return false
+    }
+
+    if (result?.accepted) {
+      error.value = null
+      await fetchProfile()
+      return true
+    }
+
+    return false
   }
 
   async function registerOwnerWithCompany(payload: {
@@ -448,6 +569,7 @@ export const useAuthStore = defineStore('auth', () => {
     companyName,
     currentCompany,
     hasMultipleCompanies,
+    passwordSetAt,
     redirectPath,
 
     loadSession,
@@ -456,6 +578,8 @@ export const useAuthStore = defineStore('auth', () => {
 
     loginWithEmail,
     loginWithGoogle,
+    updatePassword,
+    acceptDriverInvitation,
     registerOwnerWithCompany,
     createCompany,
 

@@ -120,7 +120,7 @@
                   class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 cursor-pointer"
                   @click="router.push(`/vehicles/${v.id}`)"
                 >
-                  {{ v.type }}
+                  {{ getVehicleTypeName(v) }}
                 </td>
 
                 <td
@@ -291,7 +291,8 @@ type Vehicle = {
   unit: string;
   make: string;
   model: string;
-  type: string;
+  vehicle_type_id: string;
+  vehicle_types?: { id: string; name: string } | null;
   year: number;
   plate: string;
   vin?: string | null;
@@ -349,6 +350,10 @@ const vehicleHeaders = computed(() => [
 
 function getVehicleName(v: Vehicle) {
   return `${v.make || ""} ${v.model || ""}`.trim();
+}
+
+function getVehicleTypeName(v: Vehicle) {
+  return v.vehicle_types?.name || "—";
 }
 
 function hideBrokenImage(e: Event) {

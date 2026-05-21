@@ -11,10 +11,11 @@ const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
-app.use(router)
 
 const authStore = useAuthStore()
 
 await authStore.loadSession()
+
+app.use(router)
 
 app.mount('#root')

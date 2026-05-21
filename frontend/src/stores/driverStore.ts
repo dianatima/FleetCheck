@@ -69,13 +69,13 @@ export const useDriverStore = defineStore('drivers', () => {
     loading.value = false
   }
 
-  async function fetchDriverById(id: string) {
-    loading.value = true
+  async function fetchDriverById(id: string, silent = false) {
+    if (!silent) loading.value = true
     error.value = null
 
     if (!authStore.companyId) {
       selectedDriver.value = null
-      loading.value = false
+      if (!silent) loading.value = false
       return
     }
 
@@ -90,10 +90,30 @@ export const useDriverStore = defineStore('drivers', () => {
       error.value = supabaseError.message
       selectedDriver.value = null
     } else {
-      selectedDriver.value = data
+      selectedDriver.value = {
+        ...data,
+        profile_password_set_at: await fetchDriverPasswordSetAt(id),
+      }
     }
 
-    loading.value = false
+    if (!silent) loading.value = false
+  }
+
+  async function fetchDriverPasswordSetAt(id: string) {
+    const token = authStore.session?.access_token
+
+    if (!token) return null
+
+    const response = await fetch(`/api/drivers/${id}/password-status`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+    const result = await response.json().catch(() => null)
+
+    if (!response.ok) return null
+
+    return result?.password_set_at || null
   }
 
   async function createDriver(driver: any) {
@@ -111,6 +131,7 @@ export const useDriverStore = defineStore('drivers', () => {
       .insert({
         ...driver,
         company_id: authStore.companyId,
+        status: 'new',
       })
 
     if (supabaseError) {
@@ -134,14 +155,99 @@ export const useDriverStore = defineStore('drivers', () => {
       return false
     }
 
+    const driverChanges = { ...driver }
+    delete driverChanges.status
     const { error: supabaseError } = await supabase
       .from('drivers')
-      .update(driver)
+      .update(driverChanges)
       .eq('id', id)
       .eq('company_id', authStore.companyId)
 
     if (supabaseError) {
       error.value = supabaseError.message
+      loading.value = false
+      return false
+    }
+
+    await fetchDrivers()
+
+    if (selectedDriver.value?.id === id) {
+      await fetchDriverById(id)
+    }
+
+    loading.value = false
+    return true
+  }
+
+  async function sendDriverInvitation(id: string) {
+    loading.value = true
+    error.value = null
+
+    const token = authStore.session?.access_token
+
+    if (!token) {
+      error.value = 'Access token is missing'
+      loading.value = false
+      return false
+    }
+
+    const response = await fetch(`/api/drivers/${id}/invite`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        redirectTo: `${window.location.origin}/auth/callback`,
+      }),
+    })
+
+    const result = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      error.value = result?.error || 'Invitation could not be sent'
+      loading.value = false
+      return false
+    }
+
+    await fetchDrivers()
+
+    if (selectedDriver.value?.id === id) {
+      await fetchDriverById(id)
+    }
+
+    loading.value = false
+    return true
+  }
+
+  async function updateDriverStatus(
+    id: string,
+    status: 'active' | 'pending' | 'inactive'
+  ) {
+    loading.value = true
+    error.value = null
+
+    const token = authStore.session?.access_token
+
+    if (!token) {
+      error.value = 'Access token is missing'
+      loading.value = false
+      return false
+    }
+
+    const response = await fetch(`/api/drivers/${id}/status`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    })
+
+    const result = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      error.value = result?.error || 'Driver status could not be updated'
       loading.value = false
       return false
     }
@@ -246,6 +352,8 @@ export const useDriverStore = defineStore('drivers', () => {
 
     createDriver,
     updateDriver,
+    sendDriverInvitation,
+    updateDriverStatus,
     deleteDriver,
 
     setSearch,

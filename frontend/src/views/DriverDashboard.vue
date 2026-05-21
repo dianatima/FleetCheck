@@ -68,7 +68,7 @@
               </td>
               <td class="px-4 py-3 text-sm font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">#{{ v.unit }}</td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ v.plate }}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ v.type }}</td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ v.vehicle_types.name }}</td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ v.odometer }}</td>
               <td class="px-4 py-3"><span class="badge-green">{{ store.t('statusActive') }}</span></td>
             </tr>
@@ -139,9 +139,9 @@ const vehicleHeaders = computed(() => [store.t('vehicle'), store.t('unit'), stor
 const reportsHeaders = computed(() => [store.t('vehicle'), store.t('type'), store.t('date'), store.t('result'), store.t('issues')])
 
 const availableVehicles = [
-  { id: 1, name: 'Kenworth T680',       unit: '1042', plate: 'ABC-1234', type: 'Truck',  odometer: '84,200 mi',  img: 'https://images.pexels.com/photos/1638459/pexels-photo-1638459.jpeg?w=200' },
-  { id: 2, name: 'Freightliner Cascadia', unit: '2210', plate: 'DEF-9012', type: 'Truck', odometer: '47,800 mi', img: 'https://images.pexels.com/photos/5025642/pexels-photo-5025642.jpeg?w=200' },
-  { id: 3, name: 'Ford F-350',          unit: '3305', plate: 'JKL-7890', type: 'Pickup', odometer: '12,300 mi', img: 'https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg?w=200' },
+  { id: 1, name: 'Kenworth T680',       unit: '1042', plate: 'ABC-1234', vehicle_types: { name: 'Truck' },  odometer: '84,200 mi',  img: 'https://images.pexels.com/photos/1638459/pexels-photo-1638459.jpeg?w=200' },
+  { id: 2, name: 'Freightliner Cascadia', unit: '2210', plate: 'DEF-9012', vehicle_types: { name: 'Truck' }, odometer: '47,800 mi', img: 'https://images.pexels.com/photos/5025642/pexels-photo-5025642.jpeg?w=200' },
+  { id: 3, name: 'Ford F-350',          unit: '3305', plate: 'JKL-7890', vehicle_types: { name: 'Pickup' }, odometer: '12,300 mi', img: 'https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg?w=200' },
 ]
 
 const recentInspections = [

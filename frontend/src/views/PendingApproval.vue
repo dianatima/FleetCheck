@@ -28,15 +28,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { Clock } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 
 const steps = computed(() => [
   store.t('managerWillReview'),
   store.t('youllReceiveEmail'),
   store.t('onceApprovedLogin'),
 ])
+
+onMounted(async () => {
+  if (authStore.isAuthenticated) {
+    await authStore.acceptDriverInvitation()
+  }
+})
 </script>

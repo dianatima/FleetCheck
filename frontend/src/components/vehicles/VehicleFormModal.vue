@@ -95,10 +95,14 @@
                   >{{ store.t("type") }}
                   <span class="text-red-500">*</span></label
                 >
-                <select v-model="form.type" class="input-field" required>
+                <select v-model="form.vehicle_type_id" class="input-field" required>
                   <option value="" disabled>{{ store.t("selectType") }}</option>
-                  <option v-for="t in vehicleTypes" :key="t" :value="t">
-                    {{ t }}
+                  <option
+                    v-for="vehicleType in vehicleStore.vehicleTypes"
+                    :key="vehicleType.id"
+                    :value="vehicleType.id"
+                  >
+                    {{ vehicleType.name }}
                   </option>
                 </select>
               </div>
@@ -231,6 +235,7 @@
 import { reactive, ref, computed, watch } from "vue";
 import { X, Camera, Save } from "lucide-vue-next";
 import { useAppStore } from "@/stores/app";
+import { useVehicleStore } from "@/stores/vehicleStore";
 import { uploadVehiclePhoto } from "@/api/storage";
 
 type VehicleStatus = "active" | "needs-attention" | "blocked" | "in-repair";
@@ -240,7 +245,7 @@ type Vehicle = {
   unit: string;
   make: string;
   model: string;
-  type: string;
+  vehicle_type_id: string;
   year: number;
   plate: string;
   vin?: string | null;
@@ -262,21 +267,11 @@ const emit = defineEmits<{
 }>();
 
 const store = useAppStore();
+const vehicleStore = useVehicleStore();
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedPhotoFile = ref<File | null>(null);
 const photoPreview = ref<string | null>(null);
-
-const vehicleTypes = [
-  "Truck",
-  "Van",
-  "Car",
-  "Equipment",
-  "Bus",
-  "Trailer",
-  "Pickup",
-  "Other",
-];
 
 const vehicleStatuses = computed(() => [
   { value: "active", label: store.t("statusActive") },
@@ -287,7 +282,7 @@ const vehicleStatuses = computed(() => [
 
 const form = reactive({
   unit: "",
-  type: "",
+  vehicle_type_id: "",
   make: "",
   model: "",
   year: new Date().getFullYear(),
@@ -304,7 +299,7 @@ function resetForm() {
 
   Object.assign(form, {
     unit: v?.unit || "",
-    type: v?.type || "",
+    vehicle_type_id: v?.vehicle_type_id || "",
     make: v?.make || "",
     model: v?.model || "",
     year: v?.year || new Date().getFullYear(),
@@ -322,8 +317,11 @@ function resetForm() {
 
 watch(
   () => [props.modelValue, props.vehicle],
-  () => {
-    if (props.modelValue) resetForm();
+  async () => {
+    if (props.modelValue) {
+      resetForm();
+      await vehicleStore.fetchVehicleTypes();
+    }
   },
   { immediate: true }
 );
@@ -363,7 +361,7 @@ async function submitForm() {
 
   emit("save", {
     unit: form.unit,
-    type: form.type,
+    vehicle_type_id: form.vehicle_type_id,
     make: form.make,
     model: form.model,
     year: Number(form.year),

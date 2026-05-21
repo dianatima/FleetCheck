@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore'
 export const useVehicleStore = defineStore('vehicles', () => {
   const authStore = useAuthStore()
   const vehicles = ref<any[]>([])
+  const vehicleTypes = ref<any[]>([])
   const selectedVehicle = ref<any | null>(null)
 
   const loading = ref(false)
@@ -22,6 +23,26 @@ export const useVehicleStore = defineStore('vehicles', () => {
     return Math.max(1, Math.ceil(total.value / pageSize.value))
   })
 
+  const vehicleSelect = `
+    id,
+    company_id,
+    unit,
+    make,
+    model,
+    year,
+    plate,
+    vin,
+    odometer,
+    engine_hours,
+    status,
+    photo_url,
+    vehicle_type_id,
+    vehicle_types (
+      id,
+      name
+    )
+  `
+
   async function fetchVehicles() {
     loading.value = true
     error.value = null
@@ -31,12 +52,14 @@ export const useVehicleStore = defineStore('vehicles', () => {
       
     if (!authStore.companyId) {
         vehicles.value = []
+        total.value = 0
+        loading.value = false
         return
     }
 
     let query = supabase
       .from('vehicles')
-      .select('*', { count: 'exact' })
+      .select(vehicleSelect, { count: 'exact' })
       .eq('company_id', authStore.companyId)
       .order('created_at', { ascending: false })
 
@@ -47,9 +70,19 @@ export const useVehicleStore = defineStore('vehicles', () => {
     const searchValue = search.value.trim()
 
     if (searchValue) {
-      query = query.or(
-        `unit.ilike.%${searchValue}%,make.ilike.%${searchValue}%,model.ilike.%${searchValue}%,plate.ilike.%${searchValue}%,type.ilike.%${searchValue}%`
-      )
+      const matchingTypeIds = await findVehicleTypeIds(searchValue)
+      const filters = [
+        `unit.ilike.%${searchValue}%`,
+        `make.ilike.%${searchValue}%`,
+        `model.ilike.%${searchValue}%`,
+        `plate.ilike.%${searchValue}%`,
+      ]
+
+      if (matchingTypeIds.length) {
+        filters.push(`vehicle_type_id.in.(${matchingTypeIds.join(',')})`)
+      }
+
+      query = query.or(filters.join(','))
     }
 
     const { data, count, error: supabaseError } = await query.range(from, to)
@@ -64,6 +97,36 @@ export const useVehicleStore = defineStore('vehicles', () => {
     }
 
     loading.value = false
+  }
+
+  async function findVehicleTypeIds(name: string) {
+    const { data, error: supabaseError } = await supabase
+      .from('vehicle_types')
+      .select('id')
+      .ilike('name', `%${name}%`)
+
+    if (supabaseError) {
+      error.value = supabaseError.message
+      return []
+    }
+
+    return (data || []).map((vehicleType) => vehicleType.id)
+  }
+
+  async function fetchVehicleTypes() {
+    const { data, error: supabaseError } = await supabase
+      .from('vehicle_types')
+      .select('id, name')
+      .order('name', { ascending: true })
+
+    if (supabaseError) {
+      error.value = supabaseError.message
+      vehicleTypes.value = []
+      return false
+    }
+
+    vehicleTypes.value = data || []
+    return true
   }
 
   async function setSearch(value: string) {
@@ -115,7 +178,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
         ...vehicle,
         company_id: authStore.companyId,
       })
-      .select()
+      .select(vehicleSelect)
   
     if (supabaseError) {
       error.value = supabaseError.message
@@ -185,7 +248,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
     const { data, error: supabaseError } = await supabase
       .from('vehicles')
-      .select('*')
+      .select(vehicleSelect)
       .eq('id', id)
       .eq('company_id', authStore.companyId)
       .single()
@@ -208,6 +271,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
   return {
     vehicles,
+    vehicleTypes,
     selectedVehicle,
 
     loading,
@@ -222,6 +286,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
     statusFilter,
 
     fetchVehicles,
+    fetchVehicleTypes,
     fetchVehicleById,
 
     createVehicle,

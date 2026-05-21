@@ -23,10 +23,16 @@
       <div class="card p-5 mb-5">
         <div class="flex items-center gap-4">
           <div
-            class="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl flex-shrink-0 shadow-md"
+            class="w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-bold text-2xl flex-shrink-0 shadow-md"
             :style="{ background: driver.avatar_color || '#3b82f6' }"
           >
-            {{ initials(driver.name) }}
+            <img
+              v-if="driver.avatar_url"
+              :src="driver.avatar_url"
+              :alt="`${driver.name} avatar`"
+              class="w-full h-full object-cover"
+            />
+            <span v-else>{{ initials(driver.name) }}</span>
           </div>
 
           <div class="flex-1 min-w-0">
@@ -44,14 +50,72 @@
             >
               {{ statusConfig[driver.status]?.label || driver.status }}
             </span>
+            <p
+              v-if="pendingInvitationMessage"
+              class="text-xs text-gray-500 dark:text-gray-400 mt-2"
+            >
+              {{ pendingInvitationMessage }}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Password:
+              <span
+                class="font-semibold"
+                :class="
+                  driver.profile_password_set_at
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-orange-600 dark:text-orange-400'
+                "
+              >
+                {{ driver.profile_password_set_at ? "Set" : "Not set" }}
+              </span>
+            </p>
+            <p
+              v-if="activeWithoutPassword"
+              class="text-sm text-orange-700 dark:text-orange-300 mt-2"
+            >
+              Driver is active, but password has not been set yet.
+            </p>
           </div>
 
-          <button
-            @click="showEditModal = true"
-            class="btn-secondary gap-2 text-sm self-start"
-          >
-            <Pencil :size="15" /> {{ store.t("edit") }}
-          </button>
+          <div class="flex flex-wrap justify-end gap-2 self-start">
+            <button
+              v-if="canInviteDriver"
+              type="button"
+              class="btn-secondary gap-2 text-sm"
+              :disabled="invitationSending"
+              @click="sendInvitation"
+            >
+              <MailPlus :size="15" />
+              {{ driver.invitation_sent_at ? "Resend Invitation" : "Send Invitation" }}
+            </button>
+
+            <button
+              v-if="canActivateDriver"
+              type="button"
+              class="btn-primary text-sm"
+              :disabled="statusUpdating"
+              @click="changeStatus('active')"
+            >
+              Activate
+            </button>
+
+            <button
+              v-if="canDeactivateDriver"
+              type="button"
+              class="btn-secondary text-sm"
+              :disabled="statusUpdating"
+              @click="changeStatus('inactive')"
+            >
+              Deactivate
+            </button>
+
+            <button
+              @click="showEditModal = true"
+              class="btn-secondary gap-2 text-sm"
+            >
+              <Pencil :size="15" /> {{ store.t("edit") }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -123,7 +187,11 @@
             :label="store.t('class')"
             :value="driver.license_class || '—'"
           />
-          <ExpiryRow :date="driver.license_expiry" />
+          <ExpiryRow :date="driver.license_expiry || undefined" />
+          <PhotoGallery
+            label="Driver License Photos"
+            :photos="driver.license_photo_urls || undefined"
+          />
         </div>
 
         <div class="card p-5 space-y-4">
@@ -137,7 +205,11 @@
             :value="driver.med_card_no || '—'"
             mono
           />
-          <ExpiryRow :date="driver.med_card_expiry" />
+          <ExpiryRow :date="driver.med_card_expiry || undefined" />
+          <PhotoGallery
+            label="Medical Card Photos"
+            :photos="driver.med_card_photo_urls || undefined"
+          />
         </div>
       </div>
 
@@ -193,7 +265,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, defineComponent, h, watch } from "vue";
+import {
+  ref,
+  computed,
+  defineComponent,
+  h,
+  onMounted,
+  onUnmounted,
+  watch,
+} from "vue";
 import { useRoute } from "vue-router";
 import {
   ArrowLeft,
@@ -210,6 +290,7 @@ import {
   CalendarDays,
   Cake,
   AlertCircle,
+  MailPlus,
 } from "lucide-vue-next";
 
 import AppLayout from "../components/layout/AppLayout.vue";
@@ -233,8 +314,15 @@ type Driver = {
   med_card_no?: string | null;
   med_card_expiry?: string | null;
   hire_date?: string | null;
-  status: "active" | "pending" | "inactive";
+  status: "new" | "active" | "pending" | "inactive";
   avatar_color?: string | null;
+  avatar_url?: string | null;
+  user_id?: string | null;
+  invitation_sent_at?: string | null;
+  invitation_accepted_at?: string | null;
+  profile_password_set_at?: string | null;
+  license_photo_urls?: string[] | null;
+  med_card_photo_urls?: string[] | null;
 };
 
 const store = useAppStore();
@@ -243,6 +331,8 @@ const driverStore = useDriverStore();
 const authStore = useAuthStore();
 
 const showEditModal = ref(false);
+const statusUpdating = ref(false);
+const invitationSending = ref(false);
 const driverId = computed(() => route.params.id as string);
 const driver = computed<Driver | null>(
   () => driverStore.selectedDriver as Driver | null
@@ -256,11 +346,74 @@ watch(
   { immediate: true }
 );
 
+let pendingRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+async function refreshPendingDriver() {
+  if (
+    document.visibilityState !== "visible" ||
+    driver.value?.status !== "pending" ||
+    driver.value.invitation_accepted_at
+  ) {
+    return;
+  }
+
+  await driverStore.fetchDriverById(driverId.value, true);
+}
+
+onMounted(() => {
+  pendingRefreshTimer = setInterval(refreshPendingDriver, 5000);
+  window.addEventListener("focus", refreshPendingDriver);
+});
+
+onUnmounted(() => {
+  if (pendingRefreshTimer) clearInterval(pendingRefreshTimer);
+  window.removeEventListener("focus", refreshPendingDriver);
+});
+
 const statusConfig = computed(() => ({
+  new: { label: "New", badge: "badge-blue" },
   active: { label: store.t("statusActive"), badge: "badge-green" },
   pending: { label: store.t("statusPending"), badge: "badge-yellow" },
   inactive: { label: store.t("statusInactive"), badge: "badge-gray" },
 }));
+
+type DriverStatus = Exclude<Driver["status"], "new">;
+
+const canInviteDriver = computed(() => {
+  return (
+    driver.value?.status === "new" ||
+    (driver.value?.status === "pending" && !driver.value.invitation_accepted_at)
+  );
+});
+
+const canActivateDriver = computed(() => {
+  return (
+    driver.value?.status !== "active" &&
+    !!driver.value?.invitation_accepted_at
+  );
+});
+
+const canDeactivateDriver = computed(() => {
+  return ["active", "pending"].includes(driver.value?.status || "");
+});
+
+const activeWithoutPassword = computed(() => {
+  return driver.value?.status === "active" && !driver.value.profile_password_set_at;
+});
+
+const pendingInvitationMessage = computed(() => {
+  if (driver.value?.status !== "pending") return "";
+
+  if (driver.value.invitation_accepted_at) {
+    return "Invitation accepted. Review the driver data and activate the driver.";
+  }
+
+  if (driver.value.invitation_sent_at) {
+    return "Invitation sent. Waiting for the driver to accept it.";
+  }
+
+  return "";
+});
 
 const TODAY = new Date().toISOString().split("T")[0];
 
@@ -289,6 +442,30 @@ async function handleSave(payload: any) {
   await driverStore.fetchDriverById(driver.value.id);
 
   showEditModal.value = false;
+}
+
+async function changeStatus(status: DriverStatus) {
+  if (!driver.value || driver.value.status === status) return;
+
+  statusUpdating.value = true;
+
+  try {
+    await driverStore.updateDriverStatus(driver.value.id, status);
+  } finally {
+    statusUpdating.value = false;
+  }
+}
+
+async function sendInvitation() {
+  if (!driver.value) return;
+
+  invitationSending.value = true;
+
+  try {
+    await driverStore.sendDriverInvitation(driver.value.id);
+  } finally {
+    invitationSending.value = false;
+  }
 }
 
 const DetailRow = defineComponent({
@@ -330,6 +507,57 @@ const DetailRow = defineComponent({
             props.value
           ),
         ]),
+      ]);
+  },
+});
+
+const PhotoGallery = defineComponent({
+  props: {
+    label: String,
+    photos: Array as () => string[] | null | undefined,
+  },
+  setup(props) {
+    return () =>
+      h("div", { class: "pt-1" }, [
+        h(
+          "p",
+          { class: "text-xs text-gray-500 dark:text-gray-400 mb-2" },
+          props.label
+        ),
+        props.photos?.length
+          ? h(
+              "div",
+              { class: "grid grid-cols-2 sm:grid-cols-3 gap-2" },
+              props.photos.map((photo, index) =>
+                h(
+                  "a",
+                  {
+                    key: photo,
+                    href: photo,
+                    target: "_blank",
+                    rel: "noopener noreferrer",
+                    class:
+                      "block aspect-[4/3] overflow-hidden rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900",
+                  },
+                  [
+                    h("img", {
+                      src: photo,
+                      alt: `${props.label || "Document"} ${index + 1}`,
+                      class:
+                        "w-full h-full object-cover transition-transform hover:scale-105",
+                    }),
+                  ]
+                )
+              )
+            )
+          : h(
+              "div",
+              {
+                class:
+                  "rounded-lg border border-dashed border-gray-200 dark:border-gray-700 px-3 py-4 text-sm text-gray-400 dark:text-gray-500",
+              },
+              "No photos uploaded."
+            ),
       ]);
   },
 });

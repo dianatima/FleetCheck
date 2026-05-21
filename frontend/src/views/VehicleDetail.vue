@@ -244,7 +244,8 @@ type Vehicle = {
   unit: string;
   make: string;
   model: string;
-  type: string;
+  vehicle_type_id: string;
+  vehicle_types?: { id: string; name: string } | null;
   year: number;
   plate: string;
   vin?: string | null;
@@ -319,7 +320,11 @@ const details = computed(() => {
           ? `${Number(vehicle.value.engine_hours).toLocaleString()} hrs`
           : "—",
     },
-    { icon: Hash, label: store.t("type"), value: vehicle.value.type || "—" },
+    {
+      icon: Hash,
+      label: store.t("type"),
+      value: vehicle.value.vehicle_types?.name || "—",
+    },
   ];
 });
 

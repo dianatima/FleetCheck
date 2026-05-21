@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -7,7 +8,9 @@ const router = createRouter({
 { path: '/login', name: 'login', component: () => import('../views/LoginPage.vue') },
     { path: '/register/company', name: 'company-register', component: () => import('../views/CompanyRegister.vue') },
     { path: '/register/driver', name: 'driver-register', component: () => import('../views/DriverRegister.vue') },
+    { path: '/password-setup', name: 'password-setup', component: () => import('../views/PasswordSetup.vue') },
     { path: '/pending', name: 'pending-approval', component: () => import('../views/PendingApproval.vue') },
+    { path: '/inactive', name: 'inactive-access', component: () => import('../views/InactiveAccess.vue') },
     { path: '/dashboard', name: 'manager-dashboard', component: () => import('../views/ManagerDashboard.vue') },
     { path: '/driver', name: 'driver-dashboard', component: () => import('../views/DriverDashboard.vue') },
     { path: '/driver/vehicles', name: 'driver-vehicles', component: () => import('../views/DriverVehicles.vue') },
@@ -28,6 +31,32 @@ const router = createRouter({
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: () => ({ top: 0 }),
+})
+
+router.beforeEach((to) => {
+  const authStore = useAuthStore()
+  const driverIsBlocked =
+    authStore.profile?.role === 'driver' &&
+    (!authStore.passwordSetAt || authStore.profile.status !== 'active')
+  const blockedDriverRouteName =
+    !authStore.passwordSetAt
+      ? 'password-setup'
+      : authStore.profile?.status === 'inactive'
+      ? 'inactive-access'
+      : 'pending-approval'
+  const blockedDriverRouteNames = ['login', blockedDriverRouteName]
+
+  if (driverIsBlocked && !blockedDriverRouteNames.includes(String(to.name))) {
+    return { name: blockedDriverRouteName }
+  }
+
+  if (
+    !driverIsBlocked &&
+    ['password-setup', 'pending-approval', 'inactive-access'].includes(String(to.name)) &&
+    authStore.isAuthenticated
+  ) {
+    return authStore.redirectPath
+  }
 })
 
 export default router
