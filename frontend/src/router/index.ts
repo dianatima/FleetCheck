@@ -20,6 +20,7 @@ const router = createRouter({
     { path: '/drivers/:id', name: 'driver-detail', component: () => import('../views/DriverDetail.vue'), meta: { requiresAuth: true } },
     { path: '/vehicles', name: 'vehicles', component: () => import('../views/VehicleList.vue'), meta: { requiresAuth: true } },
     { path: '/vehicles/:id', name: 'vehicle-detail', component: () => import('../views/VehicleDetail.vue'), meta: { requiresAuth: true } },
+    { path: '/operations/start', name: 'operation-launcher', component: () => import('../views/OperationLauncher.vue'), meta: { requiresAuth: true } },
     { path: '/inspect/pre', name: 'pre-trip', component: () => import('../views/PreTripInspection.vue'), meta: { requiresAuth: true } },
     { path: '/inspect/post', name: 'post-trip', component: () => import('../views/PreTripInspection.vue'), props: { isPostTrip: true }, meta: { requiresAuth: true } },
     { path: '/inspect/result', name: 'inspection-result', component: () => import('../views/InspectionResult.vue'), meta: { requiresAuth: true } },

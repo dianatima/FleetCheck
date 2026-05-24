@@ -33,14 +33,14 @@ const items = computed(() => [
   ...(authStore.role === 'driver'
     ? [
       { icon: LayoutDashboard, label: store.t('home'), to: '/driver' },
-      { icon: ClipboardList, label: store.t('inspect'), to: '/inspect/pre' },
+      { icon: ClipboardList, label: store.t('inspect'), to: '/operations/start' },
       { icon: Truck, label: store.t('vehicles'), to: '/driver/vehicles' },
       { icon: FileText, label: store.t('reports'), to: '/driver/reports' },
       { icon: User, label: store.t('profile'), to: '/driver/profile' },
     ]
     : [
       { icon: LayoutDashboard, label: store.t('home'), to: '/dashboard' },
-      { icon: ClipboardList, label: store.t('inspect'), to: '/inspect/pre' },
+      { icon: ClipboardList, label: store.t('inspect'), to: '/operations/start' },
       { icon: Truck, label: store.t('vehicles'), to: '/vehicles' },
       { icon: FileText, label: store.t('reports'), to: '/reports' },
       { icon: User, label: store.t('profile'), to: '/settings' },

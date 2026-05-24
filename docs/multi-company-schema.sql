@@ -276,6 +276,7 @@ alter table public.inspections add column if not exists vehicle_odometer numeric
 alter table public.inspections add column if not exists vehicle_engine_hours numeric;
 alter table public.inspections add column if not exists distance_unit text;
 alter table public.inspections add column if not exists dimension_unit text;
+alter table public.inspections add column if not exists signature_url text;
 
 create index if not exists inspections_company_id_idx on public.inspections(company_id);
 create index if not exists inspections_operation_id_idx on public.inspections(operation_id);

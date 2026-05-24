@@ -269,15 +269,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Search, Filter, Plus, Wrench, Pencil, Trash2, X, Save, Eye, Truck, ArrowLeft, ExternalLink } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
+import { fetchCompanyVehicles } from '@/lib/companyVehicles'
 
 const store = useAppStore()
+const authStore = useAuthStore()
+const route = useRoute()
 
 const categories = ['Tires', 'Lights', 'Brakes', 'Fluids', 'Engine', 'Exterior', 'Steering', 'Other']
-const vehicleOptions = [
+const staticVehicleOptions = [
   { id: 1, unit: 'Unit #1042', name: 'Kenworth T680' },
   { id: 2, unit: 'Unit #0781', name: 'Peterbilt 579' },
   { id: 3, unit: 'Unit #2210', name: 'Freightliner Cascadia' },
@@ -285,6 +290,22 @@ const vehicleOptions = [
   { id: 5, unit: 'Unit #3305', name: 'Ford F-350' },
   { id: 6, unit: 'Unit #1099', name: 'Genie S-65' },
 ]
+const liveVehicleOptions = ref<{ id: string; unit: string; name: string }[]>([])
+const vehicleOptions = computed(() => {
+  const merged = [...staticVehicleOptions, ...liveVehicleOptions.value]
+  const seen = new Set<string>()
+
+  return merged.filter((vehicle) => {
+    const key = String(vehicle.id)
+
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
+})
 const driverOptions = ['John Smith', 'Maria Garcia', 'David Lee', 'Sarah Johnson', 'James Carter', 'Mike Brown']
 const issueOptions = [
   { id: 1, issueId: 'ISS-001', title: 'Left turn signal not working' },
@@ -336,7 +357,7 @@ const repairHeaders = computed(() => [
 ])
 
 interface Repair {
-  id: number; vehicleId: number; vehicle: string
+  id: number; vehicleId: string | number; vehicle: string
   title: string; description: string; category: string
   relatedIssueNumId: number | null; relatedIssueId: string
   driver: string; inspection: string
@@ -360,10 +381,14 @@ const showForm = ref(false)
 const editingId = ref<number | null>(null)
 const selectedRepair = ref<Repair | null>(null)
 
-const defaultForm = () => ({ vehicleId: 0 as number, title: '', description: '', category: '', relatedIssueNumId: null as number | null, relatedIssueId: '', driver: '', inspection: '', priority: 'medium', status: 'open', startedAt: '', completedAt: '' })
+const defaultForm = () => ({ vehicleId: '' as string | number, title: '', description: '', category: '', relatedIssueNumId: null as number | null, relatedIssueId: '', driver: '', inspection: '', priority: 'medium', status: 'open', startedAt: '', completedAt: '' })
 const form = reactive(defaultForm())
 
-function openAdd() { Object.assign(form, defaultForm()); editingId.value = null; showForm.value = true }
+function openAdd(preselectedVehicleId?: string | number) {
+  Object.assign(form, defaultForm(), preselectedVehicleId ? { vehicleId: preselectedVehicleId } : {})
+  editingId.value = null
+  showForm.value = true
+}
 function openEdit(r: Repair) {
   Object.assign(form, { vehicleId: r.vehicleId, title: r.title, description: r.description, category: r.category, relatedIssueNumId: r.relatedIssueNumId, relatedIssueId: r.relatedIssueId, driver: r.driver, inspection: r.inspection, priority: r.priority, status: r.status, startedAt: r.startedAt, completedAt: r.completedAt })
   editingId.value = r.id; showForm.value = true
@@ -378,7 +403,7 @@ function confirmDelete(r: Repair) {
 
 let nextId = 100
 function handleSave() {
-  const veh = vehicleOptions.find(v => v.id === form.vehicleId)
+  const veh = vehicleOptions.value.find(v => String(v.id) === String(form.vehicleId))
   if (!veh) return
   const issue = form.relatedIssueNumId ? issueOptions.find(i => i.id === form.relatedIssueNumId) : null
   const vehicleName = `${veh.unit} · ${veh.name}`
@@ -396,6 +421,36 @@ function handleSave() {
   closeForm()
 }
 
+async function loadVehicleOptions() {
+  if (!authStore.companyId) {
+    liveVehicleOptions.value = []
+    return
+  }
+
+  try {
+    const vehicles = await fetchCompanyVehicles(authStore.companyId, authStore.role === 'driver'
+      ? { assignedToAuthUserId: authStore.user?.id || null }
+      : {})
+
+    liveVehicleOptions.value = vehicles.map((vehicle) => ({
+      id: vehicle.id,
+      unit: `Unit #${vehicle.unit}`,
+      name: `${vehicle.make || ''} ${vehicle.model || ''}`.trim() || vehicle.plate || vehicle.type,
+    }))
+  } catch {
+    liveVehicleOptions.value = []
+  }
+}
+
+function applyLauncherQuery() {
+  const shouldOpenCreate = route.query.create === '1'
+  const vehicleId = typeof route.query.vehicleId === 'string' ? route.query.vehicleId : ''
+
+  if (shouldOpenCreate) {
+    openAdd(vehicleId || undefined)
+  }
+}
+
 const summaryStats = computed(() => [
   { label: store.t('statusOpen'),        count: repairs.value.filter(r => r.status === 'open').length,        color: 'text-red-600 dark:text-red-400' },
   { label: store.t('statusInProgress'), count: repairs.value.filter(r => r.status === 'in-progress').length, color: 'text-orange-600 dark:text-orange-400' },
@@ -408,6 +463,15 @@ const filtered = computed(() => repairs.value.filter(r => {
   const matchSearch = r.title.toLowerCase().includes(q) || r.vehicle.toLowerCase().includes(q)
   return matchSearch && (filterStatus.value === 'all' || r.status === filterStatus.value) && (filterPriority.value === 'all' || r.priority === filterPriority.value)
 }))
+
+onMounted(async () => {
+  await loadVehicleOptions()
+  applyLauncherQuery()
+})
+
+watch(() => authStore.companyId, loadVehicleOptions)
+watch(() => route.query.create, applyLauncherQuery)
+watch(() => route.query.vehicleId, applyLauncherQuery)
 </script>
 
 <style scoped>

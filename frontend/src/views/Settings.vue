@@ -50,6 +50,52 @@
         </div>
       </div>
 
+      <div class="card p-6">
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div>
+            <h3 class="font-semibold text-gray-900 dark:text-white">Reference Signature</h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+              Keep one sample signature on file for comparison. Each inspection still requires a brand-new signature when the report is completed.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="btn-primary px-4 py-2 text-sm"
+            :disabled="!authStore.isAuthenticated || savingProfileSignature || !signatureFile"
+            @click="savePersonalSignature"
+          >
+            {{ savingProfileSignature ? 'Saving...' : 'Save signature' }}
+          </button>
+        </div>
+
+        <div v-if="profileActionError" class="mt-4 rounded-xl bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+          {{ profileActionError }}
+        </div>
+        <div v-else-if="profileActionMessage" class="mt-4 rounded-xl bg-green-50 dark:bg-green-900/20 px-4 py-3 text-sm text-green-700 dark:text-green-300">
+          {{ profileActionMessage }}
+        </div>
+
+        <div class="mt-5 grid gap-5 lg:grid-cols-[280px,1fr]">
+          <div>
+            <label class="label">Upload signature</label>
+            <input type="file" accept="image/*" class="input-field text-sm" :disabled="!authStore.isAuthenticated" @change="onPersonalSignatureSelected" />
+            <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+              Use a clear image on a light background. This stays in the system only as a reference sample.
+            </p>
+          </div>
+
+          <div>
+            <p class="label">Current signature</p>
+            <div v-if="signaturePreview" class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800/50">
+              <img :src="signaturePreview" alt="Account signature" class="h-32 rounded-lg object-contain" />
+            </div>
+            <div v-else class="rounded-xl border border-dashed border-gray-200 px-4 py-10 text-sm text-gray-400 dark:border-gray-700 dark:text-gray-500">
+              No signature uploaded yet.
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div class="card p-6">
           <div class="flex items-center justify-between gap-3 mb-4">
@@ -194,6 +240,9 @@
             <p class="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
               Build reusable pre-trip and post-trip checklists for each vehicle type. Drivers can then use the right checklist instead of one static template for everything.
             </p>
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+              Only one active template per vehicle type and trip type is applied in inspections. Drivers do not choose templates manually anymore.
+            </p>
           </div>
           <button type="button" class="btn-primary text-sm px-4 py-2 gap-2" @click="startCreateTemplate">
             <Plus :size="15" /> New template
@@ -232,7 +281,7 @@
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-2 mb-1">
-                    <h4 class="font-semibold text-gray-900 dark:text-white truncate">{{ template.name }}</h4>
+                    <h4 class="font-semibold text-gray-900 dark:text-white truncate">{{ getDisplayTemplateName(template) }}</h4>
                     <span class="badge-blue">{{ template.vehicle_type }}</span>
                     <span class="badge-gray">{{ template.inspection_type }}</span>
                     <span class="badge-gray">{{ distanceUnitLabel(template.distance_unit) }}</span>
@@ -267,7 +316,8 @@
           <div class="grid md:grid-cols-2 gap-4">
             <div>
               <label class="label">Template name *</label>
-              <input v-model="templateForm.name" class="input-field" placeholder="e.g. My Fleet Semi Config" />
+              <input v-model="templateForm.name" class="input-field" placeholder="e.g. My Fleet Semi Config" @input="markTemplateNameEdited" />
+              <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">{{ translatedTemplateNameCount }} / {{ templateTranslationLanguages.length }} template-name translations saved</p>
             </div>
             <div>
               <label class="label">Vehicle type *</label>
@@ -315,11 +365,31 @@
             </div>
           </div>
 
+          <div class="rounded-2xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/10 dark:text-blue-200">
+            <p>Preset checklist items still auto-localize for drivers in English, Ukrainian, Spanish, and French. Custom section names and custom item labels can also be saved with translated variants through a configured backend translation provider.</p>
+            <p class="mt-2 text-xs text-blue-600 dark:text-blue-300">
+              {{ isTemplateTranslationConfigured
+                ? `Backend translation provider: ${templateTranslationProvider}`
+                : 'Backend translation provider is not configured yet. Add DEEPL_API_KEY or LIBRETRANSLATE_URL in the root .env to enable auto-translation.' }}
+            </p>
+            <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span class="text-xs text-blue-600 dark:text-blue-300">{{ translatedTemplateNameCount }} / {{ templateTranslationLanguages.length }} template-name translations and {{ translatedCustomItemsCount }} / {{ customTemplateItemsCount }} custom items have saved translations</span>
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-100/70 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:text-blue-200 dark:hover:border-blue-700 dark:hover:bg-blue-900/30"
+                :disabled="translatingCustomItems || !isTemplateTranslationConfigured || !canAutoTranslateTemplateContent"
+                @click="autoTranslateCustomTemplateItems"
+              >
+                {{ translatingCustomItems ? 'Translating...' : 'Auto-translate name and custom items' }}
+              </button>
+            </div>
+          </div>
+
           <div class="space-y-3 max-h-[560px] overflow-y-auto pr-1">
             <div v-for="item in templateForm.items" :key="item.id" class="rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
               <div class="grid md:grid-cols-[0.8fr_1.3fr_auto] gap-3 items-center">
-                <input v-model="item.section" class="input-field" placeholder="Section" />
-                <input v-model="item.label" class="input-field" placeholder="Checklist item" />
+                <input v-model="item.section" class="input-field" placeholder="Section" @input="markTemplateItemTextEdited(item)" />
+                <input v-model="item.label" class="input-field" placeholder="Checklist item" @input="markTemplateItemTextEdited(item)" />
                 <button type="button" class="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" @click="removeTemplateItem(item.id)">
                   <Trash2 :size="14" />
                 </button>
@@ -341,6 +411,9 @@
                   <input v-model="item.photoRequired" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" :disabled="!item.photoEnabled" />
                   Photo required
                 </label>
+                <span v-if="!resolveTemplateItemTranslationKey(item) && hasSavedCustomTranslations(item)" class="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  Custom translations saved
+                </span>
               </div>
             </div>
           </div>
@@ -454,7 +527,11 @@ import type { Language } from '../stores/app'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAuthStore } from '../stores/authStore'
 import AddressAutocomplete from '../components/shared/AddressAutocomplete.vue'
+import { uploadDriverDocument } from '@/api/storage'
+import { fetchTemplateTranslationStatus, requestTemplateItemTranslations, requestTextTranslations } from '@/api/templateTranslations'
 import { formatPhoneByCountry, getCountryOption, getPreferredCountryCode, getPrioritizedCountries } from '@/lib/companyForm'
+import { getTemplateItemCatalogEntry, inferTemplateTranslationKey, type TemplateItemTranslations, type TemplateTranslationKey } from '@/lib/inspectionTemplateCatalog'
+import { buildInspectionTemplatePayload, getLocalizedTemplateName, parseInspectionTemplatePayload, sanitizeTemplateNameTranslations, type TemplateNameTranslations } from '@/lib/inspectionTemplatePayload'
 import { supabase } from '@/lib/supabase'
 import { vehicleTypeOptions } from '@/lib/vehicleCatalog'
 import { defaultDimensionUnitForCountry, defaultDistanceUnitForCountry, dimensionUnitLabel, dimensionUnitOptions, distanceUnitLabel, distanceUnitOptions } from '@/lib/measurementUnits'
@@ -465,10 +542,15 @@ const authStore = useAuthStore()
 const activeTab = ref('company')
 const appTheme = ref<'light' | 'dark'>('light')
 const companyActionMessage = ref('')
+const profileActionMessage = ref('')
+const profileActionError = ref('')
 const deletePassword = ref('')
 const deleteCompanyId = ref<string | null>(null)
 const browserLocale = typeof navigator !== 'undefined' ? navigator.language : undefined
 const defaultCountry = getCountryOption(getPreferredCountryCode(store.language, browserLocale))
+const savingProfileSignature = ref(false)
+const signatureFile = ref<File | null>(null)
+const signaturePreview = ref('')
 
 const tabs = computed(() => [
   { id: 'company',  icon: Building2, label: store.t('companyProfile') },
@@ -484,6 +566,8 @@ type TemplateItemDraft = {
   id: string
   section: string
   label: string
+  translationKey?: string
+  translations?: TemplateItemTranslations
   required: boolean
   enabled: boolean
   photoEnabled?: boolean
@@ -493,6 +577,7 @@ type TemplateItemDraft = {
 type InspectionTemplateRecord = {
   id: string
   name: string
+  nameTranslations?: TemplateNameTranslations
   vehicle_type: string
   inspection_type: TemplateInspectionType
   is_active: boolean
@@ -502,72 +587,92 @@ type InspectionTemplateRecord = {
   updated_at?: string
 }
 
+function createPresetTemplateItem(
+  translationKey: TemplateTranslationKey,
+  overrides: Partial<Pick<TemplateItemDraft, 'required' | 'enabled' | 'photoEnabled' | 'photoRequired'>> = {},
+): TemplateItemDraft {
+  const preset = getTemplateItemCatalogEntry(translationKey, 'en')
+
+  return {
+    id: crypto.randomUUID(),
+    translationKey: preset.translationKey,
+    section: preset.section,
+    label: preset.label,
+    required: overrides.required ?? true,
+    enabled: overrides.enabled ?? true,
+    photoEnabled: overrides.photoEnabled ?? false,
+    photoRequired: overrides.photoRequired ?? false,
+  }
+}
+
 const presetTemplates: Record<string, TemplateItemDraft[]> = {
   'Sedan': [
-    { id: crypto.randomUUID(), section: 'Tires', label: 'Tire pressure', required: true, enabled: true, photoEnabled: true, photoRequired: false },
-    { id: crypto.randomUUID(), section: 'Lights', label: 'Headlights', required: true, enabled: true, photoEnabled: false, photoRequired: false },
-    { id: crypto.randomUUID(), section: 'Brakes', label: 'Brake pedal', required: true, enabled: true, photoEnabled: false, photoRequired: false },
-    { id: crypto.randomUUID(), section: 'Fluids', label: 'Engine oil', required: true, enabled: true, photoEnabled: true, photoRequired: false },
-    { id: crypto.randomUUID(), section: 'Documents', label: 'Insurance', required: true, enabled: true, photoEnabled: true, photoRequired: true },
+    createPresetTemplateItem('tire-pressure', { photoEnabled: true }),
+    createPresetTemplateItem('headlights'),
+    createPresetTemplateItem('brake-pedal'),
+    createPresetTemplateItem('engine-oil', { photoEnabled: true }),
+    createPresetTemplateItem('insurance', { photoEnabled: true, photoRequired: true }),
   ],
   'SUV': [
-    { id: crypto.randomUUID(), section: 'Tires', label: 'Tread depth', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Lights', label: 'Turn signals', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Safety', label: 'Seat belts', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Interior', label: 'Interior cleanliness', required: false, enabled: true },
+    createPresetTemplateItem('tread-depth'),
+    createPresetTemplateItem('turn-signals'),
+    createPresetTemplateItem('seat-belts'),
+    createPresetTemplateItem('interior-cleanliness', { required: false }),
   ],
   'Pickup Truck': [
-    { id: crypto.randomUUID(), section: 'Bed', label: 'Cargo area secure', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Brakes', label: 'Parking brake', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Lights', label: 'Brake lights', required: true, enabled: true },
+    createPresetTemplateItem('cargo-area-secure-bed'),
+    createPresetTemplateItem('parking-brake'),
+    createPresetTemplateItem('brake-lights'),
   ],
   'Van': [
-    { id: crypto.randomUUID(), section: 'Doors', label: 'Cargo doors', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Lights', label: 'Hazard lights', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Documents', label: 'Registration', required: true, enabled: true },
+    createPresetTemplateItem('cargo-doors'),
+    createPresetTemplateItem('hazard-lights'),
+    createPresetTemplateItem('registration'),
   ],
   'Box Truck': [
-    { id: crypto.randomUUID(), section: 'Cargo', label: 'Lift gate', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Cargo', label: 'Cargo area secure', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Lights', label: 'Marker lights', required: true, enabled: true },
+    createPresetTemplateItem('lift-gate'),
+    createPresetTemplateItem('cargo-area-secure-cargo'),
+    createPresetTemplateItem('marker-lights'),
   ],
   'Semi Truck': [
-    { id: crypto.randomUUID(), section: 'Tires', label: 'Tire pressure', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Lights', label: 'Headlights', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Brakes', label: 'Brake pedal', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Fluids', label: 'Engine oil', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Windshield', label: 'Wipers', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Mirrors', label: 'Left mirror', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Mirrors', label: 'Right mirror', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Documents', label: 'Registration', required: true, enabled: true },
+    createPresetTemplateItem('tire-pressure'),
+    createPresetTemplateItem('headlights'),
+    createPresetTemplateItem('brake-pedal'),
+    createPresetTemplateItem('engine-oil'),
+    createPresetTemplateItem('wipers'),
+    createPresetTemplateItem('left-mirror'),
+    createPresetTemplateItem('right-mirror'),
+    createPresetTemplateItem('registration'),
   ],
   'Taxi': [
-    { id: crypto.randomUUID(), section: 'Interior', label: 'Passenger cabin cleanliness', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Safety', label: 'Seat belts', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Lights', label: 'Interior dome lights', required: false, enabled: true },
+    createPresetTemplateItem('passenger-cabin-cleanliness'),
+    createPresetTemplateItem('seat-belts'),
+    createPresetTemplateItem('interior-dome-lights', { required: false }),
   ],
   'Construction Equipment': [
-    { id: crypto.randomUUID(), section: 'Hydraulics', label: 'Hydraulic hoses', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Safety', label: 'Backup alarm', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Exterior', label: 'Boom / arm condition', required: true, enabled: true },
+    createPresetTemplateItem('hydraulic-hoses'),
+    createPresetTemplateItem('backup-alarm'),
+    createPresetTemplateItem('boom-arm-condition'),
   ],
   'Boom Lift': [
-    { id: crypto.randomUUID(), section: 'Safety', label: 'Emergency stop', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Safety', label: 'Harness anchor points', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Hydraulics', label: 'Hydraulic leaks', required: true, enabled: true },
+    createPresetTemplateItem('emergency-stop'),
+    createPresetTemplateItem('harness-anchor-points'),
+    createPresetTemplateItem('hydraulic-leaks'),
   ],
   'Crane': [
-    { id: crypto.randomUUID(), section: 'Rigging', label: 'Hook latch', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Rigging', label: 'Cable condition', required: true, enabled: true },
-    { id: crypto.randomUUID(), section: 'Safety', label: 'Outriggers', required: true, enabled: true },
+    createPresetTemplateItem('hook-latch'),
+    createPresetTemplateItem('cable-condition'),
+    createPresetTemplateItem('outriggers'),
   ],
   'Custom Vehicle': [
-    { id: crypto.randomUUID(), section: 'General', label: 'Main operational check', required: true, enabled: true, photoEnabled: true, photoRequired: false },
+    createPresetTemplateItem('main-operational-check', { photoEnabled: true }),
   ],
 }
 
 const inspectionTemplates = ref<InspectionTemplateRecord[]>([])
 const templatesLoading = ref(false)
+const translatingCustomItems = ref(false)
+const templateTranslationProvider = ref('')
 const templatesMessage = ref('')
 const templatesError = ref('')
 const editingTemplateId = ref<string | null>(null)
@@ -576,6 +681,7 @@ const customItemSection = ref('Custom')
 const templateForm = reactive<InspectionTemplateRecord>({
   id: '',
   name: '',
+  nameTranslations: undefined,
   vehicle_type: 'Semi Truck',
   inspection_type: 'pre-trip',
   is_active: true,
@@ -590,6 +696,20 @@ const languages = [
   { code: 'es' as Language, flag: '🇪🇸', name: 'Spanish',   native: 'Español' },
   { code: 'fr' as Language, flag: '🇫🇷', name: 'French',    native: 'Français' },
 ]
+const templateTranslationLanguages: Language[] = ['en', 'uk', 'es', 'fr']
+const translatedTemplateNameCount = computed(() => templateTranslationLanguages.filter((language) => Boolean(templateForm.nameTranslations?.[language]?.trim())).length)
+const customTemplateItemsCount = computed(() => templateForm.items.filter((item) => !resolveTemplateItemTranslationKey(item) && item.label.trim()).length)
+const translatedCustomItemsCount = computed(() => templateForm.items.filter((item) => !resolveTemplateItemTranslationKey(item) && hasSavedCustomTranslations(item)).length)
+const isTemplateTranslationConfigured = computed(() => Boolean(templateTranslationProvider.value))
+const canAutoTranslateTemplateContent = computed(() => Boolean(templateForm.name.trim()) || customTemplateItemsCount.value > 0)
+
+function cloneTemplateNameTranslations(translations?: TemplateNameTranslations | null) {
+  return sanitizeTemplateNameTranslations(translations)
+}
+
+function getDisplayTemplateName(template: Pick<InspectionTemplateRecord, 'name' | 'nameTranslations'>) {
+  return getLocalizedTemplateName(template.name, template.nameTranslations, store.language)
+}
 
 const themeOptions = computed(() => [
   { id: 'light', icon: Sun,  label: store.t('lightMode'), preview: 'bg-white border-gray-200',    iconClass: 'text-gray-700' },
@@ -623,6 +743,8 @@ onMounted(async () => {
     await authStore.fetchCompanyMemberships()
   }
 
+  signaturePreview.value = authStore.profile?.signature_url || ''
+  await loadTemplateTranslationStatus()
   resetTemplateForm()
   await fetchInspectionTemplates()
 })
@@ -631,6 +753,54 @@ watch(() => authStore.companyId, async () => {
   resetTemplateForm()
   await fetchInspectionTemplates()
 })
+
+watch(() => authStore.profile?.signature_url, (value) => {
+  if (!signatureFile.value) {
+    signaturePreview.value = value || ''
+  }
+})
+
+function onPersonalSignatureSelected(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0] || null
+  signatureFile.value = file
+  signaturePreview.value = file ? URL.createObjectURL(file) : authStore.profile?.signature_url || ''
+  profileActionError.value = ''
+  profileActionMessage.value = ''
+}
+
+async function savePersonalSignature() {
+  profileActionError.value = ''
+  profileActionMessage.value = ''
+
+  if (!authStore.user?.id || !signatureFile.value) {
+    profileActionError.value = 'Select a signature image first.'
+    return
+  }
+
+  savingProfileSignature.value = true
+
+  try {
+    const signatureUrl = await uploadDriverDocument(signatureFile.value, authStore.user.id, 'signatures')
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ signature_url: signatureUrl })
+      .eq('auth_user_id', authStore.user.id)
+
+    if (error) {
+      throw error
+    }
+
+    await authStore.fetchProfile()
+    signaturePreview.value = signatureUrl
+    signatureFile.value = null
+    profileActionMessage.value = 'Reference signature saved.'
+  } catch (saveError: any) {
+    profileActionError.value = saveError?.message || 'Unable to save signature.'
+  } finally {
+    savingProfileSignature.value = false
+  }
+}
 
 function resetCreateCompanyForm() {
   createCompanyForm.name = ''
@@ -665,11 +835,125 @@ function handleCreateCompanyPhoneInput(event: Event) {
   createCompanyForm.phone = formatPhoneByCountry((event.target as HTMLInputElement).value, createCompanyForm.country)
 }
 
+function markTemplateNameEdited() {
+  templateForm.nameTranslations = undefined
+}
+
+async function loadTemplateTranslationStatus() {
+  try {
+    const status = await fetchTemplateTranslationStatus()
+    templateTranslationProvider.value = status.configured ? status.provider : ''
+  } catch {
+    templateTranslationProvider.value = ''
+  }
+}
+
+function cloneTemplateItemTranslations(translations?: TemplateItemTranslations | null) {
+  if (!translations) {
+    return undefined
+  }
+
+  const entries = templateTranslationLanguages
+    .map((language) => {
+      const entry = translations[language]
+      const section = (entry?.section || '').trim()
+      const label = (entry?.label || '').trim()
+
+      if (!section && !label) {
+        return null
+      }
+
+      return [language, { section, label }] as const
+    })
+    .filter(Boolean) as Array<readonly [Language, { section: string; label: string }]>
+
+  return entries.length ? Object.fromEntries(entries) as TemplateItemTranslations : undefined
+}
+
+function resolveTemplateItemTranslationKey(item: Pick<TemplateItemDraft, 'translationKey' | 'section' | 'label'>) {
+  return item.translationKey || inferTemplateTranslationKey(item.section.trim(), item.label.trim()) || ''
+}
+
+function hasSavedCustomTranslations(item: TemplateItemDraft) {
+  const translations = cloneTemplateItemTranslations(item.translations)
+
+  if (!translations) {
+    return false
+  }
+
+  return templateTranslationLanguages.every((language) => {
+    const entry = translations[language]
+    return Boolean(entry?.section?.trim() && entry?.label?.trim())
+  })
+}
+
+function markTemplateItemTextEdited(item: TemplateItemDraft) {
+  item.translationKey = inferTemplateTranslationKey(item.section.trim(), item.label.trim()) || undefined
+  item.translations = undefined
+}
+
+async function autoTranslateCustomTemplateItems() {
+  templatesError.value = ''
+  templatesMessage.value = ''
+
+  const templateName = templateForm.name.trim()
+  const customItems = templateForm.items.filter((item) => !resolveTemplateItemTranslationKey(item) && item.label.trim())
+
+  if (!templateName && !customItems.length) {
+    templatesMessage.value = 'There is no template text to translate yet.'
+    return
+  }
+
+  translatingCustomItems.value = true
+
+  try {
+    const usedProviders: string[] = []
+
+    if (templateName) {
+      const { provider, translations } = await requestTextTranslations({
+        text: templateName,
+        targetLanguages: templateTranslationLanguages,
+      })
+
+      templateForm.nameTranslations = cloneTemplateNameTranslations(translations)
+      usedProviders.push(provider)
+    }
+
+    const providers = await Promise.all(customItems.map(async (item) => {
+      const { provider, translations } = await requestTemplateItemTranslations({
+        section: item.section.trim() || 'General',
+        label: item.label.trim(),
+        targetLanguages: templateTranslationLanguages,
+      })
+
+      item.translations = cloneTemplateItemTranslations(translations)
+
+      return provider
+    }))
+
+    usedProviders.push(...providers)
+
+    const providerLabel = usedProviders[0] || 'translation service'
+    const translatedParts = [
+      ...(templateName ? ['template name'] : []),
+      ...(customItems.length ? [`${customItems.length} custom checklist item${customItems.length === 1 ? '' : 's'}`] : []),
+    ]
+
+    templatesMessage.value = `Auto-translated ${translatedParts.join(' and ')} using ${providerLabel}.`
+  } catch (translationError) {
+    templatesError.value = translationError instanceof Error ? translationError.message : 'Unable to auto-translate template text.'
+  } finally {
+    translatingCustomItems.value = false
+  }
+}
+
 function cloneTemplateItems(items: TemplateItemDraft[]) {
   return items.map((item) => ({
     id: crypto.randomUUID(),
     section: item.section,
     label: item.label,
+    translationKey: item.translationKey || inferTemplateTranslationKey(item.section, item.label) || undefined,
+    translations: cloneTemplateItemTranslations(item.translations),
     required: item.required,
     enabled: item.enabled,
     photoEnabled: item.photoEnabled ?? false,
@@ -681,6 +965,7 @@ function resetTemplateForm() {
   editingTemplateId.value = null
   templateForm.id = ''
   templateForm.name = ''
+  templateForm.nameTranslations = undefined
   templateForm.vehicle_type = 'Semi Truck'
   templateForm.inspection_type = 'pre-trip'
   templateForm.is_active = true
@@ -701,6 +986,7 @@ function startEditTemplate(template: InspectionTemplateRecord) {
   editingTemplateId.value = template.id
   templateForm.id = template.id
   templateForm.name = template.name
+  templateForm.nameTranslations = cloneTemplateNameTranslations(template.nameTranslations)
   templateForm.vehicle_type = template.vehicle_type
   templateForm.inspection_type = template.inspection_type
   templateForm.is_active = template.is_active
@@ -728,6 +1014,7 @@ function addCustomTemplateItem() {
     id: crypto.randomUUID(),
     section: customItemSection.value.trim() || 'Custom',
     label: customItemLabel.value.trim(),
+    translations: undefined,
     required: true,
     enabled: true,
     photoEnabled: false,
@@ -763,17 +1050,22 @@ async function fetchInspectionTemplates() {
     return
   }
 
-  inspectionTemplates.value = (data || []).map((template) => ({
-    id: template.id,
-    name: template.name,
-    vehicle_type: template.vehicle_type,
-    inspection_type: template.inspection_type as TemplateInspectionType,
-    is_active: template.is_active,
-    distance_unit: (template.distance_unit || defaultDistanceUnitForCountry(authStore.currentCompany?.country)) as 'mi' | 'km',
-    dimension_unit: (template.dimension_unit || defaultDimensionUnitForCountry(authStore.currentCompany?.country)) as 'ft' | 'yd' | 'm',
-    items: Array.isArray(template.items) ? template.items as TemplateItemDraft[] : [],
-    updated_at: template.updated_at,
-  }))
+  inspectionTemplates.value = (data || []).map((template) => {
+    const parsedPayload = parseInspectionTemplatePayload<TemplateItemDraft>(template.items)
+
+    return {
+      id: template.id,
+      name: template.name,
+      nameTranslations: cloneTemplateNameTranslations(parsedPayload.nameTranslations),
+      vehicle_type: template.vehicle_type,
+      inspection_type: template.inspection_type as TemplateInspectionType,
+      is_active: template.is_active,
+      distance_unit: (template.distance_unit || defaultDistanceUnitForCountry(authStore.currentCompany?.country)) as 'mi' | 'km',
+      dimension_unit: (template.dimension_unit || defaultDimensionUnitForCountry(authStore.currentCompany?.country)) as 'ft' | 'yd' | 'm',
+      items: cloneTemplateItems(parsedPayload.items),
+      updated_at: template.updated_at,
+    }
+  })
 
   templatesLoading.value = false
 }
@@ -806,17 +1098,51 @@ async function saveInspectionTemplate() {
     is_active: templateForm.is_active,
     distance_unit: templateForm.distance_unit,
     dimension_unit: templateForm.dimension_unit,
-    items: templateForm.items
-      .map((item) => ({
-        id: item.id,
-        section: item.section.trim() || 'General',
-        label: item.label.trim(),
-        required: item.required,
-        enabled: item.enabled,
-        photoEnabled: item.photoEnabled ?? false,
-        photoRequired: item.photoRequired ?? false,
-      }))
-      .filter((item) => item.label),
+    items: buildInspectionTemplatePayload(
+      templateForm.items
+        .map((item) => {
+          const normalizedSection = item.section.trim() || 'General'
+          const normalizedLabel = item.label.trim()
+          const translationKey = inferTemplateTranslationKey(normalizedSection, normalizedLabel) || undefined
+
+          return {
+            id: item.id,
+            section: normalizedSection,
+            label: normalizedLabel,
+            translationKey,
+            translations: translationKey ? undefined : cloneTemplateItemTranslations(item.translations),
+            required: item.required,
+            enabled: item.enabled,
+            photoEnabled: item.photoEnabled ?? false,
+            photoRequired: item.photoRequired ?? false,
+          }
+        })
+        .filter((item) => item.label),
+      {
+        nameTranslations: cloneTemplateNameTranslations(templateForm.nameTranslations),
+      },
+    ),
+  }
+
+  if (payload.is_active) {
+    let deactivateExistingQuery = supabase
+      .from('inspection_templates')
+      .update({ is_active: false })
+      .eq('company_id', authStore.companyId)
+      .eq('vehicle_type', payload.vehicle_type)
+      .eq('inspection_type', payload.inspection_type)
+      .eq('is_active', true)
+
+    if (editingTemplateId.value) {
+      deactivateExistingQuery = deactivateExistingQuery.neq('id', editingTemplateId.value)
+    }
+
+    const { error: deactivateError } = await deactivateExistingQuery
+
+    if (deactivateError) {
+      templatesError.value = normalizeSupabaseSchemaErrorMessage(deactivateError.message) || deactivateError.message
+      return
+    }
   }
 
   const query = editingTemplateId.value

@@ -277,8 +277,26 @@ export const useAuthStore = defineStore('auth', () => {
 
     const schemaErrorMessage = getMultiCompanySchemaErrorMessage(membershipsError?.message)
 
+    const dedupeMemberships = (memberships: CompanyMembership[]) => {
+      const membershipMap = new Map<string, CompanyMembership>()
+
+      for (const membership of memberships) {
+        if (!membership.company_id) {
+          continue
+        }
+
+        const current = membershipMap.get(membership.company_id)
+
+        if (!current || (!current.is_default && membership.is_default)) {
+          membershipMap.set(membership.company_id, membership)
+        }
+      }
+
+      return [...membershipMap.values()]
+    }
+
     if (!membershipsError && Array.isArray(data) && data.length > 0) {
-      companyMemberships.value = data
+      const normalizedMemberships = data
         .map((membership: any) => {
           const company = Array.isArray(membership.companies) ? membership.companies[0] : membership.companies
 
@@ -302,8 +320,10 @@ export const useAuthStore = defineStore('auth', () => {
           } satisfies CompanyMembership
         })
         .filter(Boolean) as CompanyMembership[]
+
+      companyMemberships.value = dedupeMemberships(normalizedMemberships)
     } else {
-      companyMemberships.value = await fetchFallbackCompanyMemberships()
+      companyMemberships.value = dedupeMemberships(await fetchFallbackCompanyMemberships())
 
       if (schemaErrorMessage) {
         console.warn(schemaErrorMessage)

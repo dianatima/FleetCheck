@@ -1,10 +1,20 @@
 <template>
-  <AppLayout title="Vehicles">
+  <AppLayout :title="store.t('vehicles')">
     <div class="flex flex-wrap gap-2 mb-5">
-      <span class="badge-green">{{ vehicles.filter((v) => v.status === 'active').length }} {{ store.t('statusActive') }}</span>
-      <span class="badge-orange">{{ vehicles.filter((v) => v.status === 'needs-attention').length }} {{ store.t('statusNeedsAttention') }}</span>
-      <span class="badge-red">{{ vehicles.filter((v) => v.status === 'blocked').length }} {{ store.t('statusBlocked') }}</span>
-      <span class="badge-gray">{{ vehicles.filter((v) => v.status === 'in-repair').length }} {{ store.t('statusInRepair') }}</span>
+      <button
+        v-for="badge in statusBadges"
+        :key="badge.value"
+        type="button"
+        :class="[
+          badge.badgeClass,
+          'transition-all whitespace-nowrap cursor-pointer',
+          filterStatus === badge.value ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-950' : 'hover:opacity-85',
+        ]"
+        :aria-pressed="filterStatus === badge.value"
+        @click="toggleStatusFilter(badge.value)"
+      >
+        {{ badge.count }} {{ badge.label }}
+      </button>
     </div>
 
     <div class="flex flex-wrap items-center gap-3 mb-5">
@@ -25,7 +35,7 @@
     </div>
 
     <div v-if="loading" class="card p-6 text-sm text-gray-500">
-      Loading vehicles...
+      {{ store.t('loadingVehicles') }}
     </div>
 
     <div v-else-if="error" class="card p-6 text-sm text-red-500">
@@ -47,7 +57,7 @@
             </tr>
             <tr v-for="v in filtered" :key="v.id"
               class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 cursor-pointer" @click="openVehicle(v.id)">
                 <div class="flex items-center gap-3">
                   <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0">
                     <img v-if="v.photo_url" :src="v.photo_url" alt="" class="w-full h-full object-cover" @error="(e) => (e.target as HTMLImageElement).style.display = 'none'" />
@@ -58,12 +68,12 @@
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ v.type }}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ v.year ?? '—' }}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ v.plate }}</td>
-              <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">{{ v.vin ? v.vin.substring(0, 12) + '…' : '—' }}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ v.odometer != null ? v.odometer.toLocaleString() + ' mi' : '—' }}</td>
-              <td class="px-4 py-3"><span :class="statusConfig[v.status]?.badge || 'badge-gray'">{{ statusConfig[v.status]?.label || v.status }}</span></td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" @click="openVehicle(v.id)">{{ getVehicleTypeLabel(v.type, store.language) }}</td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" @click="openVehicle(v.id)">{{ v.year ?? '—' }}</td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap cursor-pointer" @click="openVehicle(v.id)">{{ v.plate }}</td>
+              <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap cursor-pointer" @click="openVehicle(v.id)">{{ v.vin ? v.vin.substring(0, 12) + '…' : '—' }}</td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap cursor-pointer" @click="openVehicle(v.id)">{{ v.odometer != null ? v.odometer.toLocaleString() + ' mi' : '—' }}</td>
+              <td class="px-4 py-3 cursor-pointer" @click="openVehicle(v.id)"><span :class="statusConfig[v.status]?.badge || 'badge-gray'">{{ statusConfig[v.status]?.label || v.status }}</span></td>
             </tr>
           </tbody>
         </table>
@@ -74,14 +84,17 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Search, Filter } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchCompanyVehicles, type CompanyVehicle } from '@/lib/companyVehicles'
+import { getVehicleTypeLabel } from '@/lib/vehicleCatalog'
 
 const store = useAppStore()
 const authStore = useAuthStore()
+const router = useRouter()
 
 const search = ref('')
 const filterStatus = ref('all')
@@ -96,8 +109,23 @@ const statusConfig = computed<Record<string, { label: string; badge: string }>>(
   'in-repair': { label: store.t('statusInRepair'), badge: 'badge-gray' },
 }))
 
+const statusBadges = computed(() => [
+  { value: 'active', label: store.t('statusActive'), count: vehicles.value.filter((vehicle) => vehicle.status === 'active').length, badgeClass: 'badge-green' },
+  { value: 'needs-attention', label: store.t('statusNeedsAttention'), count: vehicles.value.filter((vehicle) => vehicle.status === 'needs-attention').length, badgeClass: 'badge-orange' },
+  { value: 'blocked', label: store.t('statusBlocked'), count: vehicles.value.filter((vehicle) => vehicle.status === 'blocked').length, badgeClass: 'badge-red' },
+  { value: 'in-repair', label: store.t('statusInRepair'), count: vehicles.value.filter((vehicle) => vehicle.status === 'in-repair').length, badgeClass: 'badge-gray' },
+])
+
 function getVehicleName(vehicle: CompanyVehicle) {
   return `${vehicle.make || ''} ${vehicle.model || ''}`.trim() || vehicle.unit
+}
+
+function toggleStatusFilter(status: string) {
+  filterStatus.value = filterStatus.value === status ? 'all' : status
+}
+
+function openVehicle(vehicleId: string) {
+  void router.push(`/vehicles/${vehicleId}`)
 }
 
 async function loadVehicles() {
@@ -115,7 +143,7 @@ async function loadVehicles() {
       assignedToAuthUserId: authStore.user?.id || null,
     })
   } catch (loadError: any) {
-    error.value = loadError?.message || 'Unable to load vehicles.'
+    error.value = loadError?.message || store.t('unableToLoadVehicles')
     vehicles.value = []
   } finally {
     loading.value = false

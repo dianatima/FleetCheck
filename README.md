@@ -62,6 +62,7 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - **Business-scoped inspection templates** — кожен бізнес має власні inspection templates для окремих типів транспорту, без спільного глобального чекліста на всіх.
 - **Vehicle-type matching** — template автоматично підбирається під category вибраного авто (`Sedan`, `Semi Truck`, `Crane`, `Boom Lift`, etc.).
 - **Photo rules per checklist item** — для кожного пункту template можна вмикати `Allow photo` і `Photo required`.
+- **Optional template auto-translation** — preset items перекладаються з вбудованого каталогу, а custom section/item text і template names можна авто-перекладати через backend provider і зберігати прямо в JSON payload шаблону.
 - **Distance and dimension units** — template підтримує переключалки одиниць виміру (`mi/km`, `ft/yd/m`) залежно від бізнесу або країни.
 - **Fallback checklist** — якщо для типу авто template не знайдено, driver отримує default checklist замість помилкового або випадкового template.
 
@@ -131,4 +132,5 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - Для dev/test сценаріїв Supabase Auth може тимчасово повертати email rate limit errors після великої кількості signup attempts.
 - Shared vehicles should be linked between businesses через `vehicle_company_assignments`, а не дублюватися новими `vehicles` rows без потреби.
 - Vehicle odometer and engine hours повинні оновлюватися з inspection flow, щоб усі бізнеси бачили останні фактичні значення по shared vehicle.
+- Для optional auto-translation template names і custom template items налаштуйте або `DEEPL_API_KEY` (і за потреби `DEEPL_API_URL`), або `LIBRETRANSLATE_URL` (та опційно `LIBRETRANSLATE_API_KEY`) на backend.
 

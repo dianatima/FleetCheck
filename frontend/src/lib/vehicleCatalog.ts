@@ -16,6 +16,22 @@ export const vehicleTypeOptions = [
 
 export type VehicleTypeOption = (typeof vehicleTypeOptions)[number]
 
+const vehicleTypeLabels: Record<VehicleTypeOption, Record<'en' | 'uk' | 'es' | 'fr', string>> = {
+  Sedan: { en: 'Sedan', uk: 'Седан', es: 'Sedan', fr: 'Berline' },
+  SUV: { en: 'SUV', uk: 'Позашляховик', es: 'SUV', fr: 'SUV' },
+  'Pickup Truck': { en: 'Pickup Truck', uk: 'Пікап', es: 'Camioneta pickup', fr: 'Pick-up' },
+  Van: { en: 'Van', uk: 'Фургон', es: 'Furgon', fr: 'Fourgon' },
+  'Box Truck': { en: 'Box Truck', uk: 'Фургон-будка', es: 'Camion caja', fr: 'Camion caisse' },
+  'Semi Truck': { en: 'Semi Truck', uk: 'Сідельний тягач', es: 'Camion tractor', fr: 'Semi-remorque' },
+  Taxi: { en: 'Taxi', uk: 'Таксі', es: 'Taxi', fr: 'Taxi' },
+  'Construction Equipment': { en: 'Construction Equipment', uk: 'Будівельна техніка', es: 'Equipo de construccion', fr: 'Engin de chantier' },
+  'Boom Lift': { en: 'Boom Lift', uk: 'Підйомник зі стрілою', es: 'Plataforma articulada', fr: 'Nacelle a fleche' },
+  Crane: { en: 'Crane', uk: 'Кран', es: 'Grua', fr: 'Grue' },
+  Bus: { en: 'Bus', uk: 'Автобус', es: 'Autobus', fr: 'Bus' },
+  Trailer: { en: 'Trailer', uk: 'Причіп', es: 'Remolque', fr: 'Remorque' },
+  'Custom Vehicle': { en: 'Custom Vehicle', uk: 'Користувацький транспорт', es: 'Vehiculo personalizado', fr: 'Vehicule personnalise' },
+}
+
 export const vehicleCatalog: Record<string, Record<string, string[]>> = {
   Sedan: {
     Toyota: ['Camry', 'Corolla', 'Avalon'],
@@ -105,6 +121,16 @@ export function normalizeVehicleType(type: string | null | undefined): VehicleTy
   }
 
   return legacyTypeMap[type] || ''
+}
+
+export function getVehicleTypeLabel(type: string | null | undefined, language: 'en' | 'uk' | 'es' | 'fr' = 'en') {
+  const normalized = normalizeVehicleType(type)
+
+  if (!normalized) {
+    return type || ''
+  }
+
+  return vehicleTypeLabels[normalized]?.[language] || normalized
 }
 
 export function getMakesForVehicleType(type: string | null | undefined) {

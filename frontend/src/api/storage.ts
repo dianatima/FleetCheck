@@ -49,6 +49,22 @@ export async function uploadVehiclePhoto(file: File) {
   return uploadPublicAsset('vehicle-photos', filePath, file)
 }
 
+export async function uploadInspectionPhoto(file: File, companyId: string, vehicleId: string, itemId: string) {
+  const fileExt = file.name.split('.').pop()
+  const fileName = `${crypto.randomUUID()}.${fileExt}`
+  const filePath = `inspections/${normalizeOwnerKey(companyId)}/${normalizeOwnerKey(vehicleId)}/${normalizeOwnerKey(itemId)}/${fileName}`
+
+  return uploadPublicAsset('vehicle-photos', filePath, file)
+}
+
+export async function uploadInspectionSignature(file: File, ownerKey: string) {
+  const fileExt = file.name.split('.').pop() || 'png'
+  const fileName = `${crypto.randomUUID()}.${fileExt}`
+  const filePath = `${normalizeOwnerKey(ownerKey)}/inspection-signatures/${fileName}`
+
+  return uploadPublicAsset('driver-documents', filePath, file)
+}
+
 export async function uploadDriverAvatar(file: File, ownerKey: string) {
   const fileExt = file.name.split('.').pop()
   const fileName = `${crypto.randomUUID()}.${fileExt}`

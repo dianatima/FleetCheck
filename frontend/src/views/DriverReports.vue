@@ -1,5 +1,5 @@
 <template>
-  <AppLayout title="My Reports">
+  <AppLayout :title="store.t('myReports')">
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
       <div v-for="s in summaryStats" :key="s.label" class="card p-4 text-center">
         <div class="text-2xl font-bold" :class="s.color">{{ s.value }}</div>

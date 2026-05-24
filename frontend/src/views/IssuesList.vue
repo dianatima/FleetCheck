@@ -1,5 +1,5 @@
 <template>
-  <AppLayout title="Issues">
+  <AppLayout :title="store.t('issues')">
     <!-- Summary cards -->
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
       <div v-for="s in summaryStats" :key="s.label" class="card p-4 text-center">

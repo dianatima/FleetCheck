@@ -1,10 +1,15 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors">
-    <Sidebar />
+    <Sidebar :mobile-open="mobileMenuOpen" @close="mobileMenuOpen = false" />
 
     <!-- Top bar -->
     <header class="fixed top-0 left-0 lg:left-56 right-0 h-16 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center px-4 sm:px-6 gap-3 z-20">
-      <button class="lg:hidden p-2 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+      <button
+        type="button"
+        class="lg:hidden p-2 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+        :aria-label="store.t('openMenu')"
+        @click="mobileMenuOpen = true"
+      >
         <Menu :size="20" />
       </button>
       <h1 class="font-semibold text-gray-900 dark:text-white flex-1 truncate">{{ title }}</h1>
@@ -17,11 +22,11 @@
       <div v-if="authStore.currentCompany" class="hidden md:flex items-center gap-2 flex-1 max-w-xs min-w-0">
         <span class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ store.t('activeBusiness') }}</span>
         <select
-          v-if="authStore.hasMultipleCompanies"
+          v-if="multipleCompanies"
           v-model="selectedCompanyId"
           class="input-field py-1.5 text-sm w-full"
         >
-          <option v-for="membership in authStore.companyMemberships" :key="membership.company_id" :value="membership.company_id">
+          <option v-for="membership in companyOptions" :key="membership.company_id" :value="membership.company_id">
             {{ membership.company_name }}
           </option>
         </select>
@@ -79,6 +84,7 @@ defineProps<{ title: string }>()
 const store = useAppStore()
 const authStore = useAuthStore()
 const avatarLoadFailed = ref(false)
+const mobileMenuOpen = ref(false)
 
 const displayName = computed(() => {
   const firstName = authStore.profile?.first_name?.trim()
@@ -111,6 +117,19 @@ const avatarUrl = computed(() => {
 })
 
 const userInitial = computed(() => displayName.value.charAt(0).toUpperCase())
+const companyOptions = computed(() => {
+  const seenCompanyIds = new Set<string>()
+
+  return authStore.companyMemberships.filter((membership) => {
+    if (!membership.company_id || seenCompanyIds.has(membership.company_id)) {
+      return false
+    }
+
+    seenCompanyIds.add(membership.company_id)
+    return true
+  })
+})
+const multipleCompanies = computed(() => companyOptions.value.length > 1)
 const selectedCompanyId = computed({
   get: () => authStore.companyId || '',
   set: (companyId: string) => {

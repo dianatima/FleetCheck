@@ -44,6 +44,11 @@
         <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('duration') }}:</span> {{ inspectionContext?.duration || '—' }}</div>
         <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('photosTaken') }}:</span> {{ inspectionContext?.photosTaken ?? 0 }}</div>
       </div>
+
+      <div v-if="inspectionContext?.signatureUrl" class="mt-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800/50">
+        <p class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Inspection signature</p>
+        <img :src="inspectionContext.signatureUrl" alt="Inspection signature" class="mt-3 h-24 rounded-lg object-contain" />
+      </div>
     </div>
 
     <!-- Failed items -->
@@ -79,7 +84,7 @@
       <RouterLink to="/reports" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
         <FileText :size="16" /> {{ store.t('viewFullReport') }}
       </RouterLink>
-      <RouterLink :to="passed ? '/driver' : '/inspect/pre'" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
+      <RouterLink :to="passed ? dashboardRoute : '/inspect/pre'" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
         <RotateCcw :size="16" /> {{ passed ? store.t('backToDashboard') : store.t('fixResubmit') }}
       </RouterLink>
     </div>
@@ -90,11 +95,14 @@
 import { computed } from 'vue'
 import { ArrowLeft, CheckCircle, AlertTriangle, Wrench, Bell, FileText, RotateCcw } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
 import AppLayout from '../components/layout/AppLayout.vue'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 const passed = computed(() => store.inspectionResult !== 'fail')
 const inspectionContext = computed(() => store.inspectionContext)
+const dashboardRoute = computed(() => authStore.role === 'driver' ? '/driver' : '/dashboard')
 
 const failedItems = [
   { section: 'Tires & Wheels', item: 'Left rear tire pressure', severity: 'high', comment: 'Tire pressure at 65 PSI, minimum required 80 PSI' },

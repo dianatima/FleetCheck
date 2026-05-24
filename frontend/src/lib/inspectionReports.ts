@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { normalizeSupabaseSchemaErrorMessage } from '@/lib/supabaseErrors'
+import { isSupabaseMissingColumnError, normalizeSupabaseSchemaErrorMessage } from '@/lib/supabaseErrors'
 
 export type InspectionReportRecord = {
   id: string
@@ -86,21 +86,33 @@ export async function fetchInspectionReports(companyId: string, options: FetchIn
     }
   }
 
-  let query = supabase
-    .from('inspections')
-    .select('id, created_at, vehicle_id, driver_id, performed_by_user_id, inspection_type, result, responses')
-    .eq('company_id', companyId)
-    .order('created_at', { ascending: false })
+  const buildInspectionsQuery = (includeSignatureUrl: boolean) => {
+    let query = supabase
+      .from('inspections')
+      .select(includeSignatureUrl
+        ? 'id, created_at, vehicle_id, driver_id, performed_by_user_id, inspection_type, result, responses, signature_url'
+        : 'id, created_at, vehicle_id, driver_id, performed_by_user_id, inspection_type, result, responses')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
 
-  if (driverIdFilter) {
-    query = query.eq('driver_id', driverIdFilter)
+    if (driverIdFilter) {
+      query = query.eq('driver_id', driverIdFilter)
+    }
+
+    if (options.limit) {
+      query = query.limit(options.limit)
+    }
+
+    return query
   }
 
-  if (options.limit) {
-    query = query.limit(options.limit)
-  }
+  let { data: inspections, error: inspectionsError } = await buildInspectionsQuery(true)
 
-  const { data: inspections, error: inspectionsError } = await query
+  if (isSupabaseMissingColumnError(inspectionsError, 'inspections', 'signature_url')) {
+    const fallbackQuery = await buildInspectionsQuery(false)
+    inspections = fallbackQuery.data
+    inspectionsError = fallbackQuery.error
+  }
 
   if (inspectionsError) {
     throw new Error(normalizeSupabaseSchemaErrorMessage(inspectionsError.message) || inspectionsError.message)
@@ -161,7 +173,7 @@ export async function fetchInspectionReports(companyId: string, options: FetchIn
       result: inspection.result === 'fail' ? 'fail' : 'pass',
       issues: countIssues(inspection.responses),
       photos: countPhotos(inspection.responses),
-      signed: true,
+      signed: Boolean(inspection.signature_url),
       status: 'submitted',
       reviewStatus: countIssues(inspection.responses) > 0 ? 'needs-review' : '',
       managerNote: '',

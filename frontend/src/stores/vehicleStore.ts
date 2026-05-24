@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore'
 export const useVehicleStore = defineStore('vehicles', () => {
   const authStore = useAuthStore()
   const vehicles = ref<any[]>([])
+  const summaryVehicles = ref<any[]>([])
   const selectedVehicle = ref<any | null>(null)
 
   const loading = ref(false)
@@ -256,6 +257,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
     if (!authStore.companyId) {
       vehicles.value = []
+      summaryVehicles.value = []
       total.value = 0
       loading.value = false
       return
@@ -269,13 +271,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
       const mergedVehicles = mergeAssignmentsWithVehicles(assignments, vehicleRecords)
       const searchValue = search.value.trim().toLowerCase()
 
-      const filteredVehicles = mergedVehicles.filter((vehicle: any) => {
-        const matchesStatus = statusFilter.value === 'all' || vehicle.status === statusFilter.value
-
-        if (!matchesStatus) {
-          return false
-        }
-
+      const searchMatchedVehicles = mergedVehicles.filter((vehicle: any) => {
         if (!searchValue) {
           return true
         }
@@ -288,6 +284,12 @@ export const useVehicleStore = defineStore('vehicles', () => {
         return haystack.includes(searchValue)
       })
 
+      summaryVehicles.value = searchMatchedVehicles
+
+      const filteredVehicles = searchMatchedVehicles.filter((vehicle: any) => {
+        return statusFilter.value === 'all' || vehicle.status === statusFilter.value
+      })
+
       total.value = filteredVehicles.length
 
       const from = (page.value - 1) * pageSize.value
@@ -296,6 +298,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
     } catch (supabaseError: any) {
       error.value = supabaseError.message
       vehicles.value = []
+      summaryVehicles.value = []
       total.value = 0
     }
 
@@ -535,6 +538,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
   return {
     vehicles,
+    summaryVehicles,
     selectedVehicle,
 
     loading,

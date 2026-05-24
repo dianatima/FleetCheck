@@ -1,5 +1,5 @@
 <template>
-  <AppLayout title="Vehicle Detail">
+  <AppLayout :title="store.t('vehicleDetail')">
     <RouterLink
       to="/vehicles"
       class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 text-sm font-medium transition-colors"
@@ -8,7 +8,7 @@
     </RouterLink>
 
     <div v-if="vehicleStore.loading" class="card p-6 text-sm text-gray-500">
-      Loading vehicle...
+      {{ store.t("loadingVehicles") }}
     </div>
 
     <div v-else-if="vehicleStore.error" class="card p-6 text-sm text-red-500">
@@ -16,7 +16,7 @@
     </div>
 
     <div v-else-if="!vehicle" class="card p-6 text-sm text-gray-500">
-      Vehicle not found.
+      {{ store.t("vehicleNotFound") }}
     </div>
 
     <template v-else>
@@ -51,7 +51,7 @@
             <div>
               <h2 class="text-xl font-bold text-white">{{ vehicleName }}</h2>
               <p class="text-white/80 text-sm">
-                Unit {{ vehicle.unit }} · {{ vehicle.year }}
+                {{ store.t("vehicleNumber") }} {{ vehicle.unit }} · {{ vehicle.year }}
               </p>
             </div>
 
@@ -160,7 +160,7 @@
               </div>
 
               <span v-if="h.issues > 0" class="badge-red">
-                {{ h.issues }} issues
+                {{ h.issues }} {{ store.t("issues") }}
               </span>
 
               <span :class="h.status === 'pass' ? 'badge-green' : 'badge-red'">
@@ -208,7 +208,7 @@
                     : 'badge-gray'
                 "
               >
-                {{ r.priority }}
+                {{ getPriorityLabel(r.priority) }}
               </span>
 
               <span class="badge-green">{{ store.t("statusCompleted") }}</span>
@@ -246,9 +246,9 @@
 
             <form @submit.prevent="saveEdit" class="p-6 space-y-5">
               <div class="rounded-xl bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">
-                <p class="font-medium">Only business-specific vehicle fields can be edited.</p>
+                <p class="font-medium">{{ store.t("businessFieldsEditableOnly") }}</p>
                 <p class="mt-1 text-xs text-amber-600 dark:text-amber-300">
-                  You can change the internal unit number, license plate, status, and photo. VIN, make, model, type, year, odometer, and engine hours stay locked to preserve one shared vehicle history across businesses.
+                  {{ store.t("businessFieldsEditableHint") }}
                 </p>
               </div>
 
@@ -320,8 +320,8 @@
                     <span class="text-red-500">*</span>
                   </label>
                   <select v-model="editForm.type" class="input-field" required disabled>
-                    <option v-for="t in vehicleTypes" :key="t" :value="t">
-                      {{ t }}
+                    <option v-for="t in vehicleTypes" :key="t.value" :value="t.value">
+                      {{ t.label }}
                     </option>
                   </select>
                 </div>
@@ -470,7 +470,7 @@ import AppLayout from "../components/layout/AppLayout.vue";
 import { useAppStore } from "../stores/app";
 import { useVehicleStore } from "@/stores/vehicleStore";
 import { uploadVehiclePhoto } from "@/api/storage";
-import { vehicleTypeOptions } from "@/lib/vehicleCatalog";
+import { getVehicleTypeLabel, vehicleTypeOptions } from "@/lib/vehicleCatalog";
 
 type VehicleStatus = "active" | "needs-attention" | "blocked" | "in-repair";
 
@@ -495,6 +495,13 @@ const store = useAppStore();
 const route = useRoute();
 const vehicleStore = useVehicleStore();
 
+const localeMap: Record<string, string> = {
+  en: "en-US",
+  uk: "uk-UA",
+  es: "es-ES",
+  fr: "fr-FR",
+};
+
 const vehicleId = computed(() => route.params.id as string);
 const vehicle = computed<Vehicle | null>(
   () => vehicleStore.selectedVehicle as Vehicle | null
@@ -505,7 +512,12 @@ onMounted(() => {
   vehicleStore.fetchVehicleById(vehicleId.value);
 });
 
-const vehicleTypes = vehicleTypeOptions;
+const vehicleTypes = computed(() =>
+  vehicleTypeOptions.map((type) => ({
+    value: type,
+    label: getVehicleTypeLabel(type, store.language),
+  }))
+);
 
 const vehicleStatuses = computed(() => [
   { value: "active", label: store.t("statusActive") },
@@ -563,65 +575,72 @@ const details = computed(() => {
       label: store.t("engineHours"),
       value:
         vehicle.value.engine_hours != null
-          ? `${Number(vehicle.value.engine_hours).toLocaleString()} hrs`
+          ? `${Number(vehicle.value.engine_hours).toLocaleString()} h`
           : "—",
     },
     {
       icon: Hash,
       label: store.t("type"),
-      value: vehicle.value.type || "—",
+      value: getVehicleTypeLabel(vehicle.value.type, store.language) || "—",
     },
   ];
 });
 
-const inspHistory = [
+function formatMockDate(month: number, day: number) {
+  return new Intl.DateTimeFormat(localeMap[store.language] || "en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(2026, month - 1, day));
+}
+
+const inspHistory = computed(() => [
   {
-    date: "Today 7:24 AM",
-    type: "Pre-Trip",
+    date: `${store.t("today")} 7:24 AM`,
+    type: store.t("preTrip"),
     driver: "John Smith",
     status: "pass",
     issues: 0,
   },
   {
-    date: "Yesterday 6:15 PM",
-    type: "Post-Trip",
+    date: `${store.t("yesterday")} 6:15 PM`,
+    type: store.t("postTrip"),
     driver: "John Smith",
     status: "pass",
     issues: 0,
   },
   {
-    date: "May 11, 7:02 AM",
-    type: "Pre-Trip",
+    date: `${formatMockDate(5, 11)}, 7:02 AM`,
+    type: store.t("preTrip"),
     driver: "John Smith",
     status: "fail",
     issues: 2,
   },
   {
-    date: "May 10, 6:45 PM",
-    type: "Post-Trip",
+    date: `${formatMockDate(5, 10)}, 6:45 PM`,
+    type: store.t("postTrip"),
     driver: "John Smith",
     status: "pass",
     issues: 0,
   },
-];
+]);
 
-const repairHistory = [
+const repairHistory = computed(() => [
   {
-    date: "May 8",
-    issue: "Left rear tire pressure",
+    date: formatMockDate(5, 8),
+    issue: store.t("leftRearTirePressure"),
     priority: "medium",
   },
   {
-    date: "Apr 28",
-    issue: "Windshield wiper replacement",
+    date: formatMockDate(4, 28),
+    issue: store.t("windshieldWiperReplacement"),
     priority: "low",
   },
   {
-    date: "Apr 10",
-    issue: "Brake pad inspection",
+    date: formatMockDate(4, 10),
+    issue: store.t("brakePadInspection"),
     priority: "high",
   },
-];
+]);
 
 const showEditModal = ref(false);
 const editFileInput = ref<HTMLInputElement | null>(null);
@@ -641,6 +660,22 @@ const editForm = ref({
   status: "active" as VehicleStatus,
   photo_url: "",
 });
+
+function getPriorityLabel(priority: string) {
+  if (priority === "high") {
+    return store.t("priorityHigh");
+  }
+
+  if (priority === "medium") {
+    return store.t("priorityMedium");
+  }
+
+  if (priority === "low") {
+    return store.t("priorityLow");
+  }
+
+  return priority;
+}
 
 function openEdit() {
   if (!vehicle.value) return;
@@ -696,7 +731,7 @@ async function saveEdit() {
     try {
       photoUrl = await uploadVehiclePhoto(selectedPhotoFile.value);
     } catch (uploadError: any) {
-      saveNotice.value = uploadError?.message || "Vehicle photo could not be uploaded. The vehicle was saved without a photo.";
+      saveNotice.value = uploadError?.message || store.t("vehiclePhotoUploadFailedNotice");
       photoUrl = editForm.value.photo_url || null;
     }
   }

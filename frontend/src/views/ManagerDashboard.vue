@@ -1,5 +1,9 @@
 <template>
-  <AppLayout title="Dashboard">
+  <AppLayout :title="store.t('dashboard')">
+    <div v-if="dashboardError" class="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
+      {{ dashboardError }}
+    </div>
+
     <!-- Stats grid -->
     <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
       <div v-for="s in statsCards" :key="s.label" class="stat-card" :class="s.alert ? 'ring-1 ring-red-200 dark:ring-red-800' : ''">
@@ -20,10 +24,10 @@
         <div class="flex items-center justify-between mb-4">
           <div>
             <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('inspectionsThisWeek') }}</h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Total: 638 inspections</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ currentWeekTotal }} {{ store.t('inspections') }}</p>
           </div>
-          <div class="flex items-center gap-1 text-green-500 text-xs font-medium">
-            <TrendingUp :size="14" /> +12%
+          <div class="flex items-center gap-1 text-xs font-medium" :class="weekTrendClass">
+            <TrendingUp :size="14" /> {{ weekTrendLabel }}
           </div>
         </div>
         <div class="flex items-end gap-2 h-28">
@@ -42,7 +46,10 @@
       <!-- Issue categories -->
       <div class="card p-5">
         <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4">{{ store.t('issuesByCategory') }}</h3>
-        <div class="space-y-3">
+        <div v-if="issueCategories.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
+          {{ store.t('noIssuesFound') }}
+        </div>
+        <div v-else class="space-y-3">
           <div v-for="c in issueCategories" :key="c.label">
             <div class="flex justify-between text-xs mb-1">
               <span class="text-gray-600 dark:text-gray-400 font-medium">{{ c.label }}</span>
@@ -70,36 +77,42 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in pendingInspections" :key="r.unit" class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+            <tr v-if="dashboardLoading">
+              <td :colspan="pendingHeaders.length" class="px-5 py-8 text-center text-sm text-gray-400">{{ store.t('loadingDashboard') }}</td>
+            </tr>
+            <tr v-else-if="pendingInspections.length === 0">
+              <td :colspan="pendingHeaders.length" class="px-5 py-8 text-center text-sm text-gray-400">{{ store.t('noReportsFound') }}</td>
+            </tr>
+            <tr v-for="r in pendingInspections" :key="r.id" class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
               <td class="px-5 py-3">
                 <div class="flex items-center gap-2">
                   <div class="w-7 h-7 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
                     <Truck :size="13" class="text-gray-400" />
                   </div>
-                  <span class="text-sm font-medium text-gray-900 dark:text-white">{{ r.unit }}</span>
+                  <span class="text-sm font-medium text-gray-900 dark:text-white">{{ r.vehicle }}</span>
                 </div>
               </td>
               <td class="px-5 py-3 text-sm text-gray-600 dark:text-gray-400">{{ r.driver }}</td>
               <td class="px-5 py-3 text-sm text-gray-600 dark:text-gray-400">{{ r.type }}</td>
-              <td class="px-5 py-3"><span :class="r.status === 'pass' ? 'badge-green' : 'badge-red'">{{ r.status === 'pass' ? store.t('statusPassed') : store.t('statusFailed') }}</span></td>
-              <td class="px-5 py-3 text-sm text-gray-400">{{ r.time }}</td>
+              <td class="px-5 py-3"><span :class="r.result === 'pass' ? 'badge-green' : 'badge-red'">{{ r.result === 'pass' ? store.t('statusPassed') : store.t('statusFailed') }}</span></td>
+              <td class="px-5 py-3 text-sm text-gray-400">{{ r.date }}</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Repair status -->
+    <!-- Fleet status -->
     <div class="card p-5">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('repairStatus') }}</h3>
-        <RouterLink to="/repairs" class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5">{{ store.t('viewAll') }} <ChevronRight :size="12" /></RouterLink>
+        <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('status') }}</h3>
+        <RouterLink to="/vehicles" class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5">{{ store.t('viewAll') }} <ChevronRight :size="12" /></RouterLink>
       </div>
       <div class="flex gap-2 mb-4 h-4 rounded-full overflow-hidden">
-        <div v-for="r in repairStatus" :key="r.label" class="h-full" :class="r.color" :style="{ width: `${r.pct}%` }" />
+        <div v-for="r in fleetStatus" :key="r.label" class="h-full" :class="r.color" :style="{ width: `${r.pct}%` }" />
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div v-for="r in repairStatus" :key="r.label" class="flex items-center gap-2">
+        <div v-for="r in fleetStatus" :key="r.label" class="flex items-center gap-2">
           <div class="w-2.5 h-2.5 rounded-full" :class="r.color" />
           <span class="text-xs text-gray-600 dark:text-gray-400">{{ r.label }}</span>
           <span class="ml-auto text-xs font-semibold text-gray-900 dark:text-white">{{ r.count }}</span>
@@ -110,49 +123,112 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAppStore } from '../stores/app'
 import { Truck, ClipboardCheck, Users, Clock, AlertTriangle, Wrench, XCircle, TrendingUp, ChevronRight } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
+import { useAuthStore } from '@/stores/authStore'
+import { fetchManagerDashboardData, type ManagerDashboardData } from '@/lib/managerDashboard'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 
-const weekData = [72, 89, 64, 98, 76, 112, 127]
-const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const maxWeek = computed(() => Math.max(...weekData))
+const localeMap: Record<string, string> = {
+  en: 'en-US',
+  uk: 'uk-UA',
+  es: 'es-ES',
+  fr: 'fr-FR',
+}
+
+const dashboardData = ref<ManagerDashboardData | null>(null)
+const dashboardLoading = ref(false)
+const dashboardError = ref('')
+
+const weekData = computed(() => dashboardData.value?.weekBuckets.map((bucket) => bucket.count) || [0, 0, 0, 0, 0, 0, 0])
+const weekDays = computed(() => dashboardData.value?.weekBuckets.map((bucket) => bucket.label) || ['-', '-', '-', '-', '-', '-', '-'])
+const maxWeek = computed(() => Math.max(1, ...weekData.value))
+const currentWeekTotal = computed(() => dashboardData.value?.currentWeekTotal || 0)
+const weekTrendLabel = computed(() => {
+  const trendPercent = dashboardData.value?.weekTrendPercent || 0
+
+  if (trendPercent > 0) {
+    return `+${trendPercent}%`
+  }
+
+  if (trendPercent < 0) {
+    return `${trendPercent}%`
+  }
+
+  return '0%'
+})
+const weekTrendClass = computed(() => {
+  const direction = dashboardData.value?.weekTrendDirection || 'flat'
+
+  if (direction === 'up') {
+    return 'text-green-500'
+  }
+
+  if (direction === 'down') {
+    return 'text-red-500'
+  }
+
+  return 'text-gray-400'
+})
 
 const statsCards = computed(() => [
-  { label: store.t('vehicles'), value: '48', icon: Truck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false },
-  { label: store.t('drivers'), value: '36', icon: Users, iconColor: 'text-green-600 dark:text-green-400', iconBg: 'bg-green-100 dark:bg-green-900/40', alert: false },
-  { label: store.t('statusPending'), value: '4', icon: Clock, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: true },
-  { label: store.t('inspections'), value: '127', icon: ClipboardCheck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false },
-  { label: store.t('statusFailed'), value: '8', icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: true },
-  { label: store.t('repairs'), value: '12', icon: Wrench, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: true },
-  { label: store.t('outOfService'), value: '3', icon: XCircle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: true },
+  { label: store.t('vehicles'), value: dashboardData.value?.vehicleCount ?? 0, icon: Truck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false },
+  { label: store.t('drivers'), value: dashboardData.value?.driverCount ?? 0, icon: Users, iconColor: 'text-green-600 dark:text-green-400', iconBg: 'bg-green-100 dark:bg-green-900/40', alert: false },
+  { label: store.t('statusNeedsReview'), value: dashboardData.value?.needsReviewCount ?? 0, icon: Clock, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: (dashboardData.value?.needsReviewCount ?? 0) > 0 },
+  { label: store.t('inspections'), value: dashboardData.value?.inspectionCount ?? 0, icon: ClipboardCheck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false },
+  { label: store.t('statusFailed'), value: dashboardData.value?.failedInspectionCount ?? 0, icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: (dashboardData.value?.failedInspectionCount ?? 0) > 0 },
+  { label: store.t('statusInRepair'), value: dashboardData.value?.inRepairVehicleCount ?? 0, icon: Wrench, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: (dashboardData.value?.inRepairVehicleCount ?? 0) > 0 },
+  { label: store.t('outOfService'), value: dashboardData.value?.blockedVehicleCount ?? 0, icon: XCircle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: (dashboardData.value?.blockedVehicleCount ?? 0) > 0 },
 ])
 
-const issueCategories = computed(() => [
-  { label: store.t('tires'), count: 18, pct: 72, color: 'bg-orange-400' },
-  { label: store.t('lights'), count: 12, pct: 48, color: 'bg-yellow-400' },
-  { label: store.t('brakes'), count: 9, pct: 36, color: 'bg-red-400' },
-  { label: store.t('fluidLevels'), count: 7, pct: 28, color: 'bg-blue-400' },
-  { label: store.t('exterior'), count: 4, pct: 16, color: 'bg-gray-400' },
-])
+const issueCategories = computed(() => dashboardData.value?.issueCategories || [])
+const fleetStatus = computed(() => {
+  const items = dashboardData.value?.fleetStatus || []
 
-const repairStatus = computed(() => [
-  { label: store.t('statusOpen'), count: 12, color: 'bg-red-500', pct: 40 },
-  { label: store.t('statusInProgress'), count: 7, color: 'bg-orange-500', pct: 23 },
-  { label: store.t('statusPending'), count: 5, color: 'bg-yellow-500', pct: 17 },
-  { label: store.t('statusCompleted'), count: 6, color: 'bg-green-500', pct: 20 },
-])
+  return items.map((item) => ({
+    ...item,
+    label: item.label === 'active'
+      ? store.t('statusActive')
+      : item.label === 'needs-attention'
+        ? store.t('statusNeedsAttention')
+        : item.label === 'blocked'
+          ? store.t('statusBlocked')
+          : store.t('statusInRepair'),
+  }))
+})
 
 const pendingHeaders = computed(() => [store.t('vehicle'), store.t('driver'), store.t('type'), store.t('status'), store.t('time')])
+const pendingInspections = computed(() => dashboardData.value?.pendingInspections || [])
 
-const pendingInspections = [
-  { unit: 'Unit #0781', driver: 'Maria Garcia', type: 'Pre-Trip', status: 'fail', time: '7:18 AM' },
-  { unit: 'Unit #1099', driver: 'Mike Brown', type: 'Post-Trip', status: 'fail', time: '6:31 AM' },
-  { unit: 'Unit #1042', driver: 'James Smith', type: 'Pre-Trip', status: 'pass', time: '7:24 AM' },
-  { unit: 'Unit #3305', driver: 'Sarah Johnson', type: 'Pre-Trip', status: 'pass', time: '6:42 AM' },
-  { unit: 'Unit #2210', driver: 'David Lee', type: 'Post-Trip', status: 'pass', time: '6:55 AM' },
-]
+async function loadDashboard(companyId = authStore.companyId, language = store.language) {
+  dashboardError.value = ''
+
+  if (!companyId) {
+    dashboardData.value = null
+    return
+  }
+
+  dashboardLoading.value = true
+
+  try {
+    dashboardData.value = await fetchManagerDashboardData(companyId, localeMap[language] || 'en-US')
+  } catch (loadError: any) {
+    dashboardError.value = loadError?.message || store.t('unableToLoadDashboard')
+    dashboardData.value = null
+  } finally {
+    dashboardLoading.value = false
+  }
+}
+
+watch(
+  [() => authStore.companyId, () => store.language],
+  ([companyId, language]) => {
+    void loadDashboard(companyId, language)
+  },
+  { immediate: true },
+)
 </script>

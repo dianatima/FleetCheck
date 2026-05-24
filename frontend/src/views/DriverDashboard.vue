@@ -1,5 +1,5 @@
 <template>
-  <AppLayout title="Dashboard">
+  <AppLayout :title="store.t('driverDashboard')">
     <!-- Stats grid -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
       <div v-for="s in statsCards" :key="s.label" class="stat-card" :class="s.alert ? 'ring-1 ring-red-200 dark:ring-red-800' : ''">
@@ -13,32 +13,19 @@
       </div>
     </div>
 
-    <!-- Inspection actions -->
+    <!-- Vehicle workflow -->
     <div class="card p-5 mb-6">
       <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4">{{ store.t('startInspection') }}</h3>
-      <div class="grid sm:grid-cols-2 gap-3">
-        <RouterLink to="/inspect/pre" class="flex items-center gap-4 p-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl shadow-sm shadow-blue-500/20 transition-all">
-          <div class="w-11 h-11 bg-blue-500 rounded-xl flex items-center justify-center flex-shrink-0">
-            <ClipboardCheck :size="22" />
-          </div>
-          <div class="text-left flex-1">
-            <p class="font-semibold">{{ store.t('preTripInspection') }}</p>
-            <p class="text-blue-200 text-xs">{{ store.t('completedBeforeDeparting') }}</p>
-          </div>
-          <ChevronRight :size="18" class="text-blue-300" />
-        </RouterLink>
-
-        <RouterLink to="/inspect/post" class="flex items-center gap-4 p-4 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded-xl shadow-sm shadow-green-500/20 transition-all">
-          <div class="w-11 h-11 bg-green-500 rounded-xl flex items-center justify-center flex-shrink-0">
-            <ClipboardCheck :size="22" />
-          </div>
-          <div class="text-left flex-1">
-            <p class="font-semibold">{{ store.t('postTripInspection') }}</p>
-            <p class="text-green-200 text-xs">{{ store.t('completedAfterArriving') }}</p>
-          </div>
-          <ChevronRight :size="18" class="text-green-300" />
-        </RouterLink>
-      </div>
+      <RouterLink to="/operations/start" class="flex items-center gap-4 rounded-2xl bg-blue-600 p-5 text-white shadow-sm shadow-blue-500/20 transition-all hover:bg-blue-700 active:bg-blue-800">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500 flex-shrink-0">
+          <ClipboardCheck :size="24" />
+        </div>
+        <div class="flex-1 text-left">
+          <p class="font-semibold">{{ store.t('chooseVehicleAndAction') }}</p>
+          <p class="text-xs text-blue-100">{{ store.t('chooseVehicleAndActionHint') }}</p>
+        </div>
+        <ChevronRight :size="18" class="text-blue-200" />
+      </RouterLink>
     </div>
 
     <!-- Available vehicles table -->
@@ -57,7 +44,7 @@
           </thead>
           <tbody>
             <tr v-if="vehiclesLoading">
-              <td :colspan="vehicleHeaders.length" class="px-4 py-8 text-center text-sm text-gray-400">Loading vehicles...</td>
+              <td :colspan="vehicleHeaders.length" class="px-4 py-8 text-center text-sm text-gray-400">{{ store.t('loadingVehicles') }}</td>
             </tr>
             <tr v-else-if="vehiclesError">
               <td :colspan="vehicleHeaders.length" class="px-4 py-8 text-center text-sm text-red-500">{{ vehiclesError }}</td>
@@ -67,7 +54,7 @@
             </tr>
             <tr v-for="v in visibleVehicles" :key="v.id"
               class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 cursor-pointer" @click="openVehicle(v.id)">
                 <div class="flex items-center gap-3">
                   <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0">
                     <img v-if="v.photo_url" :src="v.photo_url" alt="" class="w-full h-full object-cover" />
@@ -75,11 +62,11 @@
                   <span class="text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">{{ getVehicleName(v) }}</span>
                 </div>
               </td>
-              <td class="px-4 py-3 text-sm font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">#{{ v.unit }}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ v.plate }}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ v.type }}</td>
-              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ formatOdometer(v) }}</td>
-              <td class="px-4 py-3"><span :class="vehicleStatusConfig[v.status]?.badge || 'badge-gray'">{{ vehicleStatusConfig[v.status]?.label || v.status }}</span></td>
+              <td class="px-4 py-3 text-sm font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap cursor-pointer" @click="openVehicle(v.id)">#{{ v.unit }}</td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap cursor-pointer" @click="openVehicle(v.id)">{{ v.plate }}</td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" @click="openVehicle(v.id)">{{ getVehicleTypeLabel(v.type, store.language) }}</td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap cursor-pointer" @click="openVehicle(v.id)">{{ formatOdometer(v) }}</td>
+              <td class="px-4 py-3 cursor-pointer" @click="openVehicle(v.id)"><span :class="vehicleStatusConfig[v.status]?.badge || 'badge-gray'">{{ vehicleStatusConfig[v.status]?.label || v.status }}</span></td>
             </tr>
           </tbody>
         </table>
@@ -102,7 +89,7 @@
           </thead>
           <tbody>
             <tr v-if="reportsLoading">
-              <td :colspan="reportsHeaders.length" class="px-5 py-8 text-center text-sm text-gray-400">Loading reports...</td>
+              <td :colspan="reportsHeaders.length" class="px-5 py-8 text-center text-sm text-gray-400">{{ store.t('loadingReports') }}</td>
             </tr>
             <tr v-else-if="reportsError">
               <td :colspan="reportsHeaders.length" class="px-5 py-8 text-center text-sm text-red-500">{{ reportsError }}</td>
@@ -141,15 +128,18 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ClipboardCheck, AlertTriangle, ChevronRight, Gauge, Truck } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchCompanyVehicles, type CompanyVehicle } from '@/lib/companyVehicles'
 import { fetchInspectionReports, type InspectionReportRecord } from '@/lib/inspectionReports'
+import { getVehicleTypeLabel } from '@/lib/vehicleCatalog'
 
 const store = useAppStore()
 const authStore = useAuthStore()
+const router = useRouter()
 
 const statsCards = computed(() => [
   { label: store.t('tripsThisMonth'),   value: '18',  icon: Truck,          iconColor: 'text-blue-600 dark:text-blue-400',   iconBg: 'bg-blue-100 dark:bg-blue-900/40',   alert: false },
@@ -186,6 +176,10 @@ function formatOdometer(vehicle: CompanyVehicle) {
   return vehicle.odometer != null ? `${Number(vehicle.odometer).toLocaleString()} mi` : '—'
 }
 
+function openVehicle(vehicleId: string) {
+  void router.push(`/vehicles/${vehicleId}`)
+}
+
 async function loadAvailableVehicles() {
   vehiclesError.value = ''
 
@@ -201,7 +195,7 @@ async function loadAvailableVehicles() {
       assignedToAuthUserId: authStore.user?.id || null,
     })
   } catch (loadError: any) {
-    vehiclesError.value = loadError?.message || 'Unable to load vehicles.'
+    vehiclesError.value = loadError?.message || store.t('unableToLoadVehicles')
     availableVehicles.value = []
   } finally {
     vehiclesLoading.value = false
@@ -224,7 +218,7 @@ async function loadRecentInspections() {
       limit: 5,
     })
   } catch (loadError: any) {
-    reportsError.value = loadError?.message || 'Unable to load reports.'
+    reportsError.value = loadError?.message || store.t('unableToLoadReports')
     recentInspections.value = []
   } finally {
     reportsLoading.value = false
