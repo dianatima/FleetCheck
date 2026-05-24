@@ -38,9 +38,16 @@ feature/driver-onboarding-multibusiness
 - Pre-trip and post-trip inspection flow
 - Persisted inspection records in Supabase
 - Odometer and engine hours validation during inspection
+- Manager dashboard connected to live Supabase-derived statistics
 - Driver dashboard connected to live Supabase data
+- Clickable dashboard cards with route-based filters
 - Driver vehicles page connected to live Supabase data
 - Driver reports page connected to live Supabase data
+- Manager reports page connected to live Supabase data
+- Driver and manager report detail pages connected to live Supabase data
+- Persisted inspection review status and manager notes via `inspection_reviews`
+- Issue list connected to real inspection history
+- Issue detail page connected to real inspection history
 - Supabase schema support for multi-company flow
 - Storage buckets and policies for driver documents and vehicle photos
 - Basic PWA/mobile-first structure
@@ -50,9 +57,7 @@ feature/driver-onboarding-multibusiness
 - Full PDF report generation
 - CSV export
 - Email report sending
-- Advanced manager dashboard analytics
 - Repair workflow from failed inspection items
-- Issue tracking connected fully to inspection history
 - More complete backend API layer
 - Production-ready RLS policy review
 
@@ -366,11 +371,13 @@ Driver pages now use live Supabase data instead of static demo data.
 Implemented driver visibility features:
 
 - `/driver/vehicles` shows real fleet for the active business.
-- Driver dashboard shows available vehicles from Supabase.
+- Driver dashboard statistic cards are calculated from live business data.
+- Driver dashboard cards open filtered destination pages.
 - Driver dashboard recent reports are loaded from inspections.
+- Driver dashboard open issue count is derived from failed inspection responses.
 - `/driver/reports` reads real inspection records.
 - Driver sees the correct template during inspection.
-- Driver only sees vehicles and reports scoped to the active business.
+- Driver only sees vehicles, reports, and issues scoped to the active business.
 
 ---
 
@@ -383,6 +390,8 @@ Current report features:
 - Inspection result page
 - Driver reports page
 - Manager reports page
+- Dedicated report detail routes for driver and manager users
+- Route-query filtering from dashboard cards
 - Performer attribution
 - Vehicle information
 - Inspection status
@@ -390,14 +399,13 @@ Current report features:
 - Checklist responses
 - Notes and failed items
 - Report history from Supabase
+- Persisted review status and manager notes for privileged company roles
 
 Planned report features:
 
 - PDF generation
 - CSV export
 - Email sending
-- Report approval flow
-- Report flagging
 - Fraud warning labels
 - Duplicate photo warning labels
 
@@ -457,12 +465,20 @@ Additional planned validation:
 
 ## Repairs and Issues
 
-FleetCheck includes the foundation for issue and repair workflows.
+FleetCheck already derives live issues from failed inspection checklist responses.
+
+Current issue workflow features:
+
+- `/issues` shows business-scoped issues derived from inspection history
+- `/issues/:id` shows real issue details, checklist item, notes, and photos
+- Issue severity and status are derived from inspection data and vehicle state
+- Driver users only see their own business-scoped issue records
+- Manager dashboard can open issue and fleet/report lists through clickable cards
 
 Planned repair flow:
 
 1. Driver fails one or more inspection checklist items.
-2. System creates an issue or repair request.
+2. System derives an issue from the failed response and opens the repair flow.
 3. Owner/admin reviews the issue.
 4. Vehicle can be marked as `Needs Repair` or `Out of Service`.
 5. Mechanic receives or views the repair request.
@@ -576,6 +592,7 @@ FleetCheck/
 │
 ├── docs/
 │   ├── api.md
+│   ├── inspection-reviews.sql
 │   └── multi-company-schema.sql
 │
 ├── frontend/
@@ -741,13 +758,14 @@ Real credentials must stay local.
 
 ## Supabase Setup
 
-After updating the driver onboarding and multi-company flow, run the SQL script:
+After updating the driver onboarding, multi-company flow, and persisted report reviews, run the SQL scripts:
 
 ```bash
 docs/multi-company-schema.sql
+docs/inspection-reviews.sql
 ```
 
-This script creates or updates:
+These scripts create or update:
 
 - `companies`
 - `company_memberships`
@@ -765,6 +783,7 @@ This script creates or updates:
 - `inspections.vehicle_engine_hours`
 - `inspections.distance_unit`
 - `inspections.dimension_unit`
+- `inspection_reviews`
 - `inspection_templates.distance_unit`
 - `inspection_templates.dimension_unit`
 - storage bucket `driver-documents`
@@ -773,6 +792,7 @@ This script creates or updates:
 - storage policies for vehicle photos
 - RLS policies for business-scoped inspection templates
 - RLS policies for shared vehicle assignments
+- RLS policies for persisted inspection reviews
 
 If SQL is not executed, possible errors include:
 
@@ -783,6 +803,7 @@ If SQL is not executed, possible errors include:
 - broken driver registration flow
 - broken vehicle assignment flow
 - broken inspection template loading
+- report review persistence not enabled in Supabase yet
 
 ---
 
@@ -993,8 +1014,10 @@ The current MVP already includes the core structure for:
 - Shared fleet management
 - Inspection templates
 - Supabase-based inspection records
+- Live driver and manager dashboards
 - Driver fleet visibility
-- Driver reports
+- Driver and manager reports
+- Inspection-derived issue tracking
 - Vehicle telemetry validation
 
-The next major development step is to complete inspection photo handling, duplicate photo detection, PDF reports, and repair workflows.
+The next major development step is to complete richer repair actions, inspection photo handling, duplicate photo detection, and export/report delivery flows.

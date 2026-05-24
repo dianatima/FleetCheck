@@ -2,7 +2,14 @@
   <AppLayout :title="store.t('driverDashboard')">
     <!-- Stats grid -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-      <div v-for="s in statsCards" :key="s.label" class="stat-card" :class="s.alert ? 'ring-1 ring-red-200 dark:ring-red-800' : ''">
+      <button
+        v-for="s in statsCards"
+        :key="s.label"
+        type="button"
+        class="stat-card text-left transition-all hover:ring-2 hover:ring-blue-500 hover:ring-offset-2 dark:hover:ring-offset-gray-950"
+        :class="s.alert ? 'ring-1 ring-red-200 dark:ring-red-800' : ''"
+        @click="openStatCard(s.to)"
+      >
         <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" :class="s.iconBg">
           <component :is="s.icon" :size="20" :class="s.iconColor" />
         </div>
@@ -10,7 +17,7 @@
           <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ s.value }}</p>
           <p class="text-xs text-gray-500 dark:text-gray-400 leading-tight">{{ s.label }}</p>
         </div>
-      </div>
+      </button>
     </div>
 
     <!-- Vehicle workflow -->
@@ -127,26 +134,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { ClipboardCheck, AlertTriangle, ChevronRight, Gauge, Truck } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import { useRouter, type RouteLocationRaw } from 'vue-router'
+import { ClipboardCheck, AlertTriangle, ChevronRight, Truck, CheckCircle } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchCompanyVehicles, type CompanyVehicle } from '@/lib/companyVehicles'
 import { fetchInspectionReports, type InspectionReportRecord } from '@/lib/inspectionReports'
 import { getVehicleTypeLabel } from '@/lib/vehicleCatalog'
+import { fetchInspectionIssues, type InspectionIssueRecord } from '@/lib/inspectionIssues'
 
 const store = useAppStore()
 const authStore = useAuthStore()
 const router = useRouter()
 
-const statsCards = computed(() => [
-  { label: store.t('tripsThisMonth'),   value: '18',  icon: Truck,          iconColor: 'text-blue-600 dark:text-blue-400',   iconBg: 'bg-blue-100 dark:bg-blue-900/40',   alert: false },
-  { label: store.t('inspectionsPassed'), value: '34',  icon: ClipboardCheck, iconColor: 'text-green-600 dark:text-green-400', iconBg: 'bg-green-100 dark:bg-green-900/40', alert: false },
-  { label: store.t('openIssues'),        value: '1',   icon: AlertTriangle,  iconColor: 'text-red-600 dark:text-red-400',     iconBg: 'bg-red-100 dark:bg-red-900/40',     alert: true  },
-  { label: store.t('fuelEfficiency'),    value: '7.2 mpg', icon: Gauge,      iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: false },
-])
+const localeMap: Record<string, string> = {
+  en: 'en-US',
+  uk: 'uk-UA',
+  es: 'es-ES',
+  fr: 'fr-FR',
+}
 
 const vehicleHeaders = computed(() => [store.t('vehicle'), store.t('unit'), store.t('plate'), store.t('type'), store.t('odometer'), store.t('status')])
 
@@ -155,11 +163,21 @@ const reportsHeaders = computed(() => [store.t('vehicle'), store.t('type'), stor
 const availableVehicles = ref<CompanyVehicle[]>([])
 const vehiclesLoading = ref(false)
 const vehiclesError = ref('')
-const recentInspections = ref<InspectionReportRecord[]>([])
+const inspectionReports = ref<InspectionReportRecord[]>([])
+const issueRecords = ref<InspectionIssueRecord[]>([])
 const reportsLoading = ref(false)
 const reportsError = ref('')
 
+const recentInspections = computed(() => inspectionReports.value.slice(0, 5))
 const visibleVehicles = computed(() => availableVehicles.value.slice(0, 3))
+const passedInspectionCount = computed(() => inspectionReports.value.filter((inspection) => inspection.result === 'pass').length)
+const activeIssueCount = computed(() => issueRecords.value.filter((issue) => issue.status !== 'fixed' && issue.status !== 'rejected').length)
+const statsCards = computed(() => [
+  { label: store.t('availableVehicles'), value: availableVehicles.value.length, icon: Truck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false, to: '/driver/vehicles' as RouteLocationRaw },
+  { label: store.t('inspections'), value: inspectionReports.value.length, icon: ClipboardCheck, iconColor: 'text-green-600 dark:text-green-400', iconBg: 'bg-green-100 dark:bg-green-900/40', alert: false, to: '/driver/reports' as RouteLocationRaw },
+  { label: store.t('statusPassed'), value: passedInspectionCount.value, icon: CheckCircle, iconColor: 'text-green-600 dark:text-green-400', iconBg: 'bg-green-100 dark:bg-green-900/40', alert: false, to: { path: '/driver/reports', query: { result: 'pass' } } as RouteLocationRaw },
+  { label: store.t('openIssues'), value: activeIssueCount.value, icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: activeIssueCount.value > 0, to: '/issues' as RouteLocationRaw },
+])
 
 const vehicleStatusConfig = computed<Record<string, { label: string; badge: string }>>(() => ({
   active: { label: store.t('statusActive'), badge: 'badge-green' },
@@ -178,6 +196,10 @@ function formatOdometer(vehicle: CompanyVehicle) {
 
 function openVehicle(vehicleId: string) {
   void router.push(`/vehicles/${vehicleId}`)
+}
+
+function openStatCard(target: RouteLocationRaw) {
+  void router.push(target)
 }
 
 async function loadAvailableVehicles() {
@@ -202,32 +224,51 @@ async function loadAvailableVehicles() {
   }
 }
 
-async function loadRecentInspections() {
+async function loadInspectionReports() {
   reportsError.value = ''
 
   if (!authStore.companyId) {
-    recentInspections.value = []
+    inspectionReports.value = []
     return
   }
 
   reportsLoading.value = true
 
   try {
-    recentInspections.value = await fetchInspectionReports(authStore.companyId, {
+    inspectionReports.value = await fetchInspectionReports(authStore.companyId, {
       driverAuthUserId: authStore.user?.id || null,
-      limit: 5,
     })
   } catch (loadError: any) {
     reportsError.value = loadError?.message || store.t('unableToLoadReports')
-    recentInspections.value = []
+    inspectionReports.value = []
   } finally {
     reportsLoading.value = false
   }
 }
 
-onMounted(loadAvailableVehicles)
-onMounted(loadRecentInspections)
+async function loadIssues(companyId = authStore.companyId, language = store.language) {
+  if (!companyId) {
+    issueRecords.value = []
+    return
+  }
 
-watch(() => authStore.companyId, loadAvailableVehicles)
-watch(() => authStore.companyId, loadRecentInspections)
+  try {
+    issueRecords.value = await fetchInspectionIssues(companyId, {
+      driverAuthUserId: authStore.user?.id || null,
+      locale: localeMap[language] || 'en-US',
+    })
+  } catch {
+    issueRecords.value = []
+  }
+}
+
+watch(
+  [() => authStore.companyId, () => store.language],
+  ([companyId, language]) => {
+    void loadAvailableVehicles()
+    void loadInspectionReports()
+    void loadIssues(companyId, language)
+  },
+  { immediate: true },
+)
 </script>

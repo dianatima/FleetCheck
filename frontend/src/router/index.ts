@@ -16,6 +16,7 @@ const router = createRouter({
     { path: '/driver/profile', name: 'driver-profile', component: () => import('../views/DriverProfile.vue'), meta: { requiresAuth: true } },
     { path: '/driver/vehicles', name: 'driver-vehicles', component: () => import('../views/DriverVehicles.vue'), meta: { requiresAuth: true } },
     { path: '/driver/reports', name: 'driver-reports', component: () => import('../views/DriverReports.vue'), meta: { requiresAuth: true } },
+    { path: '/driver/reports/:id', name: 'driver-report-detail', component: () => import('../views/ReportDetail.vue'), meta: { requiresAuth: true } },
     { path: '/drivers', name: 'drivers', component: () => import('../views/DriversPage.vue'), meta: { requiresAuth: true } },
     { path: '/drivers/:id', name: 'driver-detail', component: () => import('../views/DriverDetail.vue'), meta: { requiresAuth: true } },
     { path: '/vehicles', name: 'vehicles', component: () => import('../views/VehicleList.vue'), meta: { requiresAuth: true } },
@@ -26,6 +27,7 @@ const router = createRouter({
     { path: '/inspect/result', name: 'inspection-result', component: () => import('../views/InspectionResult.vue'), meta: { requiresAuth: true } },
     { path: '/repairs', name: 'repairs', component: () => import('../views/RepairRequest.vue'), meta: { requiresAuth: true } },
     { path: '/reports', name: 'reports', component: () => import('../views/Reports.vue'), meta: { requiresAuth: true } },
+    { path: '/reports/:id', name: 'report-detail', component: () => import('../views/ReportDetail.vue'), meta: { requiresAuth: true } },
     { path: '/issues', name: 'issues', component: () => import('../views/IssuesList.vue'), meta: { requiresAuth: true } },
     { path: '/issues/:id', name: 'issue-detail', component: () => import('../views/IssueDetail.vue'), meta: { requiresAuth: true } },
     { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue'), meta: { requiresAuth: true } },
@@ -50,6 +52,40 @@ router.beforeEach(async (to) => {
   if (authStore.profile?.role === 'driver' && authStore.profile?.status === 'pending' && to.path !== '/pending') {
     return {
       path: '/pending',
+    }
+  }
+
+  const activeRole = authStore.currentCompany?.role || authStore.profile?.role || null
+
+  if (activeRole === 'driver') {
+    if (to.name === 'reports') {
+      return {
+        name: 'driver-reports',
+        query: to.query,
+      }
+    }
+
+    if (to.name === 'report-detail') {
+      return {
+        name: 'driver-report-detail',
+        params: to.params,
+        query: to.query,
+      }
+    }
+  } else {
+    if (to.name === 'driver-reports') {
+      return {
+        name: 'reports',
+        query: to.query,
+      }
+    }
+
+    if (to.name === 'driver-report-detail') {
+      return {
+        name: 'report-detail',
+        params: to.params,
+        query: to.query,
+      }
     }
   }
 

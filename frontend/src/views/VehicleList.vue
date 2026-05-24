@@ -458,8 +458,8 @@
                     <option value="" disabled>
                       {{ store.t("selectType") }}
                     </option>
-                    <option v-for="t in vehicleTypes" :key="t" :value="t">
-                      {{ t }}
+                    <option v-for="t in vehicleTypes" :key="t.value" :value="t.value">
+                      {{ t.label }}
                     </option>
                   </select>
                 </div>
@@ -672,7 +672,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   Search,
   Filter,
@@ -728,6 +728,7 @@ type ExistingFleetVehicle = {
 
 const store = useAppStore();
 const vehicleStore = useVehicleStore();
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const showModal = ref(false);
@@ -761,6 +762,20 @@ watch(localSearch, (value) => {
 onMounted(() => {
   vehicleStore.fetchVehicles();
 });
+
+watch(
+  () => route.query.status,
+  (status) => {
+    const nextStatus = typeof status === 'string' && ['active', 'needs-attention', 'blocked', 'in-repair'].includes(status)
+      ? status
+      : 'all';
+
+    if (vehicleStore.statusFilter !== nextStatus) {
+      void vehicleStore.setStatusFilter(nextStatus);
+    }
+  },
+  { immediate: true },
+);
 
 const vehicles = computed<Vehicle[]>(() => Array.isArray(vehicleStore.vehicles) ? vehicleStore.vehicles as Vehicle[] : []);
 const summaryVehicles = computed<Vehicle[]>(() => Array.isArray(vehicleStore.summaryVehicles) ? vehicleStore.summaryVehicles as Vehicle[] : []);

@@ -84,7 +84,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Search, Filter } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
@@ -94,6 +94,7 @@ import { getVehicleTypeLabel } from '@/lib/vehicleCatalog'
 
 const store = useAppStore()
 const authStore = useAuthStore()
+const route = useRoute()
 const router = useRouter()
 
 const search = ref('')
@@ -128,6 +129,10 @@ function openVehicle(vehicleId: string) {
   void router.push(`/vehicles/${vehicleId}`)
 }
 
+function normalizeVehicleStatus(value: unknown) {
+  return typeof value === 'string' && ['active', 'needs-attention', 'blocked', 'in-repair'].includes(value) ? value : 'all'
+}
+
 async function loadVehicles() {
   error.value = ''
 
@@ -153,6 +158,13 @@ async function loadVehicles() {
 onMounted(loadVehicles)
 
 watch(() => authStore.companyId, loadVehicles)
+watch(
+  () => route.query.status,
+  (status) => {
+    filterStatus.value = normalizeVehicleStatus(status)
+  },
+  { immediate: true },
+)
 
 const filtered = computed(() => vehicles.value.filter((vehicle) => {
   const q = search.value.toLowerCase()

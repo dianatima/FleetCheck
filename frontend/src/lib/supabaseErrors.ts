@@ -20,6 +20,13 @@ export function normalizeSupabaseSchemaErrorMessage(message?: string | null) {
   }
 
   if (
+    normalizedMessage.includes('inspection_reviews')
+    && (normalizedMessage.includes('schema cache') || normalizedMessage.includes('does not exist') || normalizedMessage.includes('could not find the table'))
+  ) {
+    return 'Inspection review persistence is not enabled in Supabase yet. Run docs/inspection-reviews.sql, then reload the app.'
+  }
+
+  if (
     normalizedMessage.includes('inspections')
     && normalizedMessage.includes('responses')
     && (normalizedMessage.includes('column') || normalizedMessage.includes('schema cache'))

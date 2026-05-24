@@ -39,7 +39,7 @@
           </thead>
           <tbody>
             <tr v-if="reportsLoading">
-              <td :colspan="reportHeaders.length" class="px-4 py-12 text-center text-sm text-gray-400">Loading reports...</td>
+              <td :colspan="reportHeaders.length" class="px-4 py-12 text-center text-sm text-gray-400">{{ store.t('loadingReports') }}</td>
             </tr>
             <tr v-else-if="reportsError">
               <td :colspan="reportHeaders.length" class="px-4 py-12 text-center text-sm text-red-500">{{ reportsError }}</td>
@@ -47,7 +47,17 @@
             <tr v-else-if="filtered.length === 0">
               <td :colspan="reportHeaders.length" class="px-4 py-12 text-center text-sm text-gray-400">{{ store.t('noReportsFound') }}</td>
             </tr>
-            <tr v-for="r in filtered" :key="r.id" class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors" :class="r.reviewStatus === 'needs-review' ? 'bg-yellow-50/40 dark:bg-yellow-900/5' : ''">
+            <tr
+              v-for="r in filtered"
+              :key="r.id"
+              tabindex="0"
+              role="button"
+              class="border-b border-gray-50 transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none dark:border-gray-700/50 dark:hover:bg-gray-700/30 dark:focus:bg-gray-700/30 cursor-pointer"
+              :class="r.reviewStatus === 'needs-review' ? 'bg-yellow-50/40 dark:bg-yellow-900/5' : ''"
+              @click="openReport(r.id)"
+              @keydown.enter="openReport(r.id)"
+              @keydown.space.prevent="openReport(r.id)"
+            >
               <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ r.date }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
@@ -83,11 +93,11 @@
               </td>
               <td class="px-4 py-3">
                 <div class="flex gap-1">
-                  <button v-if="r.reviewStatus === 'needs-review'" @click="openReview(r)" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-medium hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors whitespace-nowrap">
-                    <ClipboardCheck :size="12" /> Review
+                  <button v-if="canReviewReports && r.reviewStatus === 'needs-review'" @click.stop="openReview(r)" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-medium hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors whitespace-nowrap">
+                    <ClipboardCheck :size="12" /> {{ store.t('review') }}
                   </button>
-                  <button @click="openReview(r)" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"><FileText :size="13" /></button>
-                  <button class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"><Download :size="13" /></button>
+                  <button :title="store.t('viewReport')" @click.stop="openReport(r.id)" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"><FileText :size="13" /></button>
+                  <button :title="store.t('downloadPdf')" @click.stop class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"><Download :size="13" /></button>
                 </div>
               </td>
             </tr>
@@ -130,12 +140,13 @@
               </div>
               <div>
                 <label class="label">{{ store.t('managersNote') }}</label>
-                <textarea v-model="reviewNote" class="input-field resize-none" rows="3" placeholder="Add a note about this inspection..." />
+                <textarea v-model="reviewNote" class="input-field resize-none" rows="3" :placeholder="store.t('inspectionReviewNotePlaceholder')" />
               </div>
+              <p v-if="reviewSaveError" class="text-sm text-red-500">{{ reviewSaveError }}</p>
             </div>
             <div class="flex gap-3 px-6 pb-6">
-              <button @click="reviewTarget = null" class="btn-secondary flex-1">{{ store.t('cancel') }}</button>
-              <button @click="submitReview" :disabled="!reviewDecision" class="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed">{{ store.t('saveReview') }}</button>
+              <button @click="closeReviewModal" class="btn-secondary flex-1">{{ store.t('cancel') }}</button>
+              <button @click="submitReview" :disabled="!reviewDecision || reviewSaving" class="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed">{{ store.t('saveReview') }}</button>
             </div>
           </div>
         </div>
@@ -146,20 +157,32 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Filter, Download, Mail, Truck, CheckCircle, XCircle, Camera, FileText, ClipboardCheck, AlertTriangle, X } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchInspectionReports, type InspectionReportRecord } from '@/lib/inspectionReports'
+import { fetchInspectionReports, saveInspectionReportReview, type InspectionReportRecord } from '@/lib/inspectionReports'
+import { getSupabaseErrorMessage } from '@/lib/supabaseErrors'
 
 const store = useAppStore()
 const authStore = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 
 const filterType = ref('all')
 const filterResult = ref('all')
 const reports = ref<InspectionReportRecord[]>([])
 const reportsLoading = ref(false)
 const reportsError = ref('')
+
+function normalizeReportQuery(value: unknown) {
+  return typeof value === 'string' && ['all', 'Pre-Trip', 'Post-Trip'].includes(value) ? value : 'all'
+}
+
+function normalizeResultQuery(value: unknown) {
+  return typeof value === 'string' && ['all', 'pass', 'fail', 'needs-review'].includes(value) ? value : 'all'
+}
 
 async function loadReports() {
   reportsError.value = ''
@@ -174,7 +197,7 @@ async function loadReports() {
   try {
     reports.value = await fetchInspectionReports(authStore.companyId)
   } catch (loadError: any) {
-    reportsError.value = loadError?.message || 'Unable to load reports.'
+    reportsError.value = loadError?.message || store.t('unableToLoadReports')
     reports.value = []
   } finally {
     reportsLoading.value = false
@@ -183,6 +206,14 @@ async function loadReports() {
 
 onMounted(loadReports)
 watch(() => authStore.companyId, loadReports)
+watch(
+  () => route.query,
+  (query) => {
+    filterType.value = normalizeReportQuery(query.type)
+    filterResult.value = normalizeResultQuery(query.result)
+  },
+  { immediate: true },
+)
 
 const passCount = computed(() => reports.value.filter((report) => report.result === 'pass').length)
 const failCount = computed(() => reports.value.filter((report) => report.result === 'fail').length)
@@ -193,7 +224,7 @@ const summaryStats = computed(() => [
   { label: store.t('statusPassed'), value: passCount.value, color: 'text-green-600 dark:text-green-400' },
   { label: store.t('statusFailed'), value: failCount.value, color: 'text-red-600 dark:text-red-400' },
   { label: store.t('statusNeedsReview'), value: reviewCount.value, color: 'text-yellow-600 dark:text-yellow-400' },
-  { label: 'Pass Rate', value: reports.value.length ? `${Math.round((passCount.value / reports.value.length) * 100)}%` : '0%', color: 'text-blue-600 dark:text-blue-400' },
+  { label: store.t('passRate'), value: reports.value.length ? `${Math.round((passCount.value / reports.value.length) * 100)}%` : '0%', color: 'text-blue-600 dark:text-blue-400' },
 ])
 
 const reportHeaders = computed(() => [store.t('date'), store.t('vehicle'), store.t('driver'), store.t('reportedBy'), store.t('type'), store.t('result'), store.t('reviewStatus'), store.t('issues'), store.t('photos'), store.t('actions')])
@@ -207,31 +238,70 @@ const filtered = computed(() => reports.value.filter((report) => {
   return matchType && matchResult
 }))
 
+const canReviewReports = computed(() => {
+  const activeRole = authStore.currentCompany?.role || authStore.profile?.role || null
+
+  return ['owner', 'manager', 'inspector', 'admin', 'accountant'].includes(activeRole || '')
+})
+
 const reviewTarget = ref<InspectionReportRecord | null>(null)
 const reviewDecision = ref('')
 const reviewNote = ref('')
+const reviewSaveError = ref('')
+const reviewSaving = ref(false)
+
+function openReport(reportId: string) {
+  void router.push({
+    name: 'report-detail',
+    params: { id: reportId },
+  })
+}
 
 function openReview(report: InspectionReportRecord) {
+  reviewSaveError.value = ''
   reviewTarget.value = report
   reviewDecision.value = report.reviewStatus !== 'needs-review' ? report.reviewStatus : ''
   reviewNote.value = report.managerNote
 }
 
-function submitReview() {
-  if (!reviewTarget.value || !reviewDecision.value) {
-    return
-  }
-
-  const index = reports.value.findIndex((report) => report.id === reviewTarget.value?.id)
-
-  if (index !== -1) {
-    reports.value[index].reviewStatus = reviewDecision.value as InspectionReportRecord['reviewStatus']
-    reports.value[index].managerNote = reviewNote.value
-  }
-
+function closeReviewModal() {
   reviewTarget.value = null
   reviewDecision.value = ''
   reviewNote.value = ''
+  reviewSaveError.value = ''
+  reviewSaving.value = false
+}
+
+async function submitReview() {
+  if (!reviewTarget.value || !reviewDecision.value || !authStore.companyId || !authStore.user?.id) {
+    return
+  }
+
+  reviewSaveError.value = ''
+  reviewSaving.value = true
+
+  try {
+    const savedReview = await saveInspectionReportReview({
+      companyId: authStore.companyId,
+      inspectionId: reviewTarget.value.id,
+      reviewedByUserId: authStore.user.id,
+      reviewStatus: reviewDecision.value as Exclude<InspectionReportRecord['reviewStatus'], ''>,
+      managerNote: reviewNote.value,
+    })
+
+    const index = reports.value.findIndex((report) => report.id === savedReview.inspectionId)
+
+    if (index !== -1) {
+      reports.value[index].reviewStatus = savedReview.reviewStatus
+      reports.value[index].managerNote = savedReview.managerNote
+    }
+
+    closeReviewModal()
+  } catch (error) {
+    reviewSaveError.value = getSupabaseErrorMessage(error, 'Unable to save review.')
+  } finally {
+    reviewSaving.value = false
+  }
 }
 </script>
 

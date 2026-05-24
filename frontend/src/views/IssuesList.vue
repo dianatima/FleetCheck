@@ -2,10 +2,17 @@
   <AppLayout :title="store.t('issues')">
     <!-- Summary cards -->
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
-      <div v-for="s in summaryStats" :key="s.label" class="card p-4 text-center">
+      <button
+        v-for="s in summaryStats"
+        :key="s.label"
+        type="button"
+        class="card p-4 text-center transition-all hover:ring-2 hover:ring-blue-500 hover:ring-offset-2 dark:hover:ring-offset-gray-950"
+        :class="isSummaryActive(s) ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-950' : ''"
+        @click="applySummaryFilter(s)"
+      >
         <div class="text-2xl font-bold" :class="s.color">{{ s.count }}</div>
         <div class="text-xs text-gray-500 dark:text-gray-400">{{ s.label }}</div>
-      </div>
+      </button>
     </div>
 
     <!-- Toolbar -->
@@ -40,6 +47,15 @@
 
     <!-- Table -->
     <div class="card overflow-hidden">
+      <div v-if="issuesLoading" class="px-4 py-12 text-center text-sm text-gray-400">
+        {{ store.t('loadingIssues') }}
+      </div>
+
+      <div v-else-if="issuesError" class="px-4 py-12 text-center text-sm text-red-500">
+        {{ issuesError }}
+      </div>
+
+      <template v-else>
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
@@ -77,23 +93,37 @@
       <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
         <span class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('showing') }} {{ filtered.length }} {{ store.t('of') }} {{ issues.length }}</span>
       </div>
+      </template>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Search, Filter, Wrench } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
+import { fetchInspectionIssues, type InspectionIssueRecord } from '@/lib/inspectionIssues'
 
+const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
+const authStore = useAuthStore()
 const search = ref('')
 const filterStatus = ref('all')
 const filterSeverity = ref('all')
 const filterFraud = ref('all')
+const issuesLoading = ref(false)
+const issuesError = ref('')
+
+const localeMap: Record<string, string> = {
+  en: 'en-US',
+  uk: 'uk-UA',
+  es: 'es-ES',
+  fr: 'fr-FR',
+}
 
 const severityBadge: Record<string, string> = {
   high:   'badge-red',
@@ -107,112 +137,81 @@ const statusBadge: Record<string, string> = {
   fixed:          'badge-green',
   rejected:       'badge-gray',
 }
-const statusLabel = computed((): Record<string, string> => ({
+const statusLabel = computed<Record<string, string>>(() => ({
   open:           store.t('statusOpen'),
   'under-review': store.t('statusUnderReview'),
   'in-repair':    store.t('statusInRepair'),
   fixed:          store.t('statusFixed'),
   rejected:       store.t('statusRejected'),
 }))
-
-const severityLabel = computed((): Record<string, string> => ({
+const severityLabel = computed<Record<string, string>>(() => ({
   high:   store.t('priorityHigh'),
   medium: store.t('priorityMedium'),
   low:    store.t('priorityLow'),
 }))
+const issues = ref<InspectionIssueRecord[]>([])
 
-export interface Issue {
-  id: number
-  issueId: string
-  vehicle: string
-  vehicleStatus: string
-  driver: string
-  inspectionType: string
-  inspectionDate: string
-  title: string
-  description: string
-  checklistItem: string
-  severity: string
-  status: string
-  fraudFlag: boolean
-  managerNotes: string
-  createdAt: string
-  photos: string[]
+type SummaryFilterCard = {
+  label: string
+  count: number
+  color: string
+  mode: 'status' | 'fraud'
+  value: string
 }
 
-const issues = ref<Issue[]>([
-  {
-    id: 1, issueId: 'ISS-001', vehicle: 'Peterbilt 579 #0781', vehicleStatus: 'needs-attention',
-    driver: 'Maria Garcia', inspectionType: 'Pre-Trip', inspectionDate: 'May 12, 7:18 AM',
-    title: 'Left turn signal not working', description: 'Turn signal activates but does not flash. Likely a faulty relay or bulb.',
-    checklistItem: 'Lights & Signals', severity: 'high', status: 'open', fraudFlag: false,
-    managerNotes: '', createdAt: 'May 12, 7:18 AM',
-    photos: ['https://images.pexels.com/photos/6873111/pexels-photo-6873111.jpeg?w=300'],
-  },
-  {
-    id: 2, issueId: 'ISS-002', vehicle: 'Kenworth T680 #1042', vehicleStatus: 'active',
-    driver: 'John Smith', inspectionType: 'Pre-Trip', inspectionDate: 'May 11, 7:02 AM',
-    title: 'Brake fluid level low', description: 'Brake fluid reservoir is below minimum. Requires immediate top-up and inspection for leaks.',
-    checklistItem: 'Brakes', severity: 'high', status: 'under-review', fraudFlag: false,
-    managerNotes: 'Scheduled for shop visit today.', createdAt: 'May 11, 7:02 AM',
-    photos: [],
-  },
-  {
-    id: 3, issueId: 'ISS-003', vehicle: 'Volvo VNL 860 #0521', vehicleStatus: 'blocked',
-    driver: 'James Carter', inspectionType: 'Pre-Trip', inspectionDate: 'May 10, 8:00 AM',
-    title: 'Oil pressure warning light on', description: 'Dashboard oil pressure warning illuminated during startup. Engine sounds normal but oil level is low.',
-    checklistItem: 'Engine & Fluids', severity: 'high', status: 'in-repair', fraudFlag: false,
-    managerNotes: 'Vehicle blocked. Tom Blake working on it.', createdAt: 'May 10, 8:00 AM',
-    photos: ['https://images.pexels.com/photos/9463534/pexels-photo-9463534.jpeg?w=300'],
-  },
-  {
-    id: 4, issueId: 'ISS-004', vehicle: 'Volvo VNL 860 #0521', vehicleStatus: 'blocked',
-    driver: 'James Carter', inspectionType: 'Pre-Trip', inspectionDate: 'May 10, 8:00 AM',
-    title: 'Windshield crack (driver side)', description: 'Crack approximately 30cm on driver-side windshield, impairing visibility.',
-    checklistItem: 'Windshield & Wipers', severity: 'high', status: 'in-repair', fraudFlag: false,
-    managerNotes: '', createdAt: 'May 10, 8:05 AM',
-    photos: [],
-  },
-  {
-    id: 5, issueId: 'ISS-005', vehicle: 'Volvo VNL 860 #0521', vehicleStatus: 'blocked',
-    driver: 'James Carter', inspectionType: 'Pre-Trip', inspectionDate: 'May 10, 8:00 AM',
-    title: 'Trailer coupling misalignment', description: 'Coupling pin does not seat properly. Suspicious given report was filed 2 hours after departure.',
-    checklistItem: 'Coupling & Trailer', severity: 'high', status: 'under-review', fraudFlag: true,
-    managerNotes: 'Possible false report. Reviewing security footage.', createdAt: 'May 10, 10:15 AM',
-    photos: [],
-  },
-  {
-    id: 6, issueId: 'ISS-006', vehicle: 'Kenworth T680 #1042', vehicleStatus: 'active',
-    driver: 'John Smith', inspectionType: 'Post-Trip', inspectionDate: 'May 13, 6:15 PM',
-    title: 'Minor scratch on rear bumper', description: 'Small surface scratch on rear bumper, paint not broken.',
-    checklistItem: 'Exterior', severity: 'low', status: 'rejected', fraudFlag: false,
-    managerNotes: 'Pre-existing cosmetic damage. Not actionable.', createdAt: 'May 13, 6:15 PM',
-    photos: [],
-  },
-  {
-    id: 7, issueId: 'ISS-007', vehicle: 'Ford F-350 #3305', vehicleStatus: 'active',
-    driver: 'Sarah Johnson', inspectionType: 'Pre-Trip', inspectionDate: 'May 11, 7:10 AM',
-    title: 'Brake pads worn below minimum', description: 'Front axle brake pads at 10% remaining, immediate replacement required.',
-    checklistItem: 'Brakes', severity: 'high', status: 'in-repair', fraudFlag: false,
-    managerNotes: 'Parts ordered, repair scheduled for May 15.', createdAt: 'May 11, 7:10 AM',
-    photos: ['https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg?w=300'],
-  },
-  {
-    id: 8, issueId: 'ISS-008', vehicle: 'Freightliner Cascadia #2210', vehicleStatus: 'active',
-    driver: 'David Lee', inspectionType: 'Pre-Trip', inspectionDate: 'May 13, 7:02 AM',
-    title: 'DEF fluid low warning', description: 'Diesel Exhaust Fluid below 10%. Vehicle will derate if not refilled.',
-    checklistItem: 'Engine & Fluids', severity: 'medium', status: 'fixed', fraudFlag: false,
-    managerNotes: 'Refilled at depot before departure.', createdAt: 'May 13, 7:02 AM',
-    photos: [],
-  },
-])
+function normalizeFilter(value: unknown, allowedValues: string[]) {
+  return typeof value === 'string' && allowedValues.includes(value) ? value : 'all'
+}
 
-const summaryStats = computed(() => [
-  { label: store.t('statusOpen'),        count: issues.value.filter(i => i.status === 'open').length,         color: 'text-red-600 dark:text-red-400' },
-  { label: store.t('statusUnderReview'), count: issues.value.filter(i => i.status === 'under-review').length, color: 'text-yellow-600 dark:text-yellow-400' },
-  { label: store.t('statusInRepair'),    count: issues.value.filter(i => i.status === 'in-repair').length,    color: 'text-orange-600 dark:text-orange-400' },
-  { label: store.t('statusFixed'),       count: issues.value.filter(i => i.status === 'fixed').length,        color: 'text-green-600 dark:text-green-400' },
-  { label: store.t('fraudFlagged'),      count: issues.value.filter(i => i.fraudFlag).length,                 color: 'text-red-600 dark:text-red-400' },
+function syncFiltersFromRoute() {
+  search.value = typeof route.query.search === 'string' ? route.query.search : ''
+  filterStatus.value = normalizeFilter(route.query.status, ['all', 'open', 'under-review', 'in-repair', 'fixed', 'rejected'])
+  filterSeverity.value = normalizeFilter(route.query.severity, ['all', 'high', 'medium', 'low'])
+  filterFraud.value = normalizeFilter(route.query.fraud, ['all', 'flagged', 'clean'])
+}
+
+async function loadIssues(companyId = authStore.companyId, language = store.language) {
+  issuesError.value = ''
+
+  if (!companyId) {
+    issues.value = []
+    return
+  }
+
+  issuesLoading.value = true
+
+  try {
+    issues.value = await fetchInspectionIssues(companyId, {
+      driverAuthUserId: authStore.role === 'driver' ? authStore.user?.id || null : null,
+      locale: localeMap[language] || 'en-US',
+    })
+  } catch (loadError: any) {
+    issuesError.value = loadError?.message || store.t('unableToLoadIssues')
+    issues.value = []
+  } finally {
+    issuesLoading.value = false
+  }
+}
+
+function applySummaryFilter(card: SummaryFilterCard) {
+  if (card.mode === 'fraud') {
+    filterFraud.value = filterFraud.value === card.value ? 'all' : card.value
+    return
+  }
+
+  filterStatus.value = filterStatus.value === card.value ? 'all' : card.value
+}
+
+function isSummaryActive(card: SummaryFilterCard) {
+  return card.mode === 'fraud' ? filterFraud.value === card.value : filterStatus.value === card.value
+}
+
+const summaryStats = computed<SummaryFilterCard[]>(() => [
+  { label: store.t('statusOpen'),        count: issues.value.filter(i => i.status === 'open').length,         color: 'text-red-600 dark:text-red-400', mode: 'status', value: 'open' },
+  { label: store.t('statusUnderReview'), count: issues.value.filter(i => i.status === 'under-review').length, color: 'text-yellow-600 dark:text-yellow-400', mode: 'status', value: 'under-review' },
+  { label: store.t('statusInRepair'),    count: issues.value.filter(i => i.status === 'in-repair').length,    color: 'text-orange-600 dark:text-orange-400', mode: 'status', value: 'in-repair' },
+  { label: store.t('statusFixed'),       count: issues.value.filter(i => i.status === 'fixed').length,        color: 'text-green-600 dark:text-green-400', mode: 'status', value: 'fixed' },
+  { label: store.t('fraudFlagged'),      count: issues.value.filter(i => i.fraudFlag).length,                 color: 'text-red-600 dark:text-red-400', mode: 'fraud', value: 'flagged' },
 ])
 
 const issueHeaders = computed(() => [store.t('issue'), store.t('vehicle'), store.t('driver'), store.t('severity'), store.t('status')])
@@ -225,6 +224,15 @@ const filtered = computed(() => issues.value.filter(i => {
   const matchFraud    = filterFraud.value    === 'all' || (filterFraud.value === 'flagged' ? i.fraudFlag : !i.fraudFlag)
   return matchSearch && matchStatus && matchSeverity && matchFraud
 }))
+
+watch(() => route.query, syncFiltersFromRoute, { immediate: true })
+watch(
+  [() => authStore.companyId, () => store.language],
+  ([companyId, language]) => {
+    void loadIssues(companyId, language)
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

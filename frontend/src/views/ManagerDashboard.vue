@@ -6,7 +6,14 @@
 
     <!-- Stats grid -->
     <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
-      <div v-for="s in statsCards" :key="s.label" class="stat-card" :class="s.alert ? 'ring-1 ring-red-200 dark:ring-red-800' : ''">
+      <button
+        v-for="s in statsCards"
+        :key="s.label"
+        type="button"
+        class="stat-card text-left transition-all hover:ring-2 hover:ring-blue-500 hover:ring-offset-2 dark:hover:ring-offset-gray-950"
+        :class="s.alert ? 'ring-1 ring-red-200 dark:ring-red-800' : ''"
+        @click="openStatCard(s.to)"
+      >
         <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" :class="s.iconBg">
           <component :is="s.icon" :size="20" :class="s.iconColor" />
         </div>
@@ -14,7 +21,7 @@
           <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ s.value }}</p>
           <p class="text-xs text-gray-500 dark:text-gray-400 leading-tight">{{ s.label }}</p>
         </div>
-      </div>
+      </button>
     </div>
 
     <!-- Charts row -->
@@ -45,7 +52,10 @@
 
       <!-- Issue categories -->
       <div class="card p-5">
-        <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4">{{ store.t('issuesByCategory') }}</h3>
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('issuesByCategory') }}</h3>
+          <RouterLink to="/issues" class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5">{{ store.t('viewAll') }} <ChevronRight :size="12" /></RouterLink>
+        </div>
         <div v-if="issueCategories.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
           {{ store.t('noIssuesFound') }}
         </div>
@@ -112,11 +122,17 @@
         <div v-for="r in fleetStatus" :key="r.label" class="h-full" :class="r.color" :style="{ width: `${r.pct}%` }" />
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div v-for="r in fleetStatus" :key="r.label" class="flex items-center gap-2">
+        <button
+          v-for="r in fleetStatus"
+          :key="r.key"
+          type="button"
+          class="flex items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/80"
+          @click="openFleetStatus(r.key)"
+        >
           <div class="w-2.5 h-2.5 rounded-full" :class="r.color" />
           <span class="text-xs text-gray-600 dark:text-gray-400">{{ r.label }}</span>
           <span class="ml-auto text-xs font-semibold text-gray-900 dark:text-white">{{ r.count }}</span>
-        </div>
+        </button>
       </div>
     </div>
   </AppLayout>
@@ -124,6 +140,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter, type RouteLocationRaw } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { Truck, ClipboardCheck, Users, Clock, AlertTriangle, Wrench, XCircle, TrendingUp, ChevronRight } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
@@ -132,6 +149,7 @@ import { fetchManagerDashboardData, type ManagerDashboardData } from '@/lib/mana
 
 const store = useAppStore()
 const authStore = useAuthStore()
+const router = useRouter()
 
 const localeMap: Record<string, string> = {
   en: 'en-US',
@@ -176,13 +194,13 @@ const weekTrendClass = computed(() => {
 })
 
 const statsCards = computed(() => [
-  { label: store.t('vehicles'), value: dashboardData.value?.vehicleCount ?? 0, icon: Truck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false },
-  { label: store.t('drivers'), value: dashboardData.value?.driverCount ?? 0, icon: Users, iconColor: 'text-green-600 dark:text-green-400', iconBg: 'bg-green-100 dark:bg-green-900/40', alert: false },
-  { label: store.t('statusNeedsReview'), value: dashboardData.value?.needsReviewCount ?? 0, icon: Clock, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: (dashboardData.value?.needsReviewCount ?? 0) > 0 },
-  { label: store.t('inspections'), value: dashboardData.value?.inspectionCount ?? 0, icon: ClipboardCheck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false },
-  { label: store.t('statusFailed'), value: dashboardData.value?.failedInspectionCount ?? 0, icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: (dashboardData.value?.failedInspectionCount ?? 0) > 0 },
-  { label: store.t('statusInRepair'), value: dashboardData.value?.inRepairVehicleCount ?? 0, icon: Wrench, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: (dashboardData.value?.inRepairVehicleCount ?? 0) > 0 },
-  { label: store.t('outOfService'), value: dashboardData.value?.blockedVehicleCount ?? 0, icon: XCircle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: (dashboardData.value?.blockedVehicleCount ?? 0) > 0 },
+  { label: store.t('vehicles'), value: dashboardData.value?.vehicleCount ?? 0, icon: Truck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false, to: '/vehicles' as RouteLocationRaw },
+  { label: store.t('drivers'), value: dashboardData.value?.driverCount ?? 0, icon: Users, iconColor: 'text-green-600 dark:text-green-400', iconBg: 'bg-green-100 dark:bg-green-900/40', alert: false, to: '/drivers' as RouteLocationRaw },
+  { label: store.t('statusNeedsReview'), value: dashboardData.value?.needsReviewCount ?? 0, icon: Clock, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: (dashboardData.value?.needsReviewCount ?? 0) > 0, to: { path: '/reports', query: { result: 'needs-review' } } as RouteLocationRaw },
+  { label: store.t('inspections'), value: dashboardData.value?.inspectionCount ?? 0, icon: ClipboardCheck, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/40', alert: false, to: '/reports' as RouteLocationRaw },
+  { label: store.t('statusFailed'), value: dashboardData.value?.failedInspectionCount ?? 0, icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: (dashboardData.value?.failedInspectionCount ?? 0) > 0, to: { path: '/reports', query: { result: 'fail' } } as RouteLocationRaw },
+  { label: store.t('statusInRepair'), value: dashboardData.value?.inRepairVehicleCount ?? 0, icon: Wrench, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-100 dark:bg-orange-900/40', alert: (dashboardData.value?.inRepairVehicleCount ?? 0) > 0, to: { path: '/vehicles', query: { status: 'in-repair' } } as RouteLocationRaw },
+  { label: store.t('outOfService'), value: dashboardData.value?.blockedVehicleCount ?? 0, icon: XCircle, iconColor: 'text-red-600 dark:text-red-400', iconBg: 'bg-red-100 dark:bg-red-900/40', alert: (dashboardData.value?.blockedVehicleCount ?? 0) > 0, to: { path: '/vehicles', query: { status: 'blocked' } } as RouteLocationRaw },
 ])
 
 const issueCategories = computed(() => dashboardData.value?.issueCategories || [])
@@ -191,6 +209,7 @@ const fleetStatus = computed(() => {
 
   return items.map((item) => ({
     ...item,
+    key: item.label,
     label: item.label === 'active'
       ? store.t('statusActive')
       : item.label === 'needs-attention'
@@ -203,6 +222,14 @@ const fleetStatus = computed(() => {
 
 const pendingHeaders = computed(() => [store.t('vehicle'), store.t('driver'), store.t('type'), store.t('status'), store.t('time')])
 const pendingInspections = computed(() => dashboardData.value?.pendingInspections || [])
+
+function openStatCard(target: RouteLocationRaw) {
+  void router.push(target)
+}
+
+function openFleetStatus(status: string) {
+  void router.push({ path: '/vehicles', query: { status } })
+}
 
 async function loadDashboard(companyId = authStore.companyId, language = store.language) {
   dashboardError.value = ''

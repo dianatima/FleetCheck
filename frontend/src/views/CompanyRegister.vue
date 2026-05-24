@@ -287,7 +287,7 @@
             to="/dashboard"
             class="btn-primary px-8 py-3 text-base gap-2 inline-flex"
           >
-            Go to Dashboard <ArrowRight :size="18" />
+            {{ store.t('goToDashboard') }} <ArrowRight :size="18" />
           </RouterLink>
         </div>
       </div>
