@@ -1,6 +1,5 @@
 <template>
   <AppLayout :title="store.t('repairRequests')">
-    <!-- Summary cards -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
       <div v-for="s in summaryStats" :key="s.label" class="card p-4 text-center">
         <div class="text-2xl font-bold" :class="s.color">{{ s.count }}</div>
@@ -8,8 +7,7 @@
       </div>
     </div>
 
-    <!-- Toolbar -->
-    <div class="flex flex-wrap items-center gap-3 mb-5">
+    <div v-if="!selectedRepair" class="flex flex-wrap items-center gap-3 mb-5">
       <div class="relative flex-1 min-w-48">
         <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input v-model="search" class="input-field pl-9 py-2 text-sm" :placeholder="store.t('searchRepairs')" />
@@ -18,401 +16,701 @@
         <Filter :size="14" class="text-gray-400 flex-shrink-0" />
         <select v-model="filterStatus" class="input-field py-2 text-sm w-auto">
           <option value="all">{{ store.t('allStatus') }}</option>
-          <option value="open">{{ store.t('statusOpen') }}</option>
-          <option value="in-progress">{{ store.t('statusInProgress') }}</option>
-          <option value="completed">{{ store.t('statusCompleted') }}</option>
-          <option value="cancelled">{{ store.t('statusCancelled') }}</option>
-        </select>
-        <select v-model="filterPriority" class="input-field py-2 text-sm w-auto">
-          <option value="all">{{ store.t('allPriority') }}</option>
-          <option value="high">{{ store.t('priorityHigh') }}</option>
-          <option value="medium">{{ store.t('priorityMedium') }}</option>
-          <option value="low">{{ store.t('priorityLow') }}</option>
+          <option value="open">{{ repairStatusLabel('open') }}</option>
+          <option value="in-progress">{{ repairStatusLabel('in-progress') }}</option>
+          <option value="completed">{{ repairStatusLabel('completed') }}</option>
+          <option value="cancelled">{{ repairStatusLabel('cancelled') }}</option>
         </select>
       </div>
-      <button @click="openAdd" class="btn-primary gap-2 text-sm"><Plus :size="16" /> {{ store.t('newRequest') }}</button>
+      <button @click="fetchRepairData" class="btn-secondary gap-2 text-sm">
+        <RefreshCw :size="15" /> Refresh
+      </button>
     </div>
 
-    <!-- Table (list) or Detail -->
-    <div v-if="!selectedRepair">
-      <div class="card overflow-hidden">
+    <div v-if="success" class="card p-4 mb-5 bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30">
+      <div class="flex items-center gap-2 text-green-700 dark:text-green-400">
+        <CheckCircle :size="16" />
+        <span class="text-sm font-medium">{{ success }}</span>
+      </div>
+    </div>
+
+    <div v-if="loading" class="card p-6 text-sm text-gray-500 dark:text-gray-400">Loading repairs...</div>
+    <div v-else-if="error" class="card p-6 text-sm text-red-500">{{ error }}</div>
+
+    <template v-else>
+      <div v-if="!selectedRepair" class="card overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full">
             <thead>
               <tr class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                <th v-for="h in repairHeaders" :key="h"
-                  class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap">{{ h }}</th>
+                <th v-for="header in tableHeaders" :key="header" class="table-th">{{ header }}</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-if="filtered.length === 0">
-                <td colspan="7" class="text-center py-12 text-sm text-gray-400">{{ store.t('noRepairsFound') }}</td>
+              <tr v-if="paginatedRepairs.length === 0">
+                <td :colspan="tableHeaders.length" class="text-center py-12 text-sm text-gray-400">
+                  {{ store.t('noRepairsFound') }}
+                </td>
               </tr>
-              <tr v-for="r in filtered" :key="r.id"
+              <tr
+                v-for="repair in paginatedRepairs"
+                :key="repair.id"
                 class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
-                @click="selectedRepair = r">
+                @click="selectedRepair = repair"
+              >
                 <td class="px-4 py-3">
-                  <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 bg-orange-50 dark:bg-orange-900/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Wrench :size="14" class="text-orange-500" />
+                  <div class="flex items-center gap-2.5 min-w-56">
+                    <div class="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      <img v-if="repair.vehicles?.photo_url" :src="repair.vehicles.photo_url" alt="" class="w-full h-full object-cover" />
+                      <Truck v-else :size="15" class="text-gray-400" />
                     </div>
-                    <span class="text-sm font-medium text-gray-900 dark:text-white max-w-56 truncate block">{{ r.title }}</span>
+                    <div class="min-w-0">
+                      <p class="text-sm font-semibold text-gray-900 dark:text-white truncate">{{ vehicleName(repair) }}</p>
+                      <p class="text-xs text-gray-500 dark:text-gray-400 truncate">{{ vehicleUnitPlate(repair) }}</p>
+                    </div>
                   </div>
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ r.vehicle }}</td>
-                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ r.category }}</td>
-                <td class="px-4 py-3"><span :class="priorityBadge[r.priority]">{{ priorityLabel[r.priority] }}</span></td>
-                <td class="px-4 py-3"><span :class="statusBadge[r.status]">{{ statusLabel[r.status] }}</span></td>
-                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ r.createdBy }}</td>
-                <td class="px-4 py-3" @click.stop>
-                  <div class="flex items-center gap-1">
-                    <button @click="selectedRepair = r" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors whitespace-nowrap">
-                      <Eye :size="12" /> {{ store.t('view') }}
-                    </button>
-                    <button @click="openEdit(r)" class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
-                      <Pencil :size="13" />
-                    </button>
-                    <button @click="confirmDelete(r)" class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
-                      <Trash2 :size="13" />
-                    </button>
+                <td class="px-4 py-3">
+                  <div class="min-w-52">
+                    <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ issueTitle(repair.issues) }}</p>
+                    <span :class="severityBadge(repair.issues)" class="mt-1">{{ issueSeverity(repair.issues) }}</span>
                   </div>
+                </td>
+                <td class="px-4 py-3">
+                  <p class="table-main">{{ inspectionLabel(repair.issues) }}</p>
+                  <p class="table-sub">{{ formatDate(repair.issues?.inspections?.submitted_at || repair.issues?.inspections?.created_at) }}</p>
+                </td>
+                <td class="table-td">{{ driverLabel(repair.issues) }}</td>
+                <td class="px-4 py-3">
+                  <span :class="repairStatusBadge(repair.status)">{{ repairStatusLabel(repair.status) }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span :class="vehicleStatusBadge(repair)">{{ vehicleStatusLabel(repair) }}</span>
+                </td>
+                <td class="table-td">{{ formatDate(repair.created_at) }}</td>
+                <td class="px-4 py-3" @click.stop>
+                  <button
+                    @click="selectedRepair = repair"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors whitespace-nowrap"
+                  >
+                    <Eye :size="12" /> View
+                  </button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-          <span class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('showing') }} {{ filtered.length }} {{ store.t('of') }} {{ repairs.length }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Detail view (in-place) -->
-    <div v-if="selectedRepair" class="space-y-5">
-      <button @click="selectedRepair = null" class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium transition-colors">
-        <ArrowLeft :size="16" /> {{ store.t('backToRepairs') }}
-      </button>
-
-      <div class="card overflow-hidden">
-        <div class="p-5 border-b border-gray-100 dark:border-gray-700">
-          <div class="flex flex-wrap items-start justify-between gap-4">
-            <div class="flex items-start gap-4">
-              <div class="w-12 h-12 bg-orange-50 dark:bg-orange-900/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Wrench :size="22" class="text-orange-500" />
-              </div>
-              <div>
-                <h2 class="text-lg font-bold text-gray-900 dark:text-white">{{ selectedRepair.title }}</h2>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{{ selectedRepair.vehicle }}</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-2">
-              <span :class="priorityBadge[selectedRepair.priority]">{{ priorityLabel[selectedRepair.priority] }}</span>
-              <span :class="statusBadge[selectedRepair.status]">{{ statusLabel[selectedRepair.status] }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="px-5 py-4 bg-gray-50 dark:bg-gray-800/50 flex gap-2">
-          <button @click="openEdit(selectedRepair)" class="btn-secondary gap-2 text-sm"><Pencil :size="14" /> {{ store.t('edit') }}</button>
-          <button @click="confirmDelete(selectedRepair)" class="btn-secondary gap-2 text-sm text-red-500 hover:text-red-600"><Trash2 :size="14" /> {{ store.t('delete') }}</button>
-        </div>
+        <BaseTablePagination
+          :total="filteredRepairs.length"
+          :current-page="page"
+          :page-size="pageSize"
+          @update:current-page="page = $event"
+          @update:page-size="setPageSize"
+        />
       </div>
 
-      <div class="grid lg:grid-cols-3 gap-5">
-        <div class="lg:col-span-2">
-          <div class="card p-5">
-            <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4">{{ store.t('repairInformation') }}</h3>
-            <div class="space-y-4">
-              <div v-if="selectedRepair.description">
-                <span class="text-xs text-gray-400 block mb-1">{{ store.t('description') }}</span>
-                <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{{ selectedRepair.description }}</p>
-              </div>
-              <div class="grid sm:grid-cols-2 gap-4">
-                <div v-if="selectedRepair.category">
-                  <span class="text-xs text-gray-400 block mb-1">{{ store.t('category') }}</span>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedRepair.category }}</p>
-                </div>
-                <div v-if="selectedRepair.driver">
-                  <span class="text-xs text-gray-400 block mb-1">{{ store.t('driver') }}</span>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedRepair.driver }}</p>
-                </div>
-                <div v-if="selectedRepair.inspection">
-                  <span class="text-xs text-gray-400 block mb-1">{{ store.t('inspectionLabel') }}</span>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedRepair.inspection }}</p>
-                </div>
-                <div v-if="selectedRepair.relatedIssueId">
-                  <span class="text-xs text-gray-400 block mb-1">{{ store.t('relatedIssue') }}</span>
-                  <RouterLink :to="`/issues/${selectedRepair.relatedIssueNumId}`" class="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-                    <ExternalLink :size="12" /> {{ selectedRepair.relatedIssueId }}
-                  </RouterLink>
-                </div>
-                <div>
-                  <span class="text-xs text-gray-400 block mb-1">{{ store.t('reportedBy') }}</span>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedRepair.createdBy }}</p>
-                </div>
-                <div>
-                  <span class="text-xs text-gray-400 block mb-1">{{ store.t('createdAt') }}</span>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedRepair.createdAt }}</p>
-                </div>
-                <div v-if="selectedRepair.startedAt">
-                  <span class="text-xs text-gray-400 block mb-1">{{ store.t('startedAt') }}</span>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedRepair.startedAt }}</p>
-                </div>
-                <div v-if="selectedRepair.completedAt">
-                  <span class="text-xs text-gray-400 block mb-1">{{ store.t('completedAt') }}</span>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedRepair.completedAt }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div>
-          <div class="card p-5">
-            <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4 flex items-center gap-2">
-              <Truck :size="15" class="text-blue-500" /> {{ store.t('vehicle') }}
-            </h3>
-            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedRepair.vehicle }}</p>
-            <RouterLink to="/vehicles" class="mt-3 flex items-center justify-center gap-1.5 w-full py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              <ExternalLink :size="12" /> {{ store.t('openVehicleCard') }}
-            </RouterLink>
-          </div>
-        </div>
-      </div>
-    </div>
+      <div v-else class="space-y-5">
+        <button
+          @click="selectedRepair = null"
+          class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium transition-colors"
+        >
+          <ArrowLeft :size="16" /> {{ store.t('backToRepairs') }}
+        </button>
 
-    <!-- Add / Edit Modal -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeForm" />
-          <div class="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col" style="max-height:90vh">
-            <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex-shrink-0 rounded-t-2xl">
-              <h2 class="text-lg font-bold text-gray-900 dark:text-white">{{ editingId ? store.t('editRepair') : store.t('repairRequests') }}</h2>
-              <button @click="closeForm" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><X :size="18" /></button>
+        <article class="card overflow-hidden">
+          <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+            <div class="flex flex-col lg:flex-row lg:items-start gap-5">
+              <button
+                type="button"
+                class="detail-photo"
+                @click="openVehicle(selectedRepair.vehicle_id)"
+                :aria-label="`Open ${vehicleName(selectedRepair)}`"
+              >
+                <img v-if="selectedRepair.vehicles?.photo_url" :src="selectedRepair.vehicles.photo_url" alt="" class="w-full h-full object-cover" />
+                <Truck v-else :size="30" class="text-blue-500" />
+              </button>
+
+              <div class="flex-1 min-w-0">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">{{ vehicleName(selectedRepair) }}</h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ vehicleUnitPlate(selectedRepair) }}</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span :class="repairStatusBadge(selectedRepair.status)">{{ repairStatusLabel(selectedRepair.status) }}</span>
+                    <span :class="vehicleStatusBadge(selectedRepair)">{{ vehicleStatusLabel(selectedRepair) }}</span>
+                  </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4 mt-5">
+                  <div>
+                    <span class="detail-label">Related issue</span>
+                    <p class="detail-value">{{ issueTitle(selectedRepair.issues) }}</p>
+                    <span :class="severityBadge(selectedRepair.issues)" class="mt-1">{{ issueSeverity(selectedRepair.issues) }}</span>
+                  </div>
+                  <div>
+                    <span class="detail-label">Inspection</span>
+                    <p class="detail-value">{{ inspectionLabel(selectedRepair.issues) }}</p>
+                    <p class="detail-muted">{{ formatDate(selectedRepair.issues?.inspections?.submitted_at || selectedRepair.issues?.inspections?.created_at) }}</p>
+                  </div>
+                  <div>
+                    <span class="detail-label">Reported by</span>
+                    <p class="detail-value">{{ driverLabel(selectedRepair.issues) }}</p>
+                  </div>
+                  <div>
+                    <span class="detail-label">Created</span>
+                    <p class="detail-value">{{ formatDate(selectedRepair.created_at) }}</p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <form @submit.prevent="handleSave" class="p-6 space-y-4 overflow-y-auto">
-              <div>
-                <label class="label">{{ store.t('vehicle') }} <span class="text-red-500">*</span></label>
-                <select v-model="form.vehicleId" class="input-field" required>
-                  <option value="" disabled>{{ store.t('selectVehicle') }}</option>
-                  <option v-for="v in vehicleOptions" :key="v.id" :value="v.id">{{ v.unit }} – {{ v.name }}</option>
-                </select>
-              </div>
-              <div>
-                <label class="label">{{ store.t('repairTitle') }} <span class="text-red-500">*</span></label>
-                <input v-model="form.title" class="input-field" placeholder="Short title for this repair" required />
-              </div>
-              <div>
-                <label class="label">{{ store.t('description') }}</label>
-                <textarea v-model="form.description" class="input-field resize-none" rows="3" placeholder="Detailed description..." />
-              </div>
-              <div class="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label class="label">{{ store.t('issueCategory') }} <span class="text-red-500">*</span></label>
-                  <select v-model="form.category" class="input-field" required>
-                    <option value="" disabled>{{ store.t('selectCategory') }}</option>
-                    <option v-for="c in categories" :key="c">{{ c }}</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="label">{{ store.t('driver') }}</label>
-                  <select v-model="form.driver" class="input-field">
-                    <option value="">{{ store.t('none') }}</option>
-                    <option v-for="d in driverOptions" :key="d">{{ d }}</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label class="label">{{ store.t('relatedIssue') }}</label>
-                <select v-model="form.relatedIssueNumId" class="input-field">
-                  <option :value="null">{{ store.t('none') }}</option>
-                  <option v-for="i in issueOptions" :key="i.id" :value="i.id">{{ i.issueId }} – {{ i.title }}</option>
-                </select>
-              </div>
-              <div>
-                <label class="label">{{ store.t('priority') }} <span class="text-red-500">*</span></label>
-                <div class="grid grid-cols-3 gap-2">
-                  <button v-for="p in ['low','medium','high']" :key="p" type="button"
-                    @click="form.priority = p"
-                    class="py-2 rounded-xl border-2 text-xs font-semibold capitalize transition-all"
-                    :class="form.priority === p ? priorityActive[p] : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'">{{ priorityLabel[p] }}</button>
-                </div>
-              </div>
-              <div>
-                <label class="label">{{ store.t('status') }} <span class="text-red-500">*</span></label>
-                <div class="grid grid-cols-2 gap-2">
-                  <button v-for="s in statusOptions" :key="s.value" type="button"
-                    @click="form.status = s.value"
-                    class="py-2 rounded-xl border-2 text-xs font-semibold transition-all"
-                    :class="form.status === s.value ? statusActive[s.value] : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'">{{ s.label }}</button>
-                </div>
-              </div>
-              <div class="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label class="label">{{ store.t('startedAt') }}</label>
-                  <input v-model="form.startedAt" class="input-field" type="date" />
-                </div>
-                <div>
-                  <label class="label">{{ store.t('completedAt') }}</label>
-                  <input v-model="form.completedAt" class="input-field" type="date" />
-                </div>
-              </div>
-              <div class="flex gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <button type="button" @click="closeForm" class="btn-secondary flex-1">{{ store.t('cancel') }}</button>
-                <button type="submit" class="btn-primary flex-1 gap-2"><Save :size="15" /> {{ editingId ? store.t('saveChanges') : store.t('submitRequest') }}</button>
-              </div>
-            </form>
           </div>
-        </div>
-      </Transition>
-    </Teleport>
+
+          <div class="grid lg:grid-cols-3 gap-5 p-5">
+            <div class="lg:col-span-2 space-y-5">
+              <section>
+                <h3 class="section-title">Repair notes</h3>
+                <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  {{ selectedRepair.description || 'No repair notes recorded yet.' }}
+                </p>
+              </section>
+
+              <section>
+                <h3 class="section-title">Issue notes</h3>
+                <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  {{ selectedRepair.issues?.description || selectedRepair.issues?.inspection_results?.comment || 'No issue notes available.' }}
+                </p>
+              </section>
+
+              <section>
+                <h3 class="section-title">Related photos</h3>
+                <div v-if="photoUrls(selectedRepair).length" class="flex flex-wrap gap-3">
+                  <a
+                    v-for="(photo, index) in photoUrls(selectedRepair)"
+                    :key="`${selectedRepair.id}-${index}`"
+                    :href="photo"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="photo-thumb"
+                  >
+                    <img :src="photo" alt="" class="w-full h-full object-cover" />
+                  </a>
+                </div>
+                <p v-else class="text-sm text-gray-500 dark:text-gray-400">No photos attached.</p>
+              </section>
+            </div>
+
+            <aside class="action-panel">
+              <button @click="openVehicle(selectedRepair.vehicle_id)" class="panel-link">
+                <Truck :size="14" /> Open Vehicle
+              </button>
+              <button v-if="selectedRepair.issues?.inspection_id" @click="openReport(selectedRepair.issues.inspection_id)" class="panel-link">
+                <FileText :size="14" /> Open Report
+              </button>
+              <button v-if="selectedRepair.issue_id" @click="openIssue(selectedRepair.issue_id)" class="panel-link">
+                <ExternalLink :size="14" /> Open Issue
+              </button>
+
+              <div v-if="canManage" class="pt-3 mt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
+                <button
+                  v-if="selectedRepair.status === 'open'"
+                  @click="updateRepairStatus(selectedRepair, 'in-progress')"
+                  :disabled="busyId === selectedRepair.id"
+                  class="manager-action bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  <PlayCircle :size="14" /> Mark In Progress
+                </button>
+                <button
+                  v-if="selectedRepair.status !== 'completed'"
+                  @click="completeRepair(selectedRepair)"
+                  :disabled="busyId === selectedRepair.id"
+                  class="manager-action bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <CheckCircle :size="14" /> Mark Completed
+                </button>
+                <button
+                  v-if="selectedRepair.status !== 'cancelled' && selectedRepair.status !== 'completed'"
+                  @click="updateRepairStatus(selectedRepair, 'cancelled')"
+                  :disabled="busyId === selectedRepair.id"
+                  class="manager-action bg-gray-600 hover:bg-gray-700 text-white"
+                >
+                  <XCircle :size="14" /> Cancel Repair
+                </button>
+              </div>
+            </aside>
+          </div>
+        </article>
+      </div>
+    </template>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
-import { Search, Filter, Plus, Wrench, Pencil, Trash2, X, Save, Eye, Truck, ArrowLeft, ExternalLink } from 'lucide-vue-next'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  ArrowLeft,
+  CheckCircle,
+  ExternalLink,
+  Eye,
+  FileText,
+  Filter,
+  PlayCircle,
+  RefreshCw,
+  Search,
+  Truck,
+  Wrench,
+  XCircle,
+} from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
+import BaseTablePagination from '@/components/shared/BaseTablePagination.vue'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
+import { supabase } from '@/lib/supabase'
+import { formatDateTime } from '@/lib/dateFormat'
 
+type RepairStatus = 'open' | 'in-progress' | 'completed' | 'cancelled'
+
+const router = useRouter()
 const store = useAppStore()
+const authStore = useAuthStore()
 
-const categories = ['Tires', 'Lights', 'Brakes', 'Fluids', 'Engine', 'Exterior', 'Steering', 'Other']
-const vehicleOptions = [
-  { id: 1, unit: 'Unit #1042', name: 'Kenworth T680' },
-  { id: 2, unit: 'Unit #0781', name: 'Peterbilt 579' },
-  { id: 3, unit: 'Unit #2210', name: 'Freightliner Cascadia' },
-  { id: 4, unit: 'Unit #0521', name: 'Volvo VNL 860' },
-  { id: 5, unit: 'Unit #3305', name: 'Ford F-350' },
-  { id: 6, unit: 'Unit #1099', name: 'Genie S-65' },
-]
-const driverOptions = ['John Smith', 'Maria Garcia', 'David Lee', 'Sarah Johnson', 'James Carter', 'Mike Brown']
-const issueOptions = [
-  { id: 1, issueId: 'ISS-001', title: 'Left turn signal not working' },
-  { id: 2, issueId: 'ISS-002', title: 'Brake fluid level low' },
-  { id: 3, issueId: 'ISS-003', title: 'Oil pressure warning light on' },
-  { id: 7, issueId: 'ISS-007', title: 'Brake pads worn below minimum' },
-]
-const statusOptions = computed(() => [
-  { value: 'open',        label: store.t('statusOpen') },
-  { value: 'in-progress', label: store.t('statusInProgress') },
-  { value: 'completed',   label: store.t('statusCompleted') },
-  { value: 'cancelled',   label: store.t('statusCancelled') },
-])
-
-const priorityBadge: Record<string, string>  = { low: 'badge-gray', medium: 'badge-blue', high: 'badge-orange' }
-const priorityActive: Record<string, string> = {
-  low:    'bg-gray-600 border-gray-600 text-white',
-  medium: 'bg-blue-600 border-blue-600 text-white',
-  high:   'bg-orange-500 border-orange-500 text-white',
-}
-const statusBadge: Record<string, string>  = { open: 'badge-red', 'in-progress': 'badge-orange', completed: 'badge-green', cancelled: 'badge-gray' }
-const statusActive: Record<string, string> = {
-  open:          'bg-red-600 border-red-600 text-white',
-  'in-progress': 'bg-orange-500 border-orange-500 text-white',
-  completed:     'bg-green-600 border-green-600 text-white',
-  cancelled:     'bg-gray-600 border-gray-600 text-white',
-}
-const statusLabel = computed((): Record<string, string> => ({
-  open: store.t('statusOpen'),
-  'in-progress': store.t('statusInProgress'),
-  completed: store.t('statusCompleted'),
-  cancelled: store.t('statusCancelled'),
-}))
-
-const priorityLabel = computed((): Record<string, string> => ({
-  low: store.t('priorityLow'),
-  medium: store.t('priorityMedium'),
-  high: store.t('priorityHigh'),
-}))
-
-const repairHeaders = computed(() => [
-  store.t('issue'),
-  store.t('vehicle'),
-  store.t('category'),
-  store.t('priority'),
-  store.t('status'),
-  store.t('reportedBy'),
-  store.t('actions'),
-])
-
-interface Repair {
-  id: number; vehicleId: number; vehicle: string
-  title: string; description: string; category: string
-  relatedIssueNumId: number | null; relatedIssueId: string
-  driver: string; inspection: string
-  priority: string; status: string
-  createdBy: string; createdAt: string
-  startedAt: string; completedAt: string
-}
-
-const repairs = ref<Repair[]>([
-  { id: 1, vehicleId: 2, vehicle: 'Unit #0781 · Peterbilt 579',   title: 'Left turn signal repair',             description: 'Replace faulty relay and check wiring harness.', category: 'Lights',   relatedIssueNumId: 1, relatedIssueId: 'ISS-001', driver: 'Maria Garcia',  inspection: 'Pre-Trip May 12', priority: 'medium', status: 'in-progress', createdBy: 'Maria Garcia',  createdAt: 'Today 7:18 AM',  startedAt: '2026-05-12', completedAt: '' },
-  { id: 2, vehicleId: 1, vehicle: 'Unit #1042 · Kenworth T680',   title: 'Brake fluid top-up & leak inspection', description: 'Top up fluid, inspect lines and master cylinder.', category: 'Brakes',   relatedIssueNumId: 2, relatedIssueId: 'ISS-002', driver: 'John Smith',    inspection: 'Pre-Trip May 11', priority: 'high',   status: 'open',        createdBy: 'John Smith',    createdAt: 'Yesterday',      startedAt: '',           completedAt: '' },
-  { id: 3, vehicleId: 4, vehicle: 'Unit #0521 · Volvo VNL 860',   title: 'Hydraulic oil leak repair',            description: 'Seal kit ordered, awaiting parts.',              category: 'Fluids',   relatedIssueNumId: 3, relatedIssueId: 'ISS-003', driver: 'James Carter',  inspection: 'Pre-Trip May 10', priority: 'high',   status: 'in-progress', createdBy: 'James Carter',  createdAt: 'May 10',         startedAt: '2026-05-10', completedAt: '' },
-  { id: 4, vehicleId: 3, vehicle: 'Unit #2210 · Freightliner',    title: 'Windshield wiper replacement',         description: 'Both front blades replaced with OEM parts.',     category: 'Exterior', relatedIssueNumId: null, relatedIssueId: '',      driver: 'David Lee',     inspection: '',                priority: 'low',    status: 'completed',   createdBy: 'David Lee',     createdAt: 'May 8',          startedAt: '2026-05-09', completedAt: '2026-05-09' },
-  { id: 5, vehicleId: 5, vehicle: 'Unit #3305 · Ford F-350',      title: 'Front axle brake pad replacement',     description: 'Front pads at 10%, inspect rotors.',             category: 'Brakes',   relatedIssueNumId: 7, relatedIssueId: 'ISS-007', driver: 'Sarah Johnson', inspection: 'Pre-Trip May 11', priority: 'high',   status: 'open',        createdBy: 'Sarah Johnson', createdAt: 'Today 6:42 AM',  startedAt: '',           completedAt: '' },
-])
-
+const repairs = ref<any[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
+const success = ref('')
+const busyId = ref('')
 const search = ref('')
 const filterStatus = ref('all')
-const filterPriority = ref('all')
-const showForm = ref(false)
-const editingId = ref<number | null>(null)
-const selectedRepair = ref<Repair | null>(null)
+const selectedRepair = ref<any | null>(null)
+const page = ref(1)
+const pageSize = ref(10)
 
-const defaultForm = () => ({ vehicleId: 0 as number, title: '', description: '', category: '', relatedIssueNumId: null as number | null, relatedIssueId: '', driver: '', inspection: '', priority: 'medium', status: 'open', startedAt: '', completedAt: '' })
-const form = reactive(defaultForm())
-
-function openAdd() { Object.assign(form, defaultForm()); editingId.value = null; showForm.value = true }
-function openEdit(r: Repair) {
-  Object.assign(form, { vehicleId: r.vehicleId, title: r.title, description: r.description, category: r.category, relatedIssueNumId: r.relatedIssueNumId, relatedIssueId: r.relatedIssueId, driver: r.driver, inspection: r.inspection, priority: r.priority, status: r.status, startedAt: r.startedAt, completedAt: r.completedAt })
-  editingId.value = r.id; showForm.value = true
-}
-function closeForm() { showForm.value = false; editingId.value = null }
-function confirmDelete(r: Repair) {
-  if (confirm(`Delete repair "${r.title}"?`)) {
-    repairs.value = repairs.value.filter(x => x.id !== r.id)
-    if (selectedRepair.value?.id === r.id) selectedRepair.value = null
-  }
-}
-
-let nextId = 100
-function handleSave() {
-  const veh = vehicleOptions.find(v => v.id === form.vehicleId)
-  if (!veh) return
-  const issue = form.relatedIssueNumId ? issueOptions.find(i => i.id === form.relatedIssueNumId) : null
-  const vehicleName = `${veh.unit} · ${veh.name}`
-  if (editingId.value !== null) {
-    const idx = repairs.value.findIndex(r => r.id === editingId.value)
-    if (idx !== -1) {
-      Object.assign(repairs.value[idx], { vehicleId: form.vehicleId, vehicle: vehicleName, title: form.title, description: form.description, category: form.category, relatedIssueNumId: form.relatedIssueNumId, relatedIssueId: issue?.issueId ?? '', driver: form.driver, inspection: form.inspection, priority: form.priority, status: form.status, startedAt: form.startedAt, completedAt: form.completedAt })
-      if (selectedRepair.value?.id === editingId.value) selectedRepair.value = repairs.value[idx]
-    }
-  } else {
-    const now = new Date()
-    const createdAt = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    repairs.value.unshift({ id: ++nextId, vehicleId: form.vehicleId, vehicle: vehicleName, title: form.title, description: form.description, category: form.category, relatedIssueNumId: form.relatedIssueNumId, relatedIssueId: issue?.issueId ?? '', driver: form.driver, inspection: form.inspection, priority: form.priority, status: form.status, createdBy: 'James Davis', createdAt, startedAt: form.startedAt, completedAt: form.completedAt })
-  }
-  closeForm()
-}
+const unresolvedIssueStatuses = ['under-review', 'in-repair']
+const canManage = computed(() => ['owner', 'manager'].includes(authStore.profile?.role || ''))
+const tableHeaders = ['Vehicle', 'Issue', 'Inspection', 'Reported by', 'Status', 'Vehicle status', 'Created date', 'Actions']
 
 const summaryStats = computed(() => [
-  { label: store.t('statusOpen'),        count: repairs.value.filter(r => r.status === 'open').length,        color: 'text-red-600 dark:text-red-400' },
-  { label: store.t('statusInProgress'), count: repairs.value.filter(r => r.status === 'in-progress').length, color: 'text-orange-600 dark:text-orange-400' },
-  { label: store.t('statusCompleted'),   count: repairs.value.filter(r => r.status === 'completed').length,   color: 'text-green-600 dark:text-green-400' },
-  { label: store.t('statusCancelled'),   count: repairs.value.filter(r => r.status === 'cancelled').length,   color: 'text-gray-500 dark:text-gray-400' },
+  { label: repairStatusLabel('open'), count: repairs.value.filter((repair) => repair.status === 'open').length, color: 'text-red-600 dark:text-red-400' },
+  { label: repairStatusLabel('in-progress'), count: repairs.value.filter((repair) => repair.status === 'in-progress').length, color: 'text-orange-600 dark:text-orange-400' },
+  { label: repairStatusLabel('completed'), count: repairs.value.filter((repair) => repair.status === 'completed').length, color: 'text-green-600 dark:text-green-400' },
+  { label: repairStatusLabel('cancelled'), count: repairs.value.filter((repair) => repair.status === 'cancelled').length, color: 'text-gray-500 dark:text-gray-400' },
 ])
 
-const filtered = computed(() => repairs.value.filter(r => {
-  const q = search.value.toLowerCase()
-  const matchSearch = r.title.toLowerCase().includes(q) || r.vehicle.toLowerCase().includes(q)
-  return matchSearch && (filterStatus.value === 'all' || r.status === filterStatus.value) && (filterPriority.value === 'all' || r.priority === filterPriority.value)
-}))
+const filteredRepairs = computed(() => {
+  const q = search.value.trim().toLowerCase()
+
+  return repairs.value.filter((repair) => {
+    const haystack = [
+      repair.title,
+      repair.description,
+      repair.status,
+      vehicleLabel(repair),
+      issueTitle(repair.issues),
+      repair.issues?.description,
+      driverLabel(repair.issues),
+      inspectionLabel(repair.issues),
+      vehicleStatusLabel(repair),
+    ].filter(Boolean).join(' ').toLowerCase()
+
+    const matchesSearch = !q || haystack.includes(q)
+    const matchesStatus = filterStatus.value === 'all' || repair.status === filterStatus.value
+    return matchesSearch && matchesStatus
+  })
+})
+
+const paginatedRepairs = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filteredRepairs.value.slice(start, start + pageSize.value)
+})
+
+watch([search, filterStatus, pageSize], () => {
+  page.value = 1
+})
+
+onMounted(fetchRepairData)
+
+watch(
+  () => authStore.companyId,
+  () => fetchRepairData()
+)
+
+async function fetchRepairData() {
+  if (!authStore.companyId) {
+    repairs.value = []
+    selectedRepair.value = null
+    return
+  }
+
+  loading.value = true
+  error.value = null
+
+  const { data, error: repairError } = await supabase
+    .from('repairs')
+    .select(`
+      id,
+      company_id,
+      vehicle_id,
+      issue_id,
+      title,
+      description,
+      status,
+      created_at,
+      vehicles (
+        id,
+        unit,
+        make,
+        model,
+        plate,
+        status,
+        photo_url
+      ),
+      issues (
+        id,
+        company_id,
+        vehicle_id,
+        driver_id,
+        inspection_id,
+        inspection_result_id,
+        title,
+        description,
+        status,
+        photo_urls,
+        created_at,
+        drivers (
+          id,
+          name
+        ),
+        inspections (
+          id,
+          type,
+          created_at,
+          submitted_at
+        ),
+        inspection_results (
+          id,
+          comment,
+          photo_urls,
+          inspection_template_items (
+            title,
+            category
+          )
+        )
+      )
+    `)
+    .eq('company_id', authStore.companyId)
+    .order('created_at', { ascending: false })
+
+  if (repairError) {
+    error.value = repairError.message
+    repairs.value = []
+    loading.value = false
+    return
+  }
+
+  repairs.value = data || []
+
+  if (selectedRepair.value) {
+    selectedRepair.value = repairs.value.find((repair) => repair.id === selectedRepair.value.id) || null
+  }
+
+  loading.value = false
+}
+
+async function updateRepairStatus(repair: any, status: RepairStatus) {
+  if (!canManage.value || !repair?.id) return
+  busyId.value = repair.id
+  error.value = null
+
+  const { error: repairError } = await supabase
+    .from('repairs')
+    .update({ status })
+    .eq('id', repair.id)
+    .eq('company_id', authStore.companyId)
+
+  if (repairError) {
+    error.value = repairError.message
+    busyId.value = ''
+    return
+  }
+
+  if (status === 'in-progress') {
+    await syncRepairStarted(repair)
+  }
+
+  if (status === 'cancelled' && repair.issue_id) {
+    await supabase.from('issues').update({ status: 'under-review' }).eq('id', repair.issue_id)
+    await restoreVehicleIfResolved(repair.vehicle_id)
+  }
+
+  flash(`Repair marked ${repairStatusLabel(status).toLowerCase()}`)
+  busyId.value = ''
+  await fetchRepairData()
+}
+
+async function completeRepair(repair: any) {
+  if (!canManage.value || !repair?.id) return
+  busyId.value = repair.id
+  error.value = null
+
+  const { error: repairError } = await supabase
+    .from('repairs')
+    .update({ status: 'completed' })
+    .eq('id', repair.id)
+    .eq('company_id', authStore.companyId)
+
+  if (repairError) {
+    error.value = repairError.message
+    busyId.value = ''
+    return
+  }
+
+  if (repair.issue_id) {
+    const { error: issueError } = await supabase
+      .from('issues')
+      .update({ status: 'fixed' })
+      .eq('id', repair.issue_id)
+
+    if (issueError) {
+      error.value = issueError.message
+      busyId.value = ''
+      return
+    }
+  }
+
+  await restoreVehicleIfResolved(repair.vehicle_id)
+  flash('Repair completed and issue marked fixed')
+  busyId.value = ''
+  await fetchRepairData()
+}
+
+async function syncRepairStarted(repair: any) {
+  if (repair.issue_id) {
+    const { error: issueError } = await supabase
+      .from('issues')
+      .update({ status: 'in-repair' })
+      .eq('id', repair.issue_id)
+
+    if (issueError) console.error('[Repairs] failed to move issue to in-repair', issueError)
+  }
+
+  if (repair.vehicle_id) {
+    const { error: vehicleError } = await supabase
+      .from('vehicles')
+      .update({ status: 'in-repair' })
+      .eq('id', repair.vehicle_id)
+
+    if (vehicleError) console.error('[Repairs] failed to mark vehicle in repair', vehicleError)
+  }
+}
+
+async function restoreVehicleIfResolved(vehicleId: string | null) {
+  if (!vehicleId) return
+
+  const { data: unresolved, error: unresolvedError } = await supabase
+    .from('issues')
+    .select('id')
+    .eq('vehicle_id', vehicleId)
+    .in('status', unresolvedIssueStatuses)
+    .limit(1)
+
+  if (unresolvedError) {
+    console.error('[Repairs] failed to check unresolved vehicle issues', unresolvedError)
+    return
+  }
+
+  if (unresolved?.length) return
+
+  const { error: vehicleError } = await supabase
+    .from('vehicles')
+    .update({ status: 'active' })
+    .eq('id', vehicleId)
+
+  if (vehicleError) console.error('[Repairs] failed to return vehicle to active', vehicleError)
+}
+
+function openVehicle(vehicleId: string | null) {
+  if (!vehicleId) return
+  router.push(`/vehicles/${vehicleId}`)
+}
+
+function openIssue(issueId: string | null) {
+  if (!issueId) return
+  router.push(`/issues/${issueId}`)
+}
+
+function openReport(inspectionId: string | null) {
+  if (!inspectionId) return
+  router.push(`/reports/${inspectionId}`)
+}
+
+function vehicleName(row: any) {
+  const vehicle = row?.vehicles || row
+  return `${vehicle?.make || ''} ${vehicle?.model || ''}`.trim() || 'Vehicle'
+}
+
+function vehicleUnitPlate(row: any) {
+  const vehicle = row?.vehicles || row
+  return [
+    vehicle?.unit ? `Unit ${vehicle.unit}` : 'Unit —',
+    vehicle?.plate ? `Plate ${vehicle.plate}` : 'Plate —',
+  ].join(' · ')
+}
+
+function vehicleLabel(row: any) {
+  return `${vehicleName(row)} · ${vehicleUnitPlate(row)}`
+}
+
+function issueTitle(issue: any) {
+  return issue?.title || issue?.inspection_results?.inspection_template_items?.title || 'Inspection issue'
+}
+
+function driverLabel(issue: any) {
+  return issue?.drivers?.name || '—'
+}
+
+function inspectionLabel(issue: any) {
+  const inspection = issue?.inspections
+  if (!inspection) return '—'
+  return inspection.type === 'post-trip' ? 'Post-trip' : 'Pre-trip'
+}
+
+function photoUrls(repair: any) {
+  return [
+    ...(repair?.issues?.photo_urls || []),
+    ...(repair?.issues?.inspection_results?.photo_urls || []),
+  ].filter(Boolean)
+}
+
+function issueSeverity(issue: any) {
+  const category = issue?.inspection_results?.inspection_template_items?.category?.toLowerCase() || ''
+  if (['brakes', 'steering', 'tires', 'engine'].some((value) => category.includes(value))) return 'High'
+  if (issue?.status === 'in-repair') return 'Confirmed'
+  return 'Review'
+}
+
+function severityBadge(issue: any) {
+  const severity = issueSeverity(issue)
+  if (severity === 'High') return 'badge-red'
+  if (severity === 'Confirmed') return 'badge-orange'
+  return 'badge-yellow'
+}
+
+function repairStatusLabel(status: string) {
+  return {
+    open: 'Open',
+    'in-progress': 'In Progress',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+  }[status] || status || '—'
+}
+
+function repairStatusBadge(status: string) {
+  return {
+    open: 'badge-red',
+    'in-progress': 'badge-orange',
+    completed: 'badge-green',
+    cancelled: 'badge-gray',
+  }[status] || 'badge-gray'
+}
+
+function vehicleDisplayStatus(repair: any) {
+  const raw = repair?.vehicles?.status
+  if (repair?.issues?.status === 'under-review') return 'needs-attention'
+  if (raw === 'in-repair') return 'in-repair'
+  if (raw === 'blocked') return 'blocked'
+  return raw || 'active'
+}
+
+function vehicleStatusLabel(repair: any) {
+  return {
+    active: 'Active',
+    'needs-attention': 'Needs Attention',
+    'in-repair': 'In repair',
+    blocked: 'Blocked',
+  }[vehicleDisplayStatus(repair)] || vehicleDisplayStatus(repair)
+}
+
+function vehicleStatusBadge(repair: any) {
+  return {
+    active: 'badge-green',
+    'needs-attention': 'badge-yellow',
+    'in-repair': 'badge-orange',
+    blocked: 'badge-red',
+  }[vehicleDisplayStatus(repair)] || 'badge-gray'
+}
+
+function formatDate(value: string | null) {
+  return formatDateTime(value, store.language)
+}
+
+function setPageSize(size: number) {
+  pageSize.value = size
+  page.value = 1
+}
+
+function flash(message: string) {
+  success.value = message
+  window.setTimeout(() => {
+    if (success.value === message) success.value = ''
+  }, 3000)
+}
 </script>
 
 <style scoped>
-.badge-blue   { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400; }
+.table-th {
+  @apply text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap;
+}
+
+.table-td {
+  @apply px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap;
+}
+
+.table-main {
+  @apply text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap;
+}
+
+.table-sub {
+  @apply text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap mt-0.5;
+}
+
+.detail-photo {
+  @apply w-full lg:w-36 h-36 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-blue-500 transition-all;
+}
+
+.detail-label {
+  @apply text-xs font-medium text-gray-400 dark:text-gray-500 block;
+}
+
+.detail-value {
+  @apply text-sm font-semibold text-gray-900 dark:text-white mt-1;
+}
+
+.detail-muted {
+  @apply text-xs text-gray-500 dark:text-gray-400 mt-1;
+}
+
+.section-title {
+  @apply text-sm font-semibold text-gray-900 dark:text-white mb-2;
+}
+
+.photo-thumb {
+  @apply w-20 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 hover:ring-2 hover:ring-blue-500 transition-all;
+}
+
+.action-panel {
+  @apply rounded-2xl border border-gray-100 dark:border-gray-700 p-3 space-y-2 h-fit;
+}
+
+.panel-link {
+  @apply w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors;
+}
+
+.manager-action {
+  @apply w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+}
+
+.badge-yellow { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400; }
 .badge-orange { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400; }
-.modal-enter-active, .modal-leave-active { transition: opacity 0.2s ease; }
-.modal-enter-from, .modal-leave-to { opacity: 0; }
+.badge-red { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
 </style>

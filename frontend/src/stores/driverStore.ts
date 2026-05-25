@@ -18,6 +18,12 @@ export const useDriverStore = defineStore('drivers', () => {
 
   const search = ref('')
   const statusFilter = ref('all')
+  const statusCounts = ref<Record<string, number>>({
+    new: 0,
+    pending: 0,
+    active: 0,
+    inactive: 0,
+  })
 
   const totalPages = computed(() => {
     return Math.max(1, Math.ceil(total.value / pageSize.value))
@@ -30,6 +36,12 @@ export const useDriverStore = defineStore('drivers', () => {
     if (!authStore.companyId) {
       drivers.value = []
       total.value = 0
+      statusCounts.value = {
+        new: 0,
+        pending: 0,
+        active: 0,
+        inactive: 0,
+      }
       loading.value = false
       return
     }
@@ -51,9 +63,11 @@ export const useDriverStore = defineStore('drivers', () => {
 
     if (searchValue) {
       query = query.or(
-        `name.ilike.%${searchValue}%,email.ilike.%${searchValue}%,phone.ilike.%${searchValue}%,license_no.ilike.%${searchValue}%,license_class.ilike.%${searchValue}%`
+        driverSearchExpression(searchValue)
       )
     }
+
+    await fetchStatusCounts(searchValue)
 
     const { data, count, error: supabaseError } = await query.range(from, to)
 
@@ -67,6 +81,50 @@ export const useDriverStore = defineStore('drivers', () => {
     }
 
     loading.value = false
+  }
+
+  function driverSearchExpression(searchValue: string) {
+    return `name.ilike.%${searchValue}%,email.ilike.%${searchValue}%,phone.ilike.%${searchValue}%,license_no.ilike.%${searchValue}%,license_class.ilike.%${searchValue}%`
+  }
+
+  async function fetchStatusCounts(searchValue = search.value.trim()) {
+    if (!authStore.companyId) {
+      statusCounts.value = {
+        new: 0,
+        pending: 0,
+        active: 0,
+        inactive: 0,
+      }
+      return
+    }
+
+    const statuses = ['new', 'pending', 'active', 'inactive']
+    const counts = { ...statusCounts.value }
+
+    await Promise.all(
+      statuses.map(async (status) => {
+        let query = supabase
+          .from('drivers')
+          .select('id', { count: 'exact', head: true })
+          .eq('company_id', authStore.companyId)
+          .eq('status', status)
+
+        if (searchValue) {
+          query = query.or(driverSearchExpression(searchValue))
+        }
+
+        const { count, error: countError } = await query
+
+        if (countError) {
+          console.error('[driverStore] failed to count drivers by status', countError)
+          counts[status] = 0
+        } else {
+          counts[status] = count || 0
+        }
+      })
+    )
+
+    statusCounts.value = counts
   }
 
   async function fetchDriverById(id: string, silent = false) {
@@ -346,6 +404,7 @@ export const useDriverStore = defineStore('drivers', () => {
 
     search,
     statusFilter,
+    statusCounts,
 
     fetchDrivers,
     fetchDriverById,

@@ -71,6 +71,7 @@ const managerItems = [
   { icon: LayoutDashboard, label: 'dashboard', to: '/dashboard' },
   { icon: Truck, label: 'vehicles', to: '/vehicles' },
   { icon: Users, label: 'drivers', to: '/drivers' },
+  { icon: ClipboardList, label: 'inspectionTemplates', to: '/inspection-templates' },
   { icon: FileText, label: 'reports', to: '/reports' },
   { icon: AlertTriangle, label: 'issues', to: '/issues' },
   { icon: Wrench, label: 'repairs', to: '/repairs' },
@@ -79,7 +80,7 @@ const managerItems = [
 
 const driverItems = [
   { icon: User, label: 'driverDashboard', to: '/driver' },
-  { icon: Truck, label: 'vehicles', to: '/driver/vehicles' },
+  { icon: Truck, label: 'myVehicles', to: '/driver/vehicles' },
   { icon: FileText, label: 'reports', to: '/driver/reports' },
   { icon: ClipboardList, label: 'inspections', to: '/inspect/pre' },
 ]

@@ -298,6 +298,7 @@ import DriverFormModal from "@/components/drivers/DriverFormModal.vue";
 import { useAppStore } from "../stores/app";
 import { useDriverStore } from "@/stores/driverStore";
 import { useAuthStore } from "@/stores/authStore";
+import { formatDateOnly } from "@/lib/dateFormat";
 
 type Driver = {
   id: string;
@@ -422,8 +423,7 @@ function isExpired(d?: string | null) {
 }
 
 function formatDate(d: string) {
-  const [y, m, day] = d.split("-");
-  return `${day}/${m}/${y}`;
+  return formatDateOnly(d, store.language);
 }
 
 function initials(name: string) {

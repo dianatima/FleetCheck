@@ -276,11 +276,99 @@
       </div>
     </div>
 
+    <!-- Vehicle Access Rules -->
+    <div v-else-if="activeTab === 'vehicle-access'" class="card overflow-hidden">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-6 border-b border-gray-100 dark:border-gray-700">
+        <div>
+          <h2 class="font-bold text-gray-900 dark:text-white">
+            Vehicle Access Rules
+          </h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            Allow license classes to inspect and use specific vehicle types.
+          </p>
+        </div>
+
+        <button class="btn-primary gap-2 text-sm" @click="openAddAccessRule">
+          <Plus :size="15" />
+          Create rule
+        </button>
+      </div>
+
+      <div v-if="rulesStore.loading" class="p-6 text-sm text-gray-500">
+        Loading vehicle access rules...
+      </div>
+      <div v-else-if="rulesStore.error" class="p-6 text-sm text-red-500">
+        {{ rulesStore.error }}
+      </div>
+      <div v-else class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <th class="settings-th">License Class</th>
+              <th class="settings-th">Allowed Vehicle Types</th>
+              <th class="settings-th">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="rulesStore.groupedRules.length === 0">
+              <td colspan="3" class="px-6 py-12 text-center text-sm text-gray-400">
+                No vehicle access rules configured.
+              </td>
+            </tr>
+            <tr
+              v-for="rule in rulesStore.groupedRules"
+              :key="rule.license_class"
+              class="border-b border-gray-50 dark:border-gray-700/50"
+            >
+              <td class="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                {{ rule.license_class }}
+              </td>
+              <td class="px-6 py-4">
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    v-for="vehicleType in rule.vehicle_types"
+                    :key="vehicleType.id"
+                    class="badge-gray"
+                  >
+                    {{ vehicleType.name }}
+                  </span>
+                </div>
+              </td>
+              <td class="px-6 py-4">
+                <div class="flex items-center gap-1">
+                  <button
+                    class="settings-icon-btn hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                    title="Edit rule"
+                    @click="openEditAccessRule(rule)"
+                  >
+                    <Pencil :size="15" />
+                  </button>
+                  <button
+                    class="settings-icon-btn hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                    title="Delete rule"
+                    @click="deleteAccessRule(rule)"
+                  >
+                    <Trash2 :size="15" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <CompanyFormModal
       v-model="showCompanyModal"
       :company="editingCompany"
       :loading="saving"
       @save="saveCompany"
+    />
+    <VehicleAccessRuleFormModal
+      v-model="showAccessRuleModal"
+      :rule="editingAccessRule"
+      :loading="rulesStore.loading"
+      @save="saveAccessRule"
     />
   </AppLayout>
 </template>
@@ -297,6 +385,7 @@ import {
   Plus,
   Pencil,
   Trash2,
+  KeyRound,
 } from "lucide-vue-next";
 
 import { supabase } from "@/lib/supabase";
@@ -305,9 +394,15 @@ import { useAuthStore } from "@/stores/authStore";
 import type { Language } from "../stores/app";
 import AppLayout from "../components/layout/AppLayout.vue";
 import CompanyFormModal from "@/components/settings/CompanyFormModal.vue";
+import VehicleAccessRuleFormModal from "@/components/settings/VehicleAccessRuleFormModal.vue";
+import {
+  useVehicleAccessRulesStore,
+  type VehicleAccessRulePayload,
+} from "@/stores/vehicleAccessRulesStore";
 
 const store = useAppStore();
 const authStore = useAuthStore();
+const rulesStore = useVehicleAccessRulesStore();
 
 const activeTab = ref("company");
 const appTheme = ref<"light" | "dark">(store.theme as "light" | "dark");
@@ -315,6 +410,8 @@ const saving = ref(false);
 
 const showCompanyModal = ref(false);
 const editingCompany = ref<any | null>(null);
+const showAccessRuleModal = ref(false);
+const editingAccessRule = ref<any | null>(null);
 
 const avatarInput = ref<HTMLInputElement | null>(null);
 const selectedAvatarFile = ref<File | null>(null);
@@ -324,6 +421,7 @@ const tabs = computed(() => [
   { id: "user", icon: User, label: "User Profile" },
   { id: "language", icon: Globe, label: store.t("languageSettings") },
   { id: "theme", icon: Sun, label: store.t("appearance") },
+  { id: "vehicle-access", icon: KeyRound, label: "Vehicle Access Rules" },
 ]);
 
 const languages = [
@@ -379,8 +477,17 @@ onMounted(async () => {
   }
 
   await authStore.fetchOwnerCompanies();
+  await rulesStore.fetchRules();
+  await rulesStore.fetchVehicleTypes();
   fillUserForm();
 });
+
+watch(
+  () => authStore.companyId,
+  async (companyId) => {
+    if (companyId) await rulesStore.fetchRules();
+  }
+);
 
 function fillUserForm() {
   if (!authStore.profile) return;
@@ -415,6 +522,32 @@ function openAddCompany() {
 function openEditCompany(company: any) {
   editingCompany.value = company;
   showCompanyModal.value = true;
+}
+
+function openAddAccessRule() {
+  editingAccessRule.value = null;
+  showAccessRuleModal.value = true;
+}
+
+function openEditAccessRule(rule: any) {
+  editingAccessRule.value = rule;
+  showAccessRuleModal.value = true;
+}
+
+async function saveAccessRule(payload: VehicleAccessRulePayload) {
+  const ok = editingAccessRule.value
+    ? await rulesStore.updateRules(editingAccessRule.value.license_class, payload)
+    : await rulesStore.createRules(payload);
+
+  if (ok) {
+    showAccessRuleModal.value = false;
+    editingAccessRule.value = null;
+  }
+}
+
+async function deleteAccessRule(rule: any) {
+  if (!confirm(`Delete access rules for "${rule.license_class}"?`)) return;
+  await rulesStore.deleteRules(rule.license_class);
 }
 
 async function saveCompany(payload: any) {
@@ -576,5 +709,13 @@ async function saveUserProfile() {
 <style scoped>
 .badge-blue {
   @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400;
+}
+
+.settings-th {
+  @apply text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-6 py-3 whitespace-nowrap;
+}
+
+.settings-icon-btn {
+  @apply w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 transition-colors;
 }
 </style>

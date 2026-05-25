@@ -14,8 +14,8 @@
         <Filter :size="14" class="text-gray-400 flex-shrink-0" />
         <select v-model="filterType" class="input-field py-1.5 text-sm flex-1">
           <option value="all">{{ store.t('allTypes') }}</option>
-          <option value="Pre-Trip">{{ store.t('preTrip') }}</option>
-          <option value="Post-Trip">{{ store.t('postTrip') }}</option>
+          <option value="pre-trip">{{ store.t('preTrip') }}</option>
+          <option value="post-trip">{{ store.t('postTrip') }}</option>
         </select>
         <select v-model="filterResult" class="input-field py-1.5 text-sm flex-1">
           <option value="all">{{ store.t('allResults') }}</option>
@@ -24,9 +24,9 @@
         </select>
       </div>
       <div class="flex items-center gap-2">
-        <input type="date" class="input-field py-1.5 text-sm" value="2026-05-10" />
+        <input v-model="startDate" type="date" class="input-field py-1.5 text-sm" />
         <span class="text-gray-400 text-sm">—</span>
-        <input type="date" class="input-field py-1.5 text-sm" value="2026-05-14" />
+        <input v-model="endDate" type="date" class="input-field py-1.5 text-sm" />
       </div>
       <div class="flex gap-2">
         <button class="btn-secondary gap-1.5 text-sm py-2"><Download :size="14" /> {{ store.t('pdf') }}</button>
@@ -45,11 +45,17 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-if="filtered.length === 0">
-              <td colspan="9" class="text-center py-12 text-sm text-gray-400">{{ store.t('noReportsFound') }}</td>
+            <tr v-if="paginatedReports.length === 0">
+              <td :colspan="driverReportHeaders.length" class="text-center py-12 text-sm text-gray-400">
+                {{ loading ? 'Loading reports...' : store.t('noReportsFound') }}
+              </td>
             </tr>
-            <tr v-for="r in filtered" :key="r.id"
-              class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+            <tr
+              v-for="r in paginatedReports"
+              :key="r.id"
+              class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
+              @click="viewReport(r)"
+            >
               <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ r.date }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
@@ -60,9 +66,10 @@
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ r.type }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
-                  <CheckCircle v-if="r.result === 'pass'" :size="13" class="text-green-500" />
+                  <FileEdit v-if="r.result === 'draft'" :size="13" class="text-amber-500" />
+                  <CheckCircle v-else-if="r.result === 'pass'" :size="13" class="text-green-500" />
                   <XCircle v-else :size="13" class="text-red-500" />
-                  <span :class="r.result === 'pass' ? 'badge-green' : 'badge-red'" class="text-xs">{{ r.result === 'pass' ? store.t('pass') : store.t('fail') }}</span>
+                  <span :class="resultBadge(r)" class="text-xs">{{ resultLabel(r) }}</span>
                 </div>
               </td>
               <td class="px-4 py-3">
@@ -74,10 +81,6 @@
                   <Camera :size="12" /> {{ r.photos }}
                 </div>
                 <span v-else class="text-gray-400 text-xs">—</span>
-              </td>
-              <td class="px-4 py-3">
-                <CheckCircle v-if="r.signed" :size="14" class="text-green-500" />
-                <span v-else class="text-gray-400 text-xs">No</span>
               </td>
               <td class="px-4 py-3">
                 <span v-if="r.status === 'draft'"
@@ -93,26 +96,22 @@
                 <div class="flex gap-1">
                   <template v-if="r.status === 'draft'">
                     <button
-                      @click="editReport(r)"
-                      title="Edit draft"
+                      @click.stop="continueDraft(r)"
+                      title="Continue draft"
                       class="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors">
                       <Pencil :size="13" />
-                    </button>
-                    <button
-                      @click="submitReport(r)"
-                      title="Submit report"
-                      class="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                      <Send :size="13" />
                     </button>
                   </template>
                   <template v-else>
                     <button
+                      @click.stop="viewReport(r)"
                       title="View report"
                       class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
                       <FileText :size="13" />
                     </button>
                     <button
-                      title="Download PDF"
+                      title="Download later"
+                      disabled
                       class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
                       <Download :size="13" />
                     </button>
@@ -123,55 +122,204 @@
           </tbody>
         </table>
       </div>
-      <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-        <span class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('showing') }} {{ filtered.length }} {{ store.t('of') }} {{ reports.length }}</span>
-      </div>
+      <BaseTablePagination
+        :total="filtered.length"
+        :current-page="page"
+        :page-size="pageSize"
+        @update:current-page="page = $event"
+        @update:page-size="setPageSize"
+      />
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Filter, Download, Truck, CheckCircle, XCircle, Camera, FileText, Pencil, Send, File as FileEdit } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
+import BaseTablePagination from '@/components/shared/BaseTablePagination.vue'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
+import { supabase } from '@/lib/supabase'
+import { formatDateTime } from '@/lib/dateFormat'
 
 const store = useAppStore()
+const authStore = useAuthStore()
+const router = useRouter()
 
 const filterType = ref('all')
 const filterResult = ref('all')
+const startDate = ref('')
+const endDate = ref('')
+const loading = ref(false)
+const error = ref<string | null>(null)
+const page = ref(1)
+const pageSize = ref(10)
 
 interface Report {
-  id: number
+  id: string
+  vehicleId: string
   date: string
+  createdAt: string
   vehicle: string
-  type: string
-  result: string
+  type: 'pre-trip' | 'post-trip'
+  result: 'pass' | 'fail' | 'draft'
   issues: number
   photos: number
-  signed: boolean
-  status: 'draft' | 'submitted'
+  status: 'draft' | 'submitted' | 'approved' | 'needs-review' | 'rejected'
 }
 
-const reports = ref<Report[]>([
-  { id: 1, date: 'May 14, 7:24 AM', vehicle: 'Kenworth T680 #1042', type: 'Pre-Trip',  result: 'pass', issues: 0, photos: 3, signed: true,  status: 'submitted' },
-  { id: 2, date: 'May 13, 6:15 PM', vehicle: 'Kenworth T680 #1042', type: 'Post-Trip', result: 'pass', issues: 0, photos: 1, signed: true,  status: 'submitted' },
-  { id: 3, date: 'May 13, 7:02 AM', vehicle: 'Freightliner #2210',  type: 'Pre-Trip',  result: 'fail', issues: 1, photos: 4, signed: true,  status: 'submitted' },
-  { id: 4, date: 'May 12, 6:45 PM', vehicle: 'Kenworth T680 #1042', type: 'Post-Trip', result: 'pass', issues: 0, photos: 0, signed: false, status: 'draft' },
-  { id: 5, date: 'May 12, 7:15 AM', vehicle: 'Kenworth T680 #1042', type: 'Pre-Trip',  result: 'pass', issues: 0, photos: 2, signed: false, status: 'draft' },
-  { id: 6, date: 'May 11, 6:30 PM', vehicle: 'Ford F-350 #3305',    type: 'Post-Trip', result: 'pass', issues: 0, photos: 1, signed: true,  status: 'submitted' },
-  { id: 7, date: 'May 11, 7:10 AM', vehicle: 'Ford F-350 #3305',    type: 'Pre-Trip',  result: 'fail', issues: 2, photos: 5, signed: true,  status: 'submitted' },
-])
+const reports = ref<Report[]>([])
 
-function editReport(r: Report) {
-  alert(`Edit draft report #${r.id}`)
-}
+onMounted(fetchReports)
 
-function submitReport(r: Report) {
-  if (confirm(`Submit report for ${r.vehicle} (${r.date})?`)) {
-    r.status = 'submitted'
-    r.signed = true
+watch(
+  () => authStore.profile?.id,
+  async (profileId) => {
+    if (profileId) await fetchReports()
   }
+)
+
+async function fetchReports() {
+  if (!authStore.profile?.id) return
+
+  loading.value = true
+  error.value = null
+
+  const { data: driver, error: driverError } = await supabase
+    .from('drivers')
+    .select('id, company_id')
+    .eq('user_id', authStore.profile.id)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (driverError || !driver) {
+    error.value = driverError?.message || `Active driver row was not found for profile.id ${authStore.profile.id}.`
+    reports.value = []
+    loading.value = false
+    return
+  }
+
+  const { data: inspections, error: inspectionsError } = await supabase
+    .from('inspections')
+    .select(`
+      id,
+      vehicle_id,
+      type,
+      status,
+      created_at,
+      submitted_at,
+      vehicles (
+        unit,
+        make,
+        model,
+        plate
+      ),
+      inspection_results (
+        id,
+        result,
+        photo_urls,
+        inspection_template_items (
+          title,
+          category
+        )
+      ),
+      issues (
+        id,
+        status
+      )
+    `)
+    .eq('driver_id', driver.id)
+    .eq('company_id', driver.company_id)
+    .order('created_at', { ascending: false })
+
+  if (inspectionsError) {
+    error.value = inspectionsError.message
+    reports.value = []
+    loading.value = false
+    return
+  }
+
+  reports.value = normalizeInspectionRows(inspections || []).map((inspection: any) => {
+    const vehicle = Array.isArray(inspection.vehicles) ? inspection.vehicles[0] : inspection.vehicles
+    const results = normalizeRelationArray(inspection.inspection_results)
+    const issues = normalizeRelationArray(inspection.issues)
+    const failed = results.some((row: any) => row.result === 'fail')
+    const photos = results.reduce((count: number, row: any) => count + (row.photo_urls?.length || 0), 0)
+    const name = `${vehicle?.make || ''} ${vehicle?.model || ''}`.trim()
+
+    return {
+      id: inspection.id,
+      vehicleId: inspection.vehicle_id,
+      createdAt: inspection.submitted_at || inspection.created_at,
+      date: formatDate(inspection.submitted_at || inspection.created_at),
+      vehicle: [name, vehicle?.unit ? `#${vehicle.unit}` : '', vehicle?.plate || ''].filter(Boolean).join(' · ') || '—',
+      type: inspection.type === 'post-trip' ? 'post-trip' : 'pre-trip',
+      status: inspection.status,
+      result: inspection.status === 'draft' ? 'draft' : failed ? 'fail' : 'pass',
+      issues: issues.length,
+      photos,
+    }
+  })
+
+  loading.value = false
+}
+
+function formatDate(value: string | null) {
+  return formatDateTime(value, store.language)
+}
+
+function continueDraft(r: Report) {
+  router.push(`/inspect/${r.type === 'post-trip' ? 'post' : 'pre'}?inspectionId=${r.id}&vehicleId=${r.vehicleId}`)
+}
+
+function viewReport(r: Report) {
+  router.push(`/driver/reports/${r.id}`)
+}
+
+function resultBadge(report: Report) {
+  if (report.result === 'draft') return 'badge-yellow'
+  return report.result === 'pass' ? 'badge-green' : 'badge-red'
+}
+
+function resultLabel(report: Report) {
+  if (report.result === 'draft') return store.t('statusDraft')
+  return report.result === 'pass' ? store.t('pass') : store.t('fail')
+}
+
+function normalizeInspectionRows(rows: any[]) {
+  const byId = new Map<string, any>()
+
+  for (const row of rows) {
+    if (!byId.has(row.id)) {
+      byId.set(row.id, {
+        ...row,
+        inspection_results: normalizeRelationArray(row.inspection_results),
+        issues: normalizeRelationArray(row.issues),
+      })
+      continue
+    }
+
+    const existing = byId.get(row.id)
+    existing.inspection_results = mergeById(existing.inspection_results, normalizeRelationArray(row.inspection_results))
+    existing.issues = mergeById(existing.issues, normalizeRelationArray(row.issues))
+  }
+
+  return [...byId.values()]
+}
+
+function normalizeRelationArray(value: any) {
+  if (!value) return []
+  return Array.isArray(value) ? value : [value]
+}
+
+function mergeById(left: any[], right: any[]) {
+  const byId = new Map<string, any>()
+  for (const item of [...left, ...right]) {
+    if (item?.id) byId.set(item.id, item)
+  }
+  return [...byId.values()]
 }
 
 const passCount = computed(() => reports.value.filter(r => r.result === 'pass').length)
@@ -181,14 +329,33 @@ const summaryStats = computed(() => [
   { label: store.t('reports'), value: reports.value.length, color: 'text-gray-900 dark:text-white' },
   { label: store.t('statusPassed'), value: passCount.value, color: 'text-green-600 dark:text-green-400' },
   { label: store.t('statusFailed'), value: failCount.value, color: 'text-red-600 dark:text-red-400' },
-  { label: 'Pass Rate', value: `${Math.round((passCount.value / reports.value.length) * 100)}%`, color: 'text-blue-600 dark:text-blue-400' },
+  { label: 'Pass Rate', value: reports.value.length ? `${Math.round((passCount.value / reports.value.length) * 100)}%` : '0%', color: 'text-blue-600 dark:text-blue-400' },
 ])
 
-const driverReportHeaders = computed(() => [store.t('date'), store.t('vehicle'), store.t('type'), store.t('result'), store.t('issues'), store.t('photos'), store.t('signature'), store.t('status'), store.t('actions')])
+const driverReportHeaders = computed(() => [store.t('date'), store.t('vehicle'), store.t('type'), store.t('result'), store.t('issues'), store.t('photos'), store.t('status'), store.t('actions')])
 
 const filtered = computed(() => reports.value.filter(r => {
-  const matchType   = filterType.value   === 'all' || r.type   === filterType.value
+  const matchType   = filterType.value   === 'all' || r.type === filterType.value
   const matchResult = filterResult.value === 'all' || r.result === filterResult.value
-  return matchType && matchResult
+  const time = new Date(r.createdAt).getTime()
+  const afterStart = !startDate.value || time >= new Date(`${startDate.value}T00:00:00`).getTime()
+  const beforeEnd = !endDate.value || time <= new Date(`${endDate.value}T23:59:59`).getTime()
+  return matchType && matchResult && afterStart && beforeEnd
 }))
+
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(filtered.value.length / pageSize.value))
+)
+const paginatedReports = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch([filterType, filterResult, startDate, endDate, pageSize], () => {
+  page.value = 1
+})
+
+function setPageSize(size: number) {
+  pageSize.value = size
+  page.value = 1
+}
 </script>

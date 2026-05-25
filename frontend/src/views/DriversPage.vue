@@ -1,5 +1,27 @@
 <template>
   <AppLayout title="Drivers">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+      <button
+        v-for="stat in driverStats"
+        :key="stat.status"
+        type="button"
+        class="card p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md"
+        :class="
+          driverStore.statusFilter === stat.status
+            ? 'ring-2 ring-blue-500/40'
+            : ''
+        "
+        @click="driverStore.setStatusFilter(stat.status)"
+      >
+        <p class="text-3xl font-bold" :class="stat.color">
+          {{ stat.count }}
+        </p>
+        <p class="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">
+          {{ stat.label }}
+        </p>
+      </button>
+    </div>
+
     <div class="flex flex-wrap items-center gap-3 mb-5">
       <div class="relative flex-1 min-w-48">
         <Search
@@ -42,25 +64,6 @@
     </div>
 
     <template v-else>
-      <div class="flex flex-wrap gap-2 mb-5">
-        <span class="badge-blue">
-          {{ drivers.filter((d) => d.status === "new").length }}
-          New
-        </span>
-        <span class="badge-green">
-          {{ drivers.filter((d) => d.status === "active").length }}
-          {{ store.t("statusActive") }}
-        </span>
-        <span class="badge-yellow">
-          {{ drivers.filter((d) => d.status === "pending").length }}
-          {{ store.t("statusPending") }}
-        </span>
-        <span class="badge-gray">
-          {{ drivers.filter((d) => d.status === "inactive").length }}
-          {{ store.t("statusInactive") }}
-        </span>
-      </div>
-
       <div class="card overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full">
@@ -220,72 +223,13 @@
           </table>
         </div>
 
-        <div
-          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900"
-        >
-          <div class="text-xs text-gray-500 dark:text-gray-400">
-            Showing
-            <span class="font-medium text-gray-700 dark:text-gray-200">
-              {{
-                driverStore.total === 0
-                  ? 0
-                  : (driverStore.page - 1) * driverStore.pageSize + 1
-              }}
-            </span>
-            –
-            <span class="font-medium text-gray-700 dark:text-gray-200">
-              {{
-                Math.min(
-                  driverStore.page * driverStore.pageSize,
-                  driverStore.total
-                )
-              }}
-            </span>
-            of
-            <span class="font-medium text-gray-700 dark:text-gray-200">
-              {{ driverStore.total }}
-            </span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <select
-              :value="driverStore.pageSize"
-              @change="
-                driverStore.setPageSize(
-                  Number(($event.target as HTMLSelectElement).value)
-                )
-              "
-              class="input-field py-1.5 text-xs w-auto"
-            >
-              <option :value="5">5 / page</option>
-              <option :value="10">10 / page</option>
-              <option :value="25">25 / page</option>
-              <option :value="50">50 / page</option>
-            </select>
-
-            <button
-              class="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
-              :disabled="driverStore.page <= 1"
-              @click="driverStore.prevPage()"
-            >
-              Previous
-            </button>
-
-            <div
-              class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-200"
-            >
-              {{ driverStore.page }} / {{ driverStore.totalPages }}
-            </div>
-
-            <button
-              class="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
-              :disabled="driverStore.page >= driverStore.totalPages"
-              @click="driverStore.nextPage()"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <BaseTablePagination
+          :total="driverStore.total"
+          :current-page="driverStore.page"
+          :page-size="driverStore.pageSize"
+          @update:current-page="driverStore.setPage"
+          @update:page-size="driverStore.setPageSize"
+        />
       </div>
     </template>
 
@@ -311,10 +255,12 @@ import {
   MailPlus,
 } from "lucide-vue-next";
 import AppLayout from "../components/layout/AppLayout.vue";
+import BaseTablePagination from "@/components/shared/BaseTablePagination.vue";
 import DriverFormModal from "@/components/drivers/DriverFormModal.vue";
 import { useAppStore } from "../stores/app";
 import { useDriverStore } from "@/stores/driverStore";
 import { useAuthStore } from "@/stores/authStore";
+import { formatDateOnly } from "@/lib/dateFormat";
 
 type Driver = {
   id: string;
@@ -363,6 +309,33 @@ watch(
 
 const drivers = computed<Driver[]>(() => driverStore.drivers as Driver[]);
 
+const driverStats = computed(() => [
+  {
+    status: "new",
+    label: "New",
+    count: driverStore.statusCounts.new || 0,
+    color: "text-blue-600 dark:text-blue-400",
+  },
+  {
+    status: "pending",
+    label: store.t("statusPending"),
+    count: driverStore.statusCounts.pending || 0,
+    color: "text-yellow-600 dark:text-yellow-400",
+  },
+  {
+    status: "active",
+    label: store.t("statusActive"),
+    count: driverStore.statusCounts.active || 0,
+    color: "text-green-600 dark:text-green-400",
+  },
+  {
+    status: "inactive",
+    label: store.t("statusInactive"),
+    count: driverStore.statusCounts.inactive || 0,
+    color: "text-gray-700 dark:text-gray-300",
+  },
+]);
+
 const statusConfig = computed(() => ({
   new: { label: "New", badge: "badge-blue" },
   active: { label: store.t("statusActive"), badge: "badge-green" },
@@ -388,8 +361,7 @@ function isExpired(date?: string | null) {
 }
 
 function formatDate(d: string) {
-  const [y, m, day] = d.split("-");
-  return `${day}/${m}/${y}`;
+  return formatDateOnly(d, store.language);
 }
 
 function initials(name: string) {

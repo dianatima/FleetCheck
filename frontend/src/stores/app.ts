@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
 export type Language = 'en' | 'uk' | 'es' | 'fr'
-export type Role = 'manager' | 'driver' | 'mechanic' | 'admin' | null
+export type Role = 'manager' | 'driver' | 'admin' | null
 
 const translations: Record<Language, Record<string, string>> = {
   en: {
@@ -18,6 +18,8 @@ const translations: Record<Language, Record<string, string>> = {
     vehicles: 'Vehicles',
     drivers: 'Drivers',
     inspections: 'Inspections',
+    inspectionTemplates: 'Inspection Templates',
+    myVehicles: 'My Vehicles',
     reports: 'Reports',
     issues: 'Issues',
     repairs: 'Repairs',
@@ -405,7 +407,7 @@ const translations: Record<Language, Record<string, string>> = {
     photoEvidence: 'Photo Evidence',
     photoEvidenceDesc: 'Capture and store vehicle condition photos with duplicate detection.',
     repairTracking: 'Repair Tracking',
-    repairTrackingDesc: 'Log issues, assign mechanics, and track repairs to completion.',
+    repairTrackingDesc: 'Log issues and track manager-led repairs to completion.',
     analyticsReports: 'Analytics & Reports',
     analyticsReportsDesc: 'Actionable insights on fleet health, driver performance, and trends.',
     footerCopyright: '© 2026 FleetCheck Pro. All rights reserved.',
@@ -826,7 +828,7 @@ const translations: Record<Language, Record<string, string>> = {
     photoEvidence: 'Фотодокументація',
     photoEvidenceDesc: 'Знімайте та зберігайте фото стану транспорту з виявленням дублікатів.',
     repairTracking: 'Відстеження ремонтів',
-    repairTrackingDesc: 'Фіксуйте проблеми, призначайте механіків та відстежуйте ремонти до завершення.',
+    repairTrackingDesc: 'Фіксуйте проблеми та відстежуйте ремонти, якими керує менеджер, до завершення.',
     analyticsReports: 'Аналітика та звіти',
     analyticsReportsDesc: 'Практичні висновки про стан автопарку, продуктивність водіїв та тенденції.',
     footerCopyright: '© 2026 FleetCheck Pro. Всі права захищені.',
@@ -1247,7 +1249,7 @@ const translations: Record<Language, Record<string, string>> = {
     photoEvidence: 'Evidencia Fotográfica',
     photoEvidenceDesc: 'Capture y almacene fotos del estado del vehículo con detección de duplicados.',
     repairTracking: 'Seguimiento de Reparaciones',
-    repairTrackingDesc: 'Registre problemas, asigne mecánicos y rastree reparaciones hasta su finalización.',
+    repairTrackingDesc: 'Registre problemas y rastree reparaciones gestionadas por gerentes hasta su finalización.',
     analyticsReports: 'Analítica e Informes',
     analyticsReportsDesc: 'Información procesable sobre la salud de la flota, rendimiento de conductores y tendencias.',
     footerCopyright: '© 2026 FleetCheck Pro. Todos los derechos reservados.',
@@ -1668,7 +1670,7 @@ const translations: Record<Language, Record<string, string>> = {
     photoEvidence: 'Preuves Photographiques',
     photoEvidenceDesc: "Capturez et stockez des photos de l'état du véhicule avec détection des doublons.",
     repairTracking: 'Suivi des Réparations',
-    repairTrackingDesc: "Enregistrez les problèmes, assignez des mécaniciens et suivez les réparations jusqu'à leur achèvement.",
+    repairTrackingDesc: "Enregistrez les problèmes et suivez les réparations gérées par les responsables jusqu'à leur achèvement.",
     analyticsReports: 'Analytique et Rapports',
     analyticsReportsDesc: "Informations exploitables sur la santé de la flotte, la performance des conducteurs et les tendances.",
     footerCopyright: '© 2026 FleetCheck Pro. Tous droits réservés.',

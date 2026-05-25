@@ -1,5 +1,27 @@
 <template>
   <AppLayout title="Fleet Vehicles">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+      <button
+        v-for="stat in vehicleStats"
+        :key="stat.status"
+        type="button"
+        class="card p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md"
+        :class="
+          vehicleStore.statusFilter === stat.status
+            ? 'ring-2 ring-blue-500/40'
+            : ''
+        "
+        @click="vehicleStore.setStatusFilter(stat.status)"
+      >
+        <p class="text-3xl font-bold" :class="stat.color">
+          {{ stat.count }}
+        </p>
+        <p class="mt-1 text-sm font-medium text-gray-500 dark:text-gray-400">
+          {{ stat.label }}
+        </p>
+      </button>
+    </div>
+
     <div class="flex flex-wrap items-center gap-3 mb-5">
       <div class="relative flex-1 min-w-48">
         <Search
@@ -44,25 +66,6 @@
     </div>
 
     <template v-else>
-      <div class="flex flex-wrap gap-2 mb-5">
-        <span class="badge-green"
-          >{{ vehicles.filter((v) => v.status === "active").length }}
-          {{ store.t("statusActive") }}</span
-        >
-        <span class="badge-orange"
-          >{{ vehicles.filter((v) => v.status === "needs-attention").length }}
-          {{ store.t("statusNeedsAttention") }}</span
-        >
-        <span class="badge-red"
-          >{{ vehicles.filter((v) => v.status === "blocked").length }}
-          {{ store.t("statusBlocked") }}</span
-        >
-        <span class="badge-gray"
-          >{{ vehicles.filter((v) => v.status === "in-repair").length }}
-          {{ store.t("statusInRepair") }}</span
-        >
-      </div>
-
       <div class="card overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full">
@@ -195,72 +198,13 @@
           </table>
         </div>
 
-        <div
-          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900"
-        >
-          <div class="text-xs text-gray-500 dark:text-gray-400">
-            Showing
-            <span class="font-medium text-gray-700 dark:text-gray-200">
-              {{
-                vehicleStore.total === 0
-                  ? 0
-                  : (vehicleStore.page - 1) * vehicleStore.pageSize + 1
-              }}
-            </span>
-            –
-            <span class="font-medium text-gray-700 dark:text-gray-200">
-              {{
-                Math.min(
-                  vehicleStore.page * vehicleStore.pageSize,
-                  vehicleStore.total
-                )
-              }}
-            </span>
-            of
-            <span class="font-medium text-gray-700 dark:text-gray-200">{{
-              vehicleStore.total
-            }}</span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <select
-              :value="vehicleStore.pageSize"
-              @change="
-                vehicleStore.setPageSize(
-                  Number(($event.target as HTMLSelectElement).value)
-                )
-              "
-              class="input-field py-1.5 text-xs w-auto"
-            >
-              <option :value="5">5 / page</option>
-              <option :value="10">10 / page</option>
-              <option :value="25">25 / page</option>
-              <option :value="50">50 / page</option>
-            </select>
-
-            <button
-              class="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
-              :disabled="vehicleStore.page <= 1"
-              @click="vehicleStore.prevPage()"
-            >
-              Previous
-            </button>
-
-            <div
-              class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-200"
-            >
-              {{ vehicleStore.page }} / {{ vehicleStore.totalPages }}
-            </div>
-
-            <button
-              class="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
-              :disabled="vehicleStore.page >= vehicleStore.totalPages"
-              @click="vehicleStore.nextPage()"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <BaseTablePagination
+          :total="vehicleStore.total"
+          :current-page="vehicleStore.page"
+          :page-size="vehicleStore.pageSize"
+          @update:current-page="vehicleStore.setPage"
+          @update:page-size="vehicleStore.setPageSize"
+        />
       </div>
     </template>
 
@@ -279,6 +223,7 @@ import { useRouter } from "vue-router";
 import { Search, Filter, Plus, Pencil, Trash2 } from "lucide-vue-next";
 
 import AppLayout from "../components/layout/AppLayout.vue";
+import BaseTablePagination from "@/components/shared/BaseTablePagination.vue";
 import VehicleFormModal from "@/components/vehicles/VehicleFormModal.vue";
 import { useAppStore } from "../stores/app";
 import { useVehicleStore } from "@/stores/vehicleStore";
@@ -326,6 +271,33 @@ watch(
 );
 
 const vehicles = computed<Vehicle[]>(() => vehicleStore.vehicles as Vehicle[]);
+
+const vehicleStats = computed(() => [
+  {
+    status: "active",
+    label: store.t("statusActive"),
+    count: vehicleStore.statusCounts.active || 0,
+    color: "text-green-600 dark:text-green-400",
+  },
+  {
+    status: "needs-attention",
+    label: store.t("statusNeedsAttention"),
+    count: vehicleStore.statusCounts["needs-attention"] || 0,
+    color: "text-orange-600 dark:text-orange-400",
+  },
+  {
+    status: "blocked",
+    label: store.t("statusBlocked"),
+    count: vehicleStore.statusCounts.blocked || 0,
+    color: "text-red-600 dark:text-red-400",
+  },
+  {
+    status: "in-repair",
+    label: store.t("statusInRepair"),
+    count: vehicleStore.statusCounts["in-repair"] || 0,
+    color: "text-gray-700 dark:text-gray-300",
+  },
+]);
 
 const statusConfig = computed(() => ({
   active: { label: store.t("statusActive"), badge: "badge-green" },

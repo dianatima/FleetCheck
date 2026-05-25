@@ -18,6 +18,12 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
   const search = ref('')
   const statusFilter = ref('all')
+  const statusCounts = ref<Record<string, number>>({
+    active: 0,
+    'needs-attention': 0,
+    blocked: 0,
+    'in-repair': 0,
+  })
 
   const totalPages = computed(() => {
     return Math.max(1, Math.ceil(total.value / pageSize.value))
@@ -53,6 +59,12 @@ export const useVehicleStore = defineStore('vehicles', () => {
     if (!authStore.companyId) {
         vehicles.value = []
         total.value = 0
+        statusCounts.value = {
+          active: 0,
+          'needs-attention': 0,
+          blocked: 0,
+          'in-repair': 0,
+        }
         loading.value = false
         return
     }
@@ -69,8 +81,9 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
     const searchValue = search.value.trim()
 
+    const matchingTypeIds = searchValue ? await findVehicleTypeIds(searchValue) : []
+
     if (searchValue) {
-      const matchingTypeIds = await findVehicleTypeIds(searchValue)
       const filters = [
         `unit.ilike.%${searchValue}%`,
         `make.ilike.%${searchValue}%`,
@@ -84,6 +97,8 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
       query = query.or(filters.join(','))
     }
+
+    await fetchStatusCounts(searchValue, matchingTypeIds)
 
     const { data, count, error: supabaseError } = await query.range(from, to)
 
@@ -111,6 +126,62 @@ export const useVehicleStore = defineStore('vehicles', () => {
     }
 
     return (data || []).map((vehicleType) => vehicleType.id)
+  }
+
+  function vehicleSearchExpression(searchValue: string, matchingTypeIds: string[]) {
+    const filters = [
+      `unit.ilike.%${searchValue}%`,
+      `make.ilike.%${searchValue}%`,
+      `model.ilike.%${searchValue}%`,
+      `plate.ilike.%${searchValue}%`,
+    ]
+
+    if (matchingTypeIds.length) {
+      filters.push(`vehicle_type_id.in.(${matchingTypeIds.join(',')})`)
+    }
+
+    return filters.join(',')
+  }
+
+  async function fetchStatusCounts(searchValue = search.value.trim(), matchingTypeIds?: string[]) {
+    if (!authStore.companyId) {
+      statusCounts.value = {
+        active: 0,
+        'needs-attention': 0,
+        blocked: 0,
+        'in-repair': 0,
+      }
+      return
+    }
+
+    const statuses = ['active', 'needs-attention', 'blocked', 'in-repair']
+    const typeIds = matchingTypeIds ?? (searchValue ? await findVehicleTypeIds(searchValue) : [])
+    const counts = { ...statusCounts.value }
+
+    await Promise.all(
+      statuses.map(async (status) => {
+        let query = supabase
+          .from('vehicles')
+          .select('id', { count: 'exact', head: true })
+          .eq('company_id', authStore.companyId)
+          .eq('status', status)
+
+        if (searchValue) {
+          query = query.or(vehicleSearchExpression(searchValue, typeIds))
+        }
+
+        const { count, error: countError } = await query
+
+        if (countError) {
+          console.error('[vehicleStore] failed to count vehicles by status', countError)
+          counts[status] = 0
+        } else {
+          counts[status] = count || 0
+        }
+      })
+    )
+
+    statusCounts.value = counts
   }
 
   async function fetchVehicleTypes() {
@@ -284,6 +355,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
     search,
     statusFilter,
+    statusCounts,
 
     fetchVehicles,
     fetchVehicleTypes,

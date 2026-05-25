@@ -1,7 +1,57 @@
 <template>
   <AppLayout :title="store.t('inspectionResult')">
-    <RouterLink to="/inspect/pre" class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 text-sm font-medium transition-colors">
-      <ArrowLeft :size="16" /> {{ store.t('backToInspection') }}
+    <RouterLink :to="vehiclePath" class="card vehicle-context-card group">
+      <div class="vehicle-photo">
+        <img
+          v-if="vehicle?.photo_url"
+          :src="vehicle.photo_url"
+          alt=""
+          class="w-full h-full object-cover"
+          @error="hideBrokenImage"
+        />
+        <Truck v-else :size="28" class="text-gray-300 dark:text-gray-600" />
+      </div>
+
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              {{ vehicleName }}
+            </h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {{ vehicle?.unit ? `Unit ${vehicle.unit}` : 'Unit —' }} · {{ vehicle?.plate || 'No plate' }}
+            </p>
+          </div>
+          <span :class="vehicleStatusBadge">{{ vehicleStatusLabel }}</span>
+        </div>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-4 text-xs">
+          <div class="context-tile">
+            <span class="context-label">VIN</span>
+            <span class="context-value font-mono">{{ vehicle?.vin || '—' }}</span>
+          </div>
+          <div class="context-tile">
+            <span class="context-label">Inspection</span>
+            <span class="context-value">{{ typeLabel }}</span>
+          </div>
+          <div class="context-tile">
+            <span class="context-label">Status</span>
+            <span class="context-value capitalize">{{ inspection?.status || '—' }}</span>
+          </div>
+          <div class="context-tile">
+            <span class="context-label">Driver</span>
+            <span class="context-value">{{ driverLabel }}</span>
+          </div>
+          <div class="context-tile">
+            <span class="context-label">Time</span>
+            <span class="context-value">{{ timeLabel }}</span>
+          </div>
+        </div>
+      </div>
+
+      <span class="open-vehicle-btn">
+        <ExternalLink :size="14" /> Open Vehicle
+      </span>
     </RouterLink>
 
     <!-- Result banner -->
@@ -23,7 +73,7 @@
       <h3 class="font-semibold text-gray-900 dark:text-white text-sm mb-4">{{ store.t('inspectionSummary') }}</h3>
       <div class="grid grid-cols-3 gap-3 mb-4">
         <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center">
-          <div class="text-2xl font-bold text-green-600 dark:text-green-400">54</div>
+          <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ passCount }}</div>
           <div class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('statusPassed') }}</div>
         </div>
         <div class="bg-red-50 dark:bg-red-900/20 rounded-xl p-3 text-center">
@@ -31,17 +81,16 @@
           <div class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('statusFailed') }}</div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
-          <div class="text-2xl font-bold text-gray-600 dark:text-gray-300">4</div>
+          <div class="text-2xl font-bold text-gray-600 dark:text-gray-300">{{ naCount }}</div>
           <div class="text-xs text-gray-500 dark:text-gray-400">N/A</div>
         </div>
       </div>
       <div class="grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('vehicle') }}:</span> Kenworth T680 · #1042</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('driver') }}:</span> John Smith</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('type') }}:</span> Pre-Trip Inspection</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('time') }}:</span> May 12, 2026 7:24 AM</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('duration') }}:</span> 18 minutes</div>
-        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('photosTaken') }}:</span> 3</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('vehicle') }}:</span> {{ vehicleName }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('driver') }}:</span> {{ driverLabel }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('type') }}:</span> {{ typeLabel }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('time') }}:</span> {{ timeLabel }}</div>
+        <div><span class="font-medium text-gray-700 dark:text-gray-300">{{ store.t('photosTaken') }}:</span> {{ photoCount }}</div>
       </div>
     </div>
 
@@ -58,44 +107,186 @@
               <p class="text-sm font-medium text-gray-900 dark:text-white">{{ item.item }}</p>
               <p class="text-xs text-gray-500 dark:text-gray-400">{{ item.section }}</p>
             </div>
-            <span :class="item.severity === 'high' ? 'badge-red' : 'badge-orange'">{{ item.severity === 'high' ? store.t('priorityHigh') : store.t('priorityMedium') }}</span>
+            <span v-if="item.requiresPhoto" class="badge-orange">Photo</span>
           </div>
           <p class="text-xs text-red-600 dark:text-red-400 mt-1.5 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg">{{ item.comment }}</p>
+          <div v-if="item.photos.length" class="mt-3 flex flex-wrap gap-2">
+            <img
+              v-for="(photo, index) in item.photos"
+              :key="`${item.item}-${index}`"
+              :src="photo"
+              alt=""
+              class="w-20 h-20 rounded-lg object-cover border border-red-100 dark:border-red-900/40"
+            />
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Actions -->
     <div class="space-y-3 pb-4">
-      <template v-if="!passed">
-        <RouterLink to="/repairs" class="btn-danger w-full py-3 gap-2 text-sm justify-center inline-flex">
-          <Wrench :size="16" /> {{ store.t('createRepairRequest') }}
-        </RouterLink>
-        <button class="w-full flex items-center justify-center gap-2 py-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-400 font-medium rounded-xl hover:bg-orange-100 transition-colors text-sm">
-          <Bell :size="16" /> {{ store.t('notifyManager') }}
-        </button>
-      </template>
-      <RouterLink to="/reports" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
+      <RouterLink :to="reportLink" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
         <FileText :size="16" /> {{ store.t('viewFullReport') }}
       </RouterLink>
-      <RouterLink :to="passed ? '/driver' : '/inspect/pre'" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
-        <RotateCcw :size="16" /> {{ passed ? store.t('backToDashboard') : store.t('fixResubmit') }}
+      <RouterLink to="/driver/vehicles" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
+        <Truck :size="16" /> Back to My Vehicles
+      </RouterLink>
+      <RouterLink to="/driver" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
+        <RotateCcw :size="16" /> {{ store.t('backToDashboard') }}
       </RouterLink>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ArrowLeft, CheckCircle, AlertTriangle, Wrench, Bell, FileText, RotateCcw } from 'lucide-vue-next'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { CheckCircle, AlertTriangle, FileText, RotateCcw, Truck, ExternalLink } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
+import { supabase } from '@/lib/supabase'
 import AppLayout from '../components/layout/AppLayout.vue'
+import { formatDateTime } from '@/lib/dateFormat'
 
 const store = useAppStore()
-const passed = computed(() => store.inspectionResult !== 'fail')
+const authStore = useAuthStore()
+const route = useRoute()
+const inspection = ref<any | null>(null)
+const results = ref<any[]>([])
 
-const failedItems = [
-  { section: 'Tires & Wheels', item: 'Left rear tire pressure', severity: 'high', comment: 'Tire pressure at 65 PSI, minimum required 80 PSI' },
-  { section: 'Lights & Signals', item: 'Left turn signal', severity: 'medium', comment: 'Bulb not functioning, needs replacement' },
-]
+onMounted(loadInspectionResult)
+
+const failedItems = computed(() =>
+  results.value
+    .filter((row) => row.result === 'fail')
+    .map((row) => ({
+      section: row.inspection_template_items?.category || 'Checklist',
+      item: row.inspection_template_items?.title || 'Checklist item',
+      requiresPhoto: Boolean(row.inspection_template_items?.requires_photo),
+      comment: row.comment || '',
+      photos: row.photo_urls || [],
+    }))
+)
+const passed = computed(() => results.value.length ? failedItems.value.length === 0 : store.inspectionResult !== 'fail')
+const passCount = computed(() => results.value.filter((row) => row.result === 'pass').length)
+const naCount = computed(() => results.value.filter((row) => row.result === 'not_applicable').length)
+const photoCount = computed(() => results.value.reduce((count, row) => count + (row.photo_urls?.length || 0), 0))
+const vehicle = computed(() => {
+  return Array.isArray(inspection.value?.vehicles) ? inspection.value.vehicles[0] : inspection.value?.vehicles
+})
+const vehicleName = computed(() => {
+  const vehicleValue = vehicle.value
+  const name = `${vehicleValue?.make || ''} ${vehicleValue?.model || ''}`.trim()
+  return name || 'Vehicle'
+})
+const driverLabel = computed(() => {
+  const driver = Array.isArray(inspection.value?.drivers) ? inspection.value.drivers[0] : inspection.value?.drivers
+  return driver?.name || '—'
+})
+const typeLabel = computed(() => inspection.value?.type === 'post-trip' ? store.t('postTripInspection') : store.t('preTripInspection'))
+const vehiclePath = computed(() => {
+  const id = inspection.value?.vehicle_id || vehicle.value?.id
+  const prefix = authStore.profile?.role === 'driver' ? '/driver/vehicles' : '/vehicles'
+  return id ? `${prefix}/${id}` : prefix
+})
+const vehicleStatusLabel = computed(() => {
+  return {
+    active: store.t('statusActive'),
+    'needs-attention': store.t('statusNeedsAttention'),
+    blocked: store.t('statusBlocked'),
+    'in-repair': store.t('statusInRepair'),
+  }[vehicle.value?.status as string] || vehicle.value?.status || '—'
+})
+const vehicleStatusBadge = computed(() => {
+  return {
+    active: 'badge-green',
+    'needs-attention': 'badge-orange',
+    blocked: 'badge-red',
+    'in-repair': 'badge-gray',
+  }[vehicle.value?.status as string] || 'badge-gray'
+})
+const reportLink = computed(() =>
+  inspection.value?.id ? `/driver/reports/${inspection.value.id}` : '/driver/reports'
+)
+const timeLabel = computed(() =>
+  formatDateTime(inspection.value?.created_at, store.language)
+)
+
+async function loadInspectionResult() {
+  const inspectionId = String(route.query.inspectionId || '')
+  if (!inspectionId) return
+
+  const { data: inspectionData } = await supabase
+    .from('inspections')
+    .select(`
+      id,
+      type,
+      status,
+      created_at,
+      submitted_at,
+      vehicle_id,
+      vehicles (
+        id,
+        unit,
+        make,
+        model,
+        plate,
+        vin,
+        status,
+        photo_url
+      ),
+      drivers (
+        name
+      )
+    `)
+    .eq('id', inspectionId)
+    .single()
+  inspection.value = inspectionData || null
+
+  const { data } = await supabase
+    .from('inspection_results')
+    .select(`
+      id,
+      result,
+      comment,
+      photo_urls,
+      inspection_template_items (
+        title,
+        category,
+        requires_photo
+      )
+    `)
+    .eq('inspection_id', inspectionId)
+  results.value = data || []
+}
+
+function hideBrokenImage(e: Event) {
+  ;(e.target as HTMLImageElement).style.display = 'none'
+}
 </script>
+
+<style scoped>
+.vehicle-context-card {
+  @apply p-4 mb-5 flex flex-col lg:flex-row gap-4 items-stretch lg:items-center transition-all hover:shadow-md hover:border-blue-100 dark:hover:border-blue-900/40 cursor-pointer;
+}
+
+.vehicle-photo {
+  @apply w-full lg:w-28 h-36 lg:h-24 rounded-xl bg-gray-100 dark:bg-gray-800 overflow-hidden flex items-center justify-center flex-shrink-0;
+}
+
+.context-tile {
+  @apply rounded-lg bg-gray-50 dark:bg-gray-800/70 px-3 py-2 min-w-0;
+}
+
+.context-label {
+  @apply block text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500;
+}
+
+.context-value {
+  @apply block text-xs font-semibold text-gray-800 dark:text-gray-100 mt-0.5 truncate;
+}
+
+.open-vehicle-btn {
+  @apply inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 whitespace-nowrap self-start lg:self-center;
+}
+</style>
