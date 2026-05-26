@@ -83,8 +83,14 @@
                   <p class="text-sm font-semibold text-gray-900 dark:text-white">
                     {{ row.inspection_template_items?.title || 'Checklist item' }}
                   </p>
-                  <span v-if="row.inspection_template_items?.category" class="badge-gray">
-                    {{ row.inspection_template_items.category }}
+                  <span v-if="row.inspection_template_items?.inspection_item_categories?.name" class="badge-gray">
+                    {{ row.inspection_template_items.inspection_item_categories.name }}
+                  </span>
+                  <span
+                    v-if="row.inspection_template_items?.inspection_item_categories?.severity"
+                    :class="severityBadge(row.inspection_template_items.inspection_item_categories.severity)"
+                  >
+                    {{ severityLabel(row.inspection_template_items.inspection_item_categories.severity) }}
                   </span>
                   <span v-if="row.inspection_template_items?.is_required" class="badge-blue">Required</span>
                   <span v-if="row.inspection_template_items?.requires_photo" class="badge-orange">Photo</span>
@@ -124,7 +130,10 @@
           <div v-for="issue in issues" :key="issue.id" class="p-4">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ issue.title || 'Inspection issue' }}</p>
-              <span class="badge-red">{{ issue.status || 'under-review' }}</span>
+              <div class="flex flex-wrap items-center gap-2">
+                <span :class="severityBadge(issue.severity)">{{ severityLabel(issue.severity) }}</span>
+                <span class="badge-red">{{ issue.status || 'under-review' }}</span>
+              </div>
             </div>
             <p v-if="issue.description" class="text-sm text-gray-600 dark:text-gray-300 mt-2">{{ issue.description }}</p>
             <div v-if="issue.photo_urls?.length" class="mt-3 flex flex-wrap gap-2">
@@ -249,7 +258,12 @@ async function loadReport() {
         inspection_template_items (
           title,
           description,
-          category,
+          category_id,
+          inspection_item_categories (
+            id,
+            name,
+            severity
+          ),
           is_required,
           requires_photo,
           sort_order
@@ -259,6 +273,7 @@ async function loadReport() {
         id,
         title,
         description,
+        severity,
         status,
         photo_urls,
         inspection_result_id
@@ -310,6 +325,22 @@ function resultBadge(result: string) {
   if (result === 'pass') return 'badge-green'
   if (result === 'fail') return 'badge-red'
   return 'badge-gray'
+}
+
+function severityLabel(severity: string | null) {
+  return {
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+  }[severity || 'medium'] || 'Medium'
+}
+
+function severityBadge(severity: string | null) {
+  return {
+    low: 'badge-green',
+    medium: 'badge-orange',
+    high: 'badge-red',
+  }[severity || 'medium'] || 'badge-orange'
 }
 
 function hideBrokenImage(e: Event) {

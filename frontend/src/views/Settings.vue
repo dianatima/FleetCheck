@@ -363,6 +363,11 @@
       <InspectionTemplatesManager />
     </div>
 
+    <!-- Inspection Item Categories -->
+    <div v-else-if="activeTab === 'inspection-item-categories'">
+      <InspectionItemCategoriesManager />
+    </div>
+
     <CompanyFormModal
       v-model="showCompanyModal"
       :company="editingCompany"
@@ -385,6 +390,7 @@ import {
   Building2,
   ClipboardList,
   Globe,
+  Tags,
   Sun,
   Moon,
   Check,
@@ -403,6 +409,7 @@ import AppLayout from "../components/layout/AppLayout.vue";
 import CompanyFormModal from "@/components/settings/CompanyFormModal.vue";
 import VehicleAccessRuleFormModal from "@/components/settings/VehicleAccessRuleFormModal.vue";
 import InspectionTemplatesManager from "@/components/inspection-templates/InspectionTemplatesManager.vue";
+import InspectionItemCategoriesManager from "@/components/settings/InspectionItemCategoriesManager.vue";
 import {
   useVehicleAccessRulesStore,
   type VehicleAccessRulePayload,
@@ -434,10 +441,11 @@ const tabs = computed(() => {
     { id: "theme", icon: Sun, label: store.t("appearance") },
     { id: "vehicle-access", icon: KeyRound, label: "Vehicle Access Rules" },
     { id: "inspection-templates", icon: ClipboardList, label: store.t("inspectionTemplates") },
+    { id: "inspection-item-categories", icon: Tags, label: "Inspection Item Categories" },
   ];
 
   if (authStore.role === "driver") {
-    return baseTabs.filter((tab) => !["vehicle-access", "inspection-templates"].includes(tab.id));
+    return baseTabs.filter((tab) => !["vehicle-access", "inspection-templates", "inspection-item-categories"].includes(tab.id));
   }
 
   return baseTabs;
@@ -506,6 +514,16 @@ onMounted(async () => {
 watch(
   () => route.query.tab,
   () => syncActiveTabFromRoute()
+);
+
+watch(
+  tabs,
+  () => {
+    if (!tabs.value.some((item) => item.id === activeTab.value)) {
+      activeTab.value = "company";
+      router.replace({ path: "/settings" });
+    }
+  }
 );
 
 watch(

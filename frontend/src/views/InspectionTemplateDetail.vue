@@ -86,6 +86,7 @@
             :item="item"
             :index="index"
             :count="items.length"
+            :categories="templateStore.itemCategories"
             @update="updateItem"
             @remove="removeItem"
             @move="moveItem"
@@ -136,6 +137,7 @@ watch(
     if (companyId) {
       await templateStore.fetchTemplateById(templateId.value)
       await templateStore.fetchVehicleTypes()
+      await templateStore.fetchItemCategories()
     }
   },
   { immediate: true }
@@ -148,7 +150,7 @@ watch(
       id: item.id,
       title: item.title || '',
       description: item.description || null,
-      category: item.category || null,
+      category_id: item.category_id || '',
       is_required: Boolean(item.is_required),
       requires_photo: Boolean(item.requires_photo),
       sort_order: index + 1,
@@ -167,7 +169,7 @@ function addItem() {
   items.value.push({
     title: '',
     description: null,
-    category: null,
+    category_id: templateStore.itemCategories[0]?.id || '',
     is_required: true,
     requires_photo: false,
     sort_order: items.value.length + 1,

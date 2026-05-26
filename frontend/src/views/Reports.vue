@@ -323,8 +323,7 @@ async function fetchReports() {
         result,
         photo_urls,
         inspection_template_items (
-          title,
-          category
+          title
         )
       ),
       issues (

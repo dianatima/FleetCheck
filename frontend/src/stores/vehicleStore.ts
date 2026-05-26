@@ -242,11 +242,17 @@ export const useVehicleStore = defineStore('vehicles', () => {
       loading.value = false
       return false
     }
+
+    const payload = normalizeVehiclePayload(vehicle, true)
+    if (!payload) {
+      loading.value = false
+      return false
+    }
   
     const { data, error: supabaseError } = await supabase
       .from('vehicles')
       .insert({
-        ...vehicle,
+        ...payload,
         company_id: authStore.companyId,
       })
       .select(vehicleSelect)
@@ -266,9 +272,15 @@ export const useVehicleStore = defineStore('vehicles', () => {
     loading.value = true
     error.value = null
 
+    const payload = normalizeVehiclePayload(vehicle, false)
+    if (!payload) {
+      loading.value = false
+      return false
+    }
+
     const { error: supabaseError } = await supabase
       .from('vehicles')
-      .update(vehicle)
+      .update(payload)
       .eq('id', id)
       .eq('company_id', authStore.companyId)
 
@@ -286,6 +298,44 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
     loading.value = false
     return true
+  }
+
+  function normalizeVehiclePayload(vehicle: any, requireVehicleType: boolean) {
+    if (requireVehicleType && !vehicle?.vehicle_type_id) {
+      error.value = 'Vehicle type is required'
+      return null
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(vehicle || {}, 'vehicle_type_id') &&
+      !vehicle.vehicle_type_id
+    ) {
+      error.value = 'Vehicle type is required'
+      return null
+    }
+
+    const allowedFields = [
+      'unit',
+      'vehicle_type_id',
+      'make',
+      'model',
+      'year',
+      'plate',
+      'vin',
+      'odometer',
+      'engine_hours',
+      'status',
+      'photo_url',
+    ]
+    const payload: Record<string, any> = {}
+
+    for (const field of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(vehicle || {}, field)) {
+        payload[field] = vehicle[field]
+      }
+    }
+
+    return payload
   }
 
   async function deleteVehicle(id: string) {

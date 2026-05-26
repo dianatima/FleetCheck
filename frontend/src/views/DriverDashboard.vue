@@ -73,7 +73,8 @@
               <tr
                 v-for="vehicle in availableVehicles"
                 :key="vehicle.id"
-                class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+                class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
+                @click="router.push(`/driver/vehicles/${vehicle.id}`)"
               >
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-3">
@@ -98,20 +99,20 @@
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-1">
-                    <RouterLink :to="`/driver/vehicles/${vehicle.id}`" class="icon-btn" title="View vehicle">
+                    <RouterLink :to="`/driver/vehicles/${vehicle.id}`" class="icon-btn" title="View vehicle" @click.stop>
                       <Eye :size="15" />
                     </RouterLink>
                     <button
                       class="btn-primary px-2 py-1.5 text-xs whitespace-nowrap"
                       :disabled="!canStartPreTrip(vehicle) || startingVehicleId === vehicle.id"
-                      @click="startPreTrip(vehicle)"
+                      @click.stop="startPreTrip(vehicle)"
                     >
                       Pre-trip
                     </button>
                     <button
                       class="btn-secondary px-2 py-1.5 text-xs whitespace-nowrap"
                       :disabled="!canStartPostTrip(vehicle) || startingVehicleId === vehicle.id"
-                      @click="startPostTrip(vehicle)"
+                      @click.stop="startPostTrip(vehicle)"
                     >
                       Post-trip
                     </button>
@@ -150,7 +151,8 @@
                 <tr
                   v-for="report in recentReports"
                   :key="report.id"
-                  class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+                  class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
+                  @click="router.push(`/driver/reports/${report.id}`)"
                 >
                   <td class="px-4 py-3">
                     <div class="flex items-center gap-3 min-w-56">
@@ -174,8 +176,8 @@
                   <td class="table-td">{{ typeLabel(report.type) }}</td>
                   <td class="px-5 py-3"><span :class="reportResultBadge(report)">{{ reportResultLabel(report) }}</span></td>
                   <td class="table-td">{{ formatDate(report.submitted_at || report.created_at) }}</td>
-                  <td class="px-5 py-3">
-                    <RouterLink :to="`/driver/reports/${report.id}`" class="icon-btn" title="Open Report">
+                  <td class="px-5 py-3" @click.stop>
+                    <RouterLink :to="`/driver/reports/${report.id}`" class="icon-btn" title="Open Report" @click.stop>
                       <FileText :size="14" />
                     </RouterLink>
                   </td>

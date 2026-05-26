@@ -170,6 +170,7 @@ interface Item {
   title: string
   description: string | null
   category: string | null
+  categorySeverity: 'low' | 'medium' | 'high'
   isRequired: boolean
   requiresPhoto: boolean
   sortOrder: number
@@ -270,7 +271,12 @@ async function loadInspectionItems() {
       inspection_template_items (
         title,
         description,
-        category,
+        category_id,
+        inspection_item_categories (
+          id,
+          name,
+          severity
+        ),
         is_required,
         requires_photo,
         sort_order
@@ -287,7 +293,9 @@ async function loadInspectionItems() {
       id: result.id,
       title: result.inspection_template_items?.title || 'Checklist item',
       description: result.inspection_template_items?.description || null,
-      category: result.inspection_template_items?.category || null,
+      category: result.inspection_template_items?.inspection_item_categories?.name || null,
+      categorySeverity:
+        result.inspection_template_items?.inspection_item_categories?.severity || 'medium',
       isRequired: Boolean(result.inspection_template_items?.is_required),
       requiresPhoto: Boolean(result.inspection_template_items?.requires_photo),
       sortOrder: result.inspection_template_items?.sort_order || 0,
@@ -428,6 +436,7 @@ async function createIssuesForFailedResults(inspectionId: string) {
     inspection_id: inspectionId,
     inspection_result_id: item.id,
     status: 'under-review',
+    severity: item.categorySeverity || 'medium',
     photo_urls: item.photos,
     title: item.title,
     description: item.comment || item.description || item.title,

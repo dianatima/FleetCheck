@@ -174,7 +174,7 @@ const failedItems = computed(() =>
   results.value
     .filter((row) => row.result === 'fail')
     .map((row) => ({
-      section: row.inspection_template_items?.category || 'Checklist',
+      section: row.inspection_template_items?.inspection_item_categories?.name || 'Checklist',
       item: row.inspection_template_items?.title || 'Checklist item',
       requiresPhoto: Boolean(row.inspection_template_items?.requires_photo),
       comment: row.comment || '',
@@ -266,7 +266,12 @@ async function loadInspectionResult() {
       photo_urls,
       inspection_template_items (
         title,
-        category,
+        category_id,
+        inspection_item_categories (
+          id,
+          name,
+          severity
+        ),
         requires_photo
       )
     `)

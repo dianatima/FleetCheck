@@ -116,7 +116,7 @@
 
       <div v-else class="space-y-5">
         <button
-          @click="selectedRepair = null"
+          @click="closeRepairDetail"
           class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium transition-colors"
         >
           <ArrowLeft :size="16" /> {{ store.t('backToRepairs') }}
@@ -347,7 +347,7 @@ watch(
 )
 
 watch(
-  () => route.query.repairId,
+  () => [route.params.id, route.query.repairId],
   () => selectRepairFromRoute()
 )
 
@@ -391,6 +391,7 @@ async function fetchRepairData() {
         title,
         description,
         status,
+        severity,
         photo_urls,
         created_at,
         drivers (
@@ -408,8 +409,7 @@ async function fetchRepairData() {
           comment,
           photo_urls,
           inspection_template_items (
-            title,
-            category
+            title
           )
         )
       )
@@ -435,9 +435,20 @@ async function fetchRepairData() {
 }
 
 function selectRepairFromRoute() {
-  const repairId = String(route.query.repairId || '')
-  if (!repairId || !repairs.value.length) return
+  const repairId = String(route.params.id || route.query.repairId || '')
+  if (!repairId) {
+    selectedRepair.value = null
+    return
+  }
+  if (!repairs.value.length) return
   selectedRepair.value = repairs.value.find((repair) => repair.id === repairId) || selectedRepair.value
+}
+
+function closeRepairDetail() {
+  selectedRepair.value = null
+  if (route.params.id || route.query.repairId) {
+    router.push('/repairs')
+  }
 }
 
 async function updateRepairStatus(repair: any, status: RepairStatus) {
@@ -606,17 +617,27 @@ function photoUrls(repair: any) {
 }
 
 function issueSeverity(issue: any) {
-  const category = issue?.inspection_results?.inspection_template_items?.category?.toLowerCase() || ''
-  if (['brakes', 'steering', 'tires', 'engine'].some((value) => category.includes(value))) return 'High'
-  if (issue?.status === 'in-repair') return 'Confirmed'
-  return 'Review'
+  return severityLabel(issue?.severity)
 }
 
 function severityBadge(issue: any) {
-  const severity = issueSeverity(issue)
-  if (severity === 'High') return 'badge-red'
-  if (severity === 'Confirmed') return 'badge-orange'
-  return 'badge-yellow'
+  return severityBadgeValue(issue?.severity)
+}
+
+function severityLabel(severity: string | null) {
+  return {
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+  }[severity || 'medium'] || 'Medium'
+}
+
+function severityBadgeValue(severity: string | null) {
+  return {
+    low: 'badge-green',
+    medium: 'badge-orange',
+    high: 'badge-red',
+  }[severity || 'medium'] || 'badge-orange'
 }
 
 function repairStatusLabel(status: string) {

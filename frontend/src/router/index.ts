@@ -31,6 +31,7 @@ const router = createRouter({
     { path: '/inspect/post', name: 'post-trip', component: () => import('../views/PreTripInspection.vue'), props: { isPostTrip: true } },
     { path: '/inspect/result', name: 'inspection-result', component: () => import('../views/InspectionResult.vue') },
     { path: '/repairs', name: 'repairs', component: () => import('../views/RepairRequest.vue') },
+    { path: '/repairs/:id', name: 'repair-detail', component: () => import('../views/RepairRequest.vue') },
     { path: '/reports', name: 'reports', component: () => import('../views/Reports.vue') },
     { path: '/reports/:inspectionId', name: 'report-detail', component: () => import('../views/DriverReportDetail.vue') },
     { path: '/issues', name: 'issues', component: () => import('../views/IssuesList.vue') },
@@ -70,6 +71,7 @@ router.beforeEach((to) => {
     'issues',
     'issue-detail',
     'repairs',
+    'repair-detail',
     'settings',
     'inspection-template-detail',
   ]

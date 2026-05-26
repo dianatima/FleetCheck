@@ -20,7 +20,10 @@
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{{ vehicleLabel }} · {{ driverLabel }}</p>
               </div>
             </div>
-            <span :class="statusBadge[issue.status] || 'badge-gray'">{{ statusText(issue.status) }}</span>
+            <div class="flex flex-wrap items-center gap-2">
+              <span :class="severityBadge(issue.severity)">{{ severityLabel(issue.severity) }}</span>
+              <span :class="statusBadge[issue.status] || 'badge-gray'">{{ statusText(issue.status) }}</span>
+            </div>
           </div>
         </div>
 
@@ -202,6 +205,7 @@ const basicInfo = computed(() => issue.value ? [
   { icon: Hash, label: store.t('issue'), value: issueNumber.value },
   { icon: Truck, label: store.t('vehicle'), value: vehicleLabel.value },
   { icon: User, label: store.t('driver'), value: driverLabel.value },
+  { icon: null, label: store.t('severity'), value: severityLabel(issue.value.severity) },
   { icon: null, label: store.t('inspectionType'), value: inspectionLabel.value },
   { icon: Calendar, label: store.t('inspectionDate'), value: inspectionDate.value },
   { icon: Calendar, label: store.t('issueDate'), value: formatDate(issue.value.created_at) },
@@ -226,6 +230,7 @@ async function fetchIssue() {
       title,
       description,
       status,
+      severity,
       photo_urls,
       created_at,
       vehicles (
@@ -248,8 +253,7 @@ async function fetchIssue() {
       inspection_results (
         id,
         inspection_template_items (
-          title,
-          category
+          title
         )
       )
     `)
@@ -419,6 +423,22 @@ function statusText(status: string) {
   }[status] || status || '—'
 }
 
+function severityLabel(severity: string | null) {
+  return {
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+  }[severity || 'medium'] || 'Medium'
+}
+
+function severityBadge(severity: string | null) {
+  return {
+    low: 'badge-green',
+    medium: 'badge-orange',
+    high: 'badge-red',
+  }[severity || 'medium'] || 'badge-orange'
+}
+
 function vehicleStatusLabel(status: string) {
   return {
     active: 'Active',
@@ -451,4 +471,5 @@ function flash(message: string) {
 .badge-yellow { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400; }
 .badge-orange { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400; }
 .badge-blue { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400; }
+.badge-red { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
 </style>

@@ -64,6 +64,12 @@ function resultLabel(result: string | null): string {
   return 'Not answered'
 }
 
+function severityLabel(severity: string | null): string {
+  if (severity === 'low') return 'Low'
+  if (severity === 'high') return 'High'
+  return 'Medium'
+}
+
 function reportResult(status: string, results: any[]): ReportResult {
   if (status === 'draft') return 'Draft'
   return results.some((row) => row.result === 'fail') ? 'Fail' : 'Pass'
@@ -454,7 +460,7 @@ function drawChecklist(pdf: ReportPdf, results: any[]) {
 
     pdf.rect(MARGIN, y, CONTENT_WIDTH, height, colors.white, colors.gray300)
     pdf.text(`${index + 1}. ${text(item.title, 'Checklist item')}`, MARGIN + 14, pdf.y - 20, { size: 11, bold: true, color: colors.gray900, maxWidth: 330 })
-    pdf.text(text(item.category, 'Checklist'), MARGIN + 14, pdf.y - 37, { size: 8, color: colors.gray500, bold: true })
+    pdf.text(text(item.inspection_item_categories?.name, 'Checklist'), MARGIN + 14, pdf.y - 37, { size: 8, color: colors.gray500, bold: true })
     if (item.requires_photo) pdf.badge('Photo required', MARGIN + 130, pdf.y - 33)
     pdf.badge(resultLabel(row.result), PAGE_WIDTH - MARGIN - 104, pdf.y - 21)
 
@@ -483,14 +489,16 @@ function drawIssues(pdf: ReportPdf, issues: any[], repairsByIssueId: Map<string,
     const repair = repairsByIssueId.get(issue.id)
     const notes = [issue.description, repair?.description].filter(Boolean).join(' · ')
     const notesLines = notes ? wrapText(notes, CONTENT_WIDTH - 28, 9) : []
-    const height = Math.max(58, 54 + notesLines.length * 12)
+    const badgeSpace = repair?.status ? 82 : 58
+    const height = Math.max(badgeSpace, 54 + notesLines.length * 12)
     pdf.ensure(height + 8)
     const y = pdf.y - height
 
     pdf.rect(MARGIN, y, CONTENT_WIDTH, height, colors.orangeLight, colors.gray300)
     pdf.text(`${index + 1}. ${text(issue.title, 'Inspection issue')}`, MARGIN + 14, pdf.y - 20, { size: 11, bold: true, color: colors.gray900, maxWidth: 310 })
-    pdf.badge(reviewStatus([issue]), PAGE_WIDTH - MARGIN - 120, pdf.y - 20)
-    if (repair?.status) pdf.badge(`Repair: ${repair.status}`, PAGE_WIDTH - MARGIN - 120, pdf.y - 45)
+    pdf.badge(severityLabel(issue.severity), PAGE_WIDTH - MARGIN - 120, pdf.y - 20)
+    pdf.badge(reviewStatus([issue]), PAGE_WIDTH - MARGIN - 120, pdf.y - 45)
+    if (repair?.status) pdf.badge(`Repair: ${repair.status}`, PAGE_WIDTH - MARGIN - 120, pdf.y - 70)
     if (notes) {
       pdf.text(`Notes: ${notes}`, MARGIN + 14, pdf.y - 42, { size: 9, color: colors.gray700, maxWidth: CONTENT_WIDTH - 155 })
     }
@@ -554,7 +562,12 @@ export async function downloadInspectionReportPdf(
         inspection_template_items (
           title,
           description,
-          category,
+          category_id,
+          inspection_item_categories (
+            id,
+            name,
+            severity
+          ),
           is_required,
           requires_photo,
           sort_order
@@ -564,6 +577,7 @@ export async function downloadInspectionReportPdf(
         id,
         title,
         description,
+        severity,
         status,
         photo_urls,
         inspection_result_id

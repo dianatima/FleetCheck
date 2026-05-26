@@ -23,13 +23,35 @@
           />
         </div>
         <div>
-          <label class="label">Category</label>
+          <label class="label">Category <span class="text-red-500">*</span></label>
           <input
-            :value="item.category || ''"
+            v-if="!categories.length"
+            value=""
             class="input-field"
-            placeholder="Brakes"
-            @input="patch({ category: inputValue($event) || null })"
+            placeholder="Create categories in Settings first"
+            disabled
           />
+          <select
+            v-else
+            :value="item.category_id"
+            class="input-field"
+            required
+            @change="patch({ category_id: inputValue($event) })"
+          >
+            <option value="" disabled>Select category</option>
+            <option
+              v-for="category in categories"
+              :key="category.id"
+              :value="category.id"
+            >
+              {{ category.name }}
+            </option>
+          </select>
+          <p v-if="selectedCategory" class="mt-1">
+            <span :class="severityBadge(selectedCategory.severity)">
+              {{ severityLabel(selectedCategory.severity) }}
+            </span>
+          </p>
         </div>
       </div>
 
@@ -100,6 +122,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ArrowDown, ArrowUp, GripVertical, Trash2 } from 'lucide-vue-next'
 import type { TemplateItemDraft } from '@/stores/inspectionTemplateStore'
 
@@ -107,6 +130,7 @@ const props = defineProps<{
   item: TemplateItemDraft
   index: number
   count: number
+  categories: Array<{ id: string; name: string; severity: 'low' | 'medium' | 'high' }>
 }>()
 
 const emit = defineEmits<{
@@ -127,6 +151,26 @@ function inputValue(event: Event) {
 
 function checkedValue(event: Event) {
   return (event.target as HTMLInputElement).checked
+}
+
+const selectedCategory = computed(() =>
+  props.categories.find((category) => category.id === props.item.category_id)
+)
+
+function severityLabel(severity: string) {
+  return {
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+  }[severity] || 'Medium'
+}
+
+function severityBadge(severity: string) {
+  return {
+    low: 'badge-green',
+    medium: 'badge-orange',
+    high: 'badge-red',
+  }[severity] || 'badge-orange'
 }
 </script>
 

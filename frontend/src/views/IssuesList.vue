@@ -66,6 +66,9 @@
                   </div>
                 </div>
               </td>
+              <td class="px-4 py-3">
+                <span :class="severityBadge(issue.severity)">{{ severityLabel(issue.severity) }}</span>
+              </td>
               <td class="table-td">{{ vehicleLabel(issue) }}</td>
               <td class="table-td">{{ issue.drivers?.name || '—' }}</td>
               <td class="table-td">{{ inspectionLabel(issue) }}</td>
@@ -87,7 +90,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Search, Filter, Wrench } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import BaseTablePagination from '@/components/shared/BaseTablePagination.vue'
@@ -96,6 +99,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 
 const router = useRouter()
+const route = useRoute()
 const store = useAppStore()
 const authStore = useAuthStore()
 const search = ref('')
@@ -137,6 +141,7 @@ async function fetchIssues() {
       title,
       description,
       status,
+      severity,
       photo_urls,
       created_at,
       vehicles (
@@ -160,7 +165,12 @@ async function fetchIssues() {
         id,
         inspection_template_items (
           title,
-          category
+          category_id,
+          inspection_item_categories (
+            id,
+            name,
+            severity
+          )
         )
       )
     `)
@@ -183,21 +193,38 @@ const summaryStats = computed(() => [
   { label: store.t('statusFixed'), count: issues.value.filter(i => i.status === 'fixed').length, color: 'text-green-600 dark:text-green-400' },
 ])
 
-const issueHeaders = computed(() => [store.t('issue'), store.t('vehicle'), store.t('driver'), store.t('inspection'), store.t('status')])
+const issueHeaders = computed(() => [
+  store.t('issue'),
+  store.t('severity'),
+  store.t('vehicle'),
+  store.t('driver'),
+  store.t('inspection'),
+  store.t('status'),
+])
 
 const filtered = computed(() => issues.value.filter((issue) => {
   const q = search.value.trim().toLowerCase()
+  const templateItem = issueTemplateItem(issue)
+  const selectedCategory = String(route.query.category || '')
   const haystack = [
     issue.title,
     issue.description,
     vehicleLabel(issue),
     issue.drivers?.name,
     issueNumber(issue),
-    issue.inspection_results?.inspection_template_items?.title,
+    severityLabel(issue.severity),
+    templateItem?.title,
+    templateItem?.inspection_item_categories?.name,
   ].filter(Boolean).join(' ').toLowerCase()
   const matchSearch = !q || haystack.includes(q)
   const matchStatus = filterStatus.value === 'all' || issue.status === filterStatus.value
-  return matchSearch && matchStatus
+  const matchCategory =
+    !selectedCategory ||
+    templateItem?.category_id === selectedCategory ||
+    templateItem?.inspection_item_categories?.id === selectedCategory ||
+    templateItem?.inspection_item_categories?.name === selectedCategory
+
+  return matchSearch && matchStatus && matchCategory
 }))
 
 const paginatedIssues = computed(() => {
@@ -205,7 +232,7 @@ const paginatedIssues = computed(() => {
   return filtered.value.slice(start, start + pageSize.value)
 })
 
-watch([search, filterStatus, pageSize], () => {
+watch([search, filterStatus, pageSize, () => route.query.category], () => {
   page.value = 1
 })
 
@@ -230,6 +257,15 @@ function inspectionLabel(issue: any) {
   return inspection.type === 'post-trip' ? 'Post-trip' : 'Pre-trip'
 }
 
+function relation(value: any) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function issueTemplateItem(issue: any) {
+  const result = relation(issue.inspection_results)
+  return relation(result?.inspection_template_items)
+}
+
 function statusText(status: string) {
   return {
     'under-review': store.t('statusUnderReview'),
@@ -237,6 +273,22 @@ function statusText(status: string) {
     fixed: store.t('statusFixed'),
     rejected: store.t('statusRejected'),
   }[status] || status || '—'
+}
+
+function severityLabel(severity: string | null) {
+  return {
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+  }[severity || 'medium'] || 'Medium'
+}
+
+function severityBadge(severity: string | null) {
+  return {
+    low: 'badge-green',
+    medium: 'badge-orange',
+    high: 'badge-red',
+  }[severity || 'medium'] || 'badge-orange'
 }
 </script>
 
@@ -251,4 +303,5 @@ function statusText(status: string) {
 
 .badge-yellow { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400; }
 .badge-orange { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400; }
+.badge-red { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
 </style>

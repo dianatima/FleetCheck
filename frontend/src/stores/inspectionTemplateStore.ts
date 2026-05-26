@@ -7,7 +7,7 @@ export type TemplateItemDraft = {
   id?: string
   title: string
   description: string | null
-  category: string | null
+  category_id: string
   is_required: boolean
   requires_photo: boolean
   sort_order: number
@@ -36,10 +36,15 @@ const templateSelect = `
     id,
     title,
     description,
-    category,
+    category_id,
     is_required,
     requires_photo,
-    sort_order
+    sort_order,
+    inspection_item_categories (
+      id,
+      name,
+      severity
+    )
   )
 `
 
@@ -48,6 +53,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
   const templates = ref<any[]>([])
   const selectedTemplate = ref<any | null>(null)
   const vehicleTypes = ref<any[]>([])
+  const itemCategories = ref<any[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   const search = ref('')
@@ -74,6 +80,23 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     }
 
     vehicleTypes.value = data || []
+    return true
+  }
+
+  async function fetchItemCategories() {
+    const { data, error: categoriesError } = await supabase
+      .from('inspection_item_categories')
+      .select('id, name, severity, sort_order')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+
+    if (categoriesError) {
+      error.value = categoriesError.message
+      itemCategories.value = []
+      return false
+    }
+
+    itemCategories.value = data || []
     return true
   }
 
@@ -163,6 +186,18 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return null
     }
 
+    if (!itemCategories.value.length) {
+      await fetchItemCategories()
+    }
+
+    const defaultCategoryId = itemCategories.value[0]?.id
+
+    if (!defaultCategoryId) {
+      error.value = 'Create an inspection item category before creating a template'
+      loading.value = false
+      return null
+    }
+
     if (payload.is_default) {
       await clearDefaultTemplate(payload.vehicle_type_id)
     }
@@ -188,7 +223,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
         template_id: data.id,
         title: 'General condition',
         description: 'Inspect the vehicle and note any visible concerns.',
-        category: 'General',
+        category_id: defaultCategoryId,
         is_required: true,
         requires_photo: false,
         sort_order: 1,
@@ -245,12 +280,15 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       ...item,
       title: item.title.trim(),
       description: item.description?.trim() || null,
-      category: item.category?.trim() || null,
+      category_id: item.category_id,
       sort_order: index + 1,
     }))
 
-    if (!normalized.length || normalized.some((item) => !item.title)) {
-      error.value = 'Each template needs at least one titled checklist item'
+    if (
+      !normalized.length ||
+      normalized.some((item) => !item.title || !item.category_id)
+    ) {
+      error.value = 'Each checklist item needs a title and category'
       return false
     }
 
@@ -281,7 +319,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
         template_id: templateId,
         title: item.title,
         description: item.description,
-        category: item.category,
+        category_id: item.category_id,
         is_required: item.is_required,
         requires_photo: item.requires_photo,
         sort_order: item.sort_order,
@@ -392,6 +430,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     templates,
     selectedTemplate,
     vehicleTypes,
+    itemCategories,
     loading,
     error,
     search,
@@ -404,6 +443,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     fetchTemplates,
     fetchTemplateById,
     fetchVehicleTypes,
+    fetchItemCategories,
     createTemplate,
     updateTemplate,
     saveTemplateItems,

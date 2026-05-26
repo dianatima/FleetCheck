@@ -98,18 +98,21 @@
                 <tr
                   v-for="issue in openIssues"
                   :key="issue.id"
-                  class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+                  class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
+                  @click="router.push(`/issues/${issue.id}`)"
                 >
                   <td class="px-4 py-3">
                     <VehiclePreviewCell :vehicle="issue.vehicles" />
                   </td>
                   <td class="px-4 py-3">
                     <p class="table-main">{{ issue.title || 'Inspection issue' }}</p>
-                    <p class="table-sub">{{ issueSeverity(issue) }}</p>
+                    <p class="table-sub">{{ issue.inspection_results?.inspection_template_items?.title || 'Checklist item' }}</p>
                   </td>
-                  <td class="table-td">{{ issueSeverity(issue) }}</td>
-                  <td class="px-5 py-3">
-                    <RouterLink :to="`/issues/${issue.id}`" class="icon-btn" title="Open Issue">
+                  <td class="px-4 py-3">
+                    <span :class="severityBadge(issue.severity)">{{ severityLabel(issue.severity) }}</span>
+                  </td>
+                  <td class="px-5 py-3" @click.stop>
+                    <RouterLink :to="`/issues/${issue.id}`" class="icon-btn" title="Open Issue" @click.stop>
                       <ExternalLink :size="14" />
                     </RouterLink>
                   </td>
@@ -142,15 +145,16 @@
                 <tr
                   v-for="repair in activeRepairs"
                   :key="repair.id"
-                  class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+                  class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
+                  @click="router.push(`/repairs/${repair.id}`)"
                 >
                   <td class="px-4 py-3">
                     <VehiclePreviewCell :vehicle="repair.vehicles" />
                   </td>
                   <td class="table-td">{{ repair.title || repair.issues?.title || 'Repair' }}</td>
                   <td class="px-5 py-3"><span :class="repairStatusBadge(repair.status)">{{ repairStatusLabel(repair.status) }}</span></td>
-                  <td class="px-5 py-3">
-                    <RouterLink :to="`/repairs?repairId=${repair.id}`" class="icon-btn" title="Open Repair">
+                  <td class="px-5 py-3" @click.stop>
+                    <RouterLink :to="`/repairs/${repair.id}`" class="icon-btn" title="Open Repair" @click.stop>
                       <ExternalLink :size="14" />
                     </RouterLink>
                   </td>
@@ -184,7 +188,8 @@
               <tr
                 v-for="report in recentReports"
                 :key="report.id"
-                class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+                class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
+                @click="router.push(`/reports/${report.id}`)"
               >
                 <td class="px-4 py-3">
                   <VehiclePreviewCell :vehicle="report.vehicle" />
@@ -193,8 +198,8 @@
                 <td class="table-td">{{ typeLabel(report.type) }}</td>
                 <td class="px-5 py-3"><span :class="resultBadge(report.result)">{{ resultLabel(report.result) }}</span></td>
                 <td class="table-td">{{ formatDate(report.date) }}</td>
-                <td class="px-5 py-3">
-                  <RouterLink :to="`/reports/${report.id}`" class="icon-btn" title="Open Report">
+                <td class="px-5 py-3" @click.stop>
+                  <RouterLink :to="`/reports/${report.id}`" class="icon-btn" title="Open Report" @click.stop>
                     <FileText :size="14" />
                   </RouterLink>
                 </td>
@@ -203,12 +208,48 @@
           </table>
         </div>
       </section>
+
+      <section class="card mb-6">
+        <div class="p-5 border-b border-gray-100/80 dark:border-gray-800">
+          <h2 class="font-medium text-gray-700 dark:text-gray-200 text-sm">Issues by Category</h2>
+        </div>
+
+        <div v-if="issueCategoryRows.length === 0" class="px-5 py-10 text-center text-sm text-gray-400">
+          No issue category data yet.
+        </div>
+
+        <div v-else class="p-5 space-y-4">
+          <div
+            v-for="category in issueCategoryRows"
+            :key="category.id"
+            class="rounded-xl p-2 -m-2 transition-colors cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+            @click="openIssueCategory(category.id)"
+          >
+            <div class="flex items-center justify-between gap-3 text-sm mb-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="category.dotColor" />
+                <span class="font-medium text-gray-700 dark:text-gray-200 truncate">{{ category.name }}</span>
+                <span :class="severityBadge(category.severity)">{{ severityLabel(category.severity) }}</span>
+              </div>
+              <span class="text-gray-900 dark:text-white font-semibold tabular-nums">{{ category.count }}</span>
+            </div>
+            <div class="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all"
+                :class="category.barColor"
+                :style="{ width: `${category.pct}%` }"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
     </template>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
 import { computed, defineComponent, h, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   AlertTriangle,
   Car,
@@ -230,6 +271,7 @@ import { formatDateTime } from '@/lib/dateFormat'
 
 const store = useAppStore()
 const authStore = useAuthStore()
+const router = useRouter()
 const loading = ref(false)
 const error = ref<string | null>(null)
 const vehicles = ref<any[]>([])
@@ -238,6 +280,7 @@ const inspections = ref<any[]>([])
 const analyticsInspections = ref<any[]>([])
 const openIssues = ref<any[]>([])
 const activeRepairs = ref<any[]>([])
+const issueCategorySource = ref<any[]>([])
 const reportsTodayCount = ref(0)
 const failedReportCount = ref(0)
 const underReviewIssueCount = ref(0)
@@ -258,6 +301,7 @@ async function fetchDashboard() {
     analyticsInspections.value = []
     openIssues.value = []
     activeRepairs.value = []
+    issueCategorySource.value = []
     reportsTodayCount.value = 0
     failedReportCount.value = 0
     underReviewIssueCount.value = 0
@@ -285,6 +329,7 @@ async function fetchDashboard() {
     failedReportsResult,
     underReviewIssuesResult,
     inRepairIssuesResult,
+    issueCategoryResult,
   ] = await Promise.all([
     supabase
       .from('vehicles')
@@ -353,6 +398,7 @@ async function fetchDashboard() {
         id,
         title,
         status,
+        severity,
         created_at,
         vehicles (
           unit,
@@ -363,8 +409,7 @@ async function fetchDashboard() {
         ),
         inspection_results (
           inspection_template_items (
-            title,
-            category
+            title
           )
         )
       `)
@@ -417,6 +462,23 @@ async function fetchDashboard() {
       .select('id', { count: 'exact', head: true })
       .eq('company_id', authStore.companyId)
       .eq('status', 'in-repair'),
+    supabase
+      .from('issues')
+      .select(`
+        id,
+        inspection_results (
+          inspection_template_items (
+            category_id,
+            inspection_item_categories (
+              id,
+              name,
+              severity,
+              sort_order
+            )
+          )
+        )
+      `)
+      .eq('company_id', authStore.companyId),
   ])
 
   const firstError =
@@ -429,7 +491,8 @@ async function fetchDashboard() {
     reportsTodayResult.error ||
     failedReportsResult.error ||
     underReviewIssuesResult.error ||
-    inRepairIssuesResult.error
+    inRepairIssuesResult.error ||
+    issueCategoryResult.error
 
   if (firstError) {
     error.value = firstError.message
@@ -443,6 +506,7 @@ async function fetchDashboard() {
   analyticsInspections.value = analyticsInspectionResult.data || []
   openIssues.value = issueResult.data || []
   activeRepairs.value = repairResult.data || []
+  issueCategorySource.value = issueCategoryResult.data || []
   reportsTodayCount.value = reportsTodayResult.count || 0
   failedReportCount.value = failedReportsResult.count || 0
   underReviewIssueCount.value = underReviewIssuesResult.count || 0
@@ -497,6 +561,53 @@ const failureTrendRows = computed(() => {
   return rows.map((row) => ({
     ...row,
     pct: row.count ? Math.max(8, (row.count / max) * 100) : 0,
+  }))
+})
+
+const issueCategoryRows = computed(() => {
+  const grouped = new Map<string, {
+    name: string
+    id: string
+    severity: 'low' | 'medium' | 'high'
+    sortOrder: number
+    count: number
+  }>()
+
+  for (const issue of issueCategorySource.value) {
+    const result = relation(issue.inspection_results)
+    const item = relation(result?.inspection_template_items)
+    const category = relation(item?.inspection_item_categories)
+
+    if (!category?.name) continue
+
+    const key = category.id || category.name
+    const current = grouped.get(key)
+
+    if (current) {
+      current.count += 1
+    } else {
+      grouped.set(key, {
+        id: key,
+        name: category.name,
+        severity: isSeverity(category.severity) ? category.severity : 'medium',
+        sortOrder: Number(category.sort_order || 0),
+        count: 1,
+      })
+    }
+  }
+
+  const rows = [...grouped.values()]
+    .filter((row) => row.count > 0)
+    .sort((a, b) => b.count - a.count || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+    .slice(0, 5)
+
+  const max = Math.max(1, ...rows.map((row) => row.count))
+
+  return rows.map((row) => ({
+    ...row,
+    pct: row.count ? Math.max(8, (row.count / max) * 100) : 0,
+    barColor: categoryBarColor(row.severity),
+    dotColor: categoryDotColor(row.severity),
   }))
 })
 
@@ -668,11 +779,50 @@ function repairStatusBadge(status: string) {
   return status === 'in-progress' ? 'badge-orange' : 'badge-blue'
 }
 
-function issueSeverity(issue: any) {
-  return issue.inspection_results?.inspection_template_items?.category || 'Inspection issue'
-}
-
 function formatDate(value: string | null) {
   return formatDateTime(value, store.language)
+}
+
+function severityLabel(severity: string | null) {
+  return {
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+  }[severity || 'medium'] || 'Medium'
+}
+
+function severityBadge(severity: string | null) {
+  return {
+    low: 'badge-green',
+    medium: 'badge-orange',
+    high: 'badge-red',
+  }[severity || 'medium'] || 'badge-orange'
+}
+
+function openIssueCategory(categoryId: string) {
+  router.push({
+    path: '/issues',
+    query: { category: categoryId },
+  })
+}
+
+function isSeverity(value: string | null): value is 'low' | 'medium' | 'high' {
+  return value === 'low' || value === 'medium' || value === 'high'
+}
+
+function categoryBarColor(severity: string | null) {
+  return {
+    low: 'bg-green-500',
+    medium: 'bg-amber-500',
+    high: 'bg-red-500',
+  }[severity || 'medium'] || 'bg-amber-500'
+}
+
+function categoryDotColor(severity: string | null) {
+  return {
+    low: 'bg-green-500',
+    medium: 'bg-amber-500',
+    high: 'bg-red-500',
+  }[severity || 'medium'] || 'bg-amber-500'
 }
 </script>
