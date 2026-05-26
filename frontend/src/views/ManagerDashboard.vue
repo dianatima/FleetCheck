@@ -225,7 +225,7 @@
             class="rounded-xl p-2 -m-2 transition-colors cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
             @click="openIssueCategory(category.id)"
           >
-            <div class="flex items-center justify-between gap-3 text-sm mb-2">
+            <div class="flex items-center justify-between gap-3 text-sm mb-1.5">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="category.dotColor" />
                 <span class="font-medium text-gray-700 dark:text-gray-200 truncate">{{ category.name }}</span>
@@ -233,7 +233,7 @@
               </div>
               <span class="text-gray-900 dark:text-white font-semibold tabular-nums">{{ category.count }}</span>
             </div>
-            <div class="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div class="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all"
                 :class="category.barColor"

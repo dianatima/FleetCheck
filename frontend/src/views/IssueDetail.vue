@@ -341,7 +341,7 @@ async function sendToRepair() {
       vehicle_id: issue.value.vehicle_id,
       issue_id: issue.value.id,
       title: issue.value.title || 'Inspection issue repair',
-      description: issue.value.description || null,
+      description: null,
       status: 'open',
     })
 

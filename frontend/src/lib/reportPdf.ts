@@ -487,7 +487,9 @@ function drawIssues(pdf: ReportPdf, issues: any[], repairsByIssueId: Map<string,
 
   issues.forEach((issue, index) => {
     const repair = repairsByIssueId.get(issue.id)
-    const notes = [issue.description, repair?.description].filter(Boolean).join(' · ')
+    const repairNotes =
+      repair?.notes && repair.notes !== issue.description ? repair.notes : ''
+    const notes = [issue.description, repairNotes].filter(Boolean).join(' · ')
     const notesLines = notes ? wrapText(notes, CONTENT_WIDTH - 28, 9) : []
     const badgeSpace = repair?.status ? 82 : 58
     const height = Math.max(badgeSpace, 54 + notesLines.length * 12)
@@ -610,7 +612,7 @@ export async function downloadInspectionReportPdf(
   const { data: repairs } = issues.length
     ? await supabase
         .from('repairs')
-        .select('id, issue_id, status, description, priority')
+        .select('id, issue_id, status, notes, description, priority')
         .in('issue_id', issues.map((issue: any) => issue.id))
     : { data: [] as any[] }
   const repairsByIssueId = new Map(

@@ -1,6 +1,6 @@
 <template>
   <AppLayout :title="selectedRepair ? 'Repair Details' : 'Repairs'">
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+    <div v-if="!selectedRepair" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
       <div v-for="s in summaryStats" :key="s.label" class="card p-4 text-center">
         <div class="text-2xl font-bold" :class="s.color">{{ s.count }}</div>
         <div class="text-xs text-gray-500 dark:text-gray-400">{{ s.label }}</div>
@@ -152,12 +152,7 @@
         </button>
 
         <article class="card overflow-hidden">
-          <div class="px-5 py-3 border-b border-gray-100/80 dark:border-gray-800">
-            <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
-              Repair Details
-            </h2>
-          </div>
-          <div class="p-5 border-b border-gray-100/80 dark:border-gray-800">
+          <div class="p-5">
             <div class="flex flex-col lg:flex-row lg:items-start gap-5">
               <button
                 type="button"
@@ -204,52 +199,147 @@
               </div>
             </div>
           </div>
+        </article>
 
-          <div class="grid lg:grid-cols-3 gap-5 p-5">
-            <div class="lg:col-span-2 space-y-5">
-              <section>
-                <h3 class="section-title">Repair notes</h3>
-                <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                  {{ selectedRepair.description || 'No repair notes recorded yet.' }}
-                </p>
-              </section>
-
-              <section>
-                <h3 class="section-title">Issue notes</h3>
-                <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                  {{ selectedRepair.issues?.description || selectedRepair.issues?.inspection_results?.comment || 'No issue notes available.' }}
-                </p>
-              </section>
-
-              <section>
-                <h3 class="section-title">Related photos</h3>
-                <div v-if="photoUrls(selectedRepair).length" class="flex flex-wrap gap-3">
-                  <button
-                    v-for="(photo, index) in photoUrls(selectedRepair)"
-                    :key="`${selectedRepair.id}-${index}`"
-                    type="button"
-                    class="photo-thumb"
-                    @click="openPhotoLightbox(photoUrls(selectedRepair), index)"
-                  >
-                    <img :src="photo" alt="" class="w-full h-full object-cover" />
-                  </button>
+        <div class="grid lg:grid-cols-3 gap-5">
+          <div class="lg:col-span-2 space-y-5">
+            <section class="card p-5">
+              <h3 class="section-title">Basic Information</h3>
+              <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <span class="detail-label">Repair ID</span>
+                  <p class="detail-value">{{ repairNumber(selectedRepair) }}</p>
                 </div>
-                <p v-else class="text-sm text-gray-500 dark:text-gray-400">No photos attached.</p>
-              </section>
-            </div>
+                <div>
+                  <span class="detail-label">Vehicle</span>
+                  <p class="detail-value">{{ vehicleLabel(selectedRepair) }}</p>
+                </div>
+                <div>
+                  <span class="detail-label">Issue</span>
+                  <p class="detail-value">{{ issueTitle(selectedRepair.issues) }}</p>
+                </div>
+                <div>
+                  <span class="detail-label">Severity</span>
+                  <span :class="severityBadge(selectedRepair.issues)" class="mt-1">{{ issueSeverity(selectedRepair.issues) }}</span>
+                </div>
+                <div>
+                  <span class="detail-label">Driver</span>
+                  <p class="detail-value">{{ driverLabel(selectedRepair.issues) }}</p>
+                </div>
+                <div>
+                  <span class="detail-label">Inspection Type</span>
+                  <p class="detail-value">{{ inspectionLabel(selectedRepair.issues) }}</p>
+                </div>
+                <div>
+                  <span class="detail-label">Inspection Date</span>
+                  <p class="detail-value">{{ formatDate(selectedRepair.issues?.inspections?.submitted_at || selectedRepair.issues?.inspections?.created_at) }}</p>
+                </div>
+                <div>
+                  <span class="detail-label">Created Date</span>
+                  <p class="detail-value">{{ formatDate(selectedRepair.created_at) }}</p>
+                </div>
+                <div>
+                  <span class="detail-label">Status</span>
+                  <span :class="repairStatusBadge(selectedRepair.status)" class="mt-1">{{ repairStatusLabel(selectedRepair.status) }}</span>
+                </div>
+              </div>
+            </section>
 
-            <aside class="action-panel">
-              <button @click="openVehicle(selectedRepair.vehicle_id)" class="panel-link">
-                <Truck :size="14" /> Open Vehicle
-              </button>
-              <button v-if="selectedRepair.issues?.inspection_id" @click="openReport(selectedRepair.issues.inspection_id)" class="panel-link">
-                <FileText :size="14" /> Open Report
-              </button>
-              <button v-if="selectedRepair.issue_id" @click="openIssue(selectedRepair.issue_id)" class="panel-link">
-                <ExternalLink :size="14" /> Open Issue
-              </button>
+            <section class="card p-5">
+              <h3 class="section-title">Notes</h3>
+              <div class="space-y-5">
+                <div>
+                  <span class="detail-label">Issue notes</span>
+                  <p class="mt-1 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                    {{ issueNotes(selectedRepair.issues) || 'No issue notes available.' }}
+                  </p>
+                </div>
 
-              <div v-if="canManage" class="pt-3 mt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
+                <div v-if="visibleRepairNotes(selectedRepair) || canEditRepairNotes(selectedRepair)" class="space-y-3">
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <span class="detail-label">Repair notes</span>
+                    <button
+                      v-if="canEditRepairNotes(selectedRepair) && !repairNotesEditing"
+                      type="button"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      @click="startEditRepairNotes"
+                    >
+                      {{ visibleRepairNotes(selectedRepair) ? 'Edit repair notes' : 'Add repair notes' }}
+                    </button>
+                  </div>
+
+                  <div v-if="repairNotesEditing" class="space-y-3">
+                    <textarea
+                      v-model="repairNotesDraft"
+                      rows="4"
+                      class="input-field resize-none text-sm"
+                      placeholder="Add manager repair notes..."
+                    />
+                    <div class="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        class="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        :disabled="repairNotesSaving"
+                        @click="cancelEditRepairNotes"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        class="px-3 py-2 rounded-lg bg-blue-600 text-xs font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        :disabled="repairNotesSaving"
+                        @click="saveRepairNotes"
+                      >
+                        {{ repairNotesSaving ? 'Saving...' : 'Save notes' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p v-else-if="visibleRepairNotes(selectedRepair)" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                    {{ visibleRepairNotes(selectedRepair) }}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section class="card p-5">
+              <h3 class="section-title">Related Photos</h3>
+              <div v-if="photoUrls(selectedRepair).length" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <button
+                  v-for="(photo, index) in photoUrls(selectedRepair)"
+                  :key="`${selectedRepair.id}-${index}`"
+                  type="button"
+                  class="photo-thumb aspect-video"
+                  @click="openPhotoLightbox(photoUrls(selectedRepair), index)"
+                >
+                  <img :src="photo" alt="" class="w-full h-full object-cover" />
+                </button>
+              </div>
+              <div v-else class="py-8 text-center">
+                <p class="text-sm text-gray-400">No photos attached.</p>
+              </div>
+            </section>
+          </div>
+
+          <aside class="space-y-5">
+            <section class="card p-5">
+              <h3 class="section-title">Related Links</h3>
+              <div class="space-y-2">
+                <button @click="openVehicle(selectedRepair.vehicle_id)" class="panel-link">
+                  <Truck :size="14" /> Open Vehicle
+                </button>
+                <button v-if="selectedRepair.issues?.inspection_id" @click="openReport(selectedRepair.issues.inspection_id)" class="panel-link">
+                  <FileText :size="14" /> Open Report
+                </button>
+                <button v-if="selectedRepair.issue_id" @click="openIssue(selectedRepair.issue_id)" class="panel-link">
+                  <ExternalLink :size="14" /> Open Issue
+                </button>
+              </div>
+            </section>
+
+            <section v-if="canManage" class="card p-5">
+              <h3 class="section-title">Repair Actions</h3>
+              <div class="space-y-2">
                 <button
                   v-if="selectedRepair.status === 'open'"
                   @click="updateRepairStatus(selectedRepair, 'in-progress')"
@@ -275,9 +365,9 @@
                   <XCircle :size="14" /> Cancel Repair
                 </button>
               </div>
-            </aside>
-          </div>
-        </article>
+            </section>
+          </aside>
+        </div>
       </div>
     </template>
 
@@ -334,6 +424,9 @@ const pageSize = ref(10)
 const photoLightboxOpen = ref(false)
 const lightboxPhotos = ref<string[]>([])
 const lightboxStartIndex = ref(0)
+const repairNotesDraft = ref('')
+const repairNotesEditing = ref(false)
+const repairNotesSaving = ref(false)
 
 const unresolvedIssueStatuses = ['under-review', 'in-repair']
 const canManage = computed(() => ['owner', 'manager'].includes(authStore.profile?.role || ''))
@@ -408,6 +501,7 @@ const filteredRepairs = computed(() => {
     const issueLabels = issueFilterLabels(repair)
     const haystack = [
       repair.title,
+      repair.notes,
       repair.description,
       repair.status,
       vehicleLabel(repair),
@@ -458,6 +552,11 @@ watch(
   () => syncFiltersFromQuery()
 )
 
+watch(
+  () => selectedRepair.value?.id,
+  () => cancelEditRepairNotes()
+)
+
 async function fetchRepairData() {
   if (!authStore.companyId) {
     repairs.value = []
@@ -476,6 +575,7 @@ async function fetchRepairData() {
       vehicle_id,
       issue_id,
       title,
+      notes,
       description,
       status,
       created_at,
@@ -612,6 +712,77 @@ async function updateRepairStatus(repair: any, status: RepairStatus) {
   await fetchRepairData()
 }
 
+function issueNotes(issue: any) {
+  return (
+    issue?.inspection_results?.comment ||
+    issue?.description ||
+    ''
+  ).trim()
+}
+
+function visibleRepairNotes(repair: any) {
+  const notes = (repair?.notes || '').trim()
+  if (!notes) return ''
+
+  const originalIssueNotes = issueNotes(repair?.issues)
+  if (originalIssueNotes && notes === originalIssueNotes) return ''
+
+  return notes
+}
+
+function canEditRepairNotes(repair: any) {
+  return canManage.value && ['open', 'in-progress'].includes(repair?.status)
+}
+
+function startEditRepairNotes() {
+  if (!canEditRepairNotes(selectedRepair.value)) return
+  repairNotesDraft.value = selectedRepair.value.notes || ''
+  repairNotesEditing.value = true
+}
+
+function cancelEditRepairNotes() {
+  repairNotesEditing.value = false
+  repairNotesDraft.value = ''
+  repairNotesSaving.value = false
+}
+
+async function saveRepairNotes() {
+  if (!selectedRepair.value?.id) return
+
+  if (!canEditRepairNotes(selectedRepair.value)) {
+    error.value = 'Repair notes cannot be edited after repair is completed or cancelled.'
+    repairNotesEditing.value = false
+    repairNotesSaving.value = false
+    return
+  }
+
+  repairNotesSaving.value = true
+  error.value = null
+
+  const notes = repairNotesDraft.value.trim() || null
+  const { error: notesError } = await supabase
+    .from('repairs')
+    .update({ notes })
+    .eq('id', selectedRepair.value.id)
+    .eq('company_id', authStore.companyId)
+
+  if (notesError) {
+    error.value = notesError.message
+    repairNotesSaving.value = false
+    return
+  }
+
+  const nextRepair = { ...selectedRepair.value, notes }
+  selectedRepair.value = nextRepair
+  const repairIndex = repairs.value.findIndex((repair) => repair.id === nextRepair.id)
+  if (repairIndex >= 0) repairs.value.splice(repairIndex, 1, nextRepair)
+
+  repairNotesEditing.value = false
+  repairNotesDraft.value = ''
+  repairNotesSaving.value = false
+  flash(notes ? 'Repair notes saved' : 'Repair notes cleared')
+}
+
 async function completeRepair(repair: any) {
   if (!canManage.value || !repair?.id) return
   busyId.value = repair.id
@@ -706,6 +877,10 @@ function openIssue(issueId: string | null) {
 function openReport(inspectionId: string | null) {
   if (!inspectionId) return
   router.push(`/reports/${inspectionId}`)
+}
+
+function repairNumber(repair: any) {
+  return repair?.id ? `REP-${String(repair.id).slice(0, 8).toUpperCase()}` : '—'
 }
 
 function vehicleName(row: any) {
