@@ -1,17 +1,17 @@
 <template>
   <AppLayout title="Vehicles">
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
       <button
         v-for="stat in vehicleStats"
         :key="stat.status"
         type="button"
         class="card p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md"
         :class="
-          vehicleStore.statusFilter === stat.status
+          isStatActive(stat)
             ? 'ring-2 ring-blue-500/40'
             : ''
         "
-        @click="vehicleStore.setStatusFilter(stat.status)"
+        @click="applyStatFilter(stat)"
       >
         <p class="text-3xl font-bold" :class="stat.color">
           {{ stat.count }}
@@ -51,6 +51,53 @@
           <option value="in-repair">{{ store.t("statusInRepair") }}</option>
         </select>
       </div>
+
+      <select
+        v-model="vehicleStore.assignedFilter"
+        @change="vehicleStore.setAssignedFilter(vehicleStore.assignedFilter)"
+        class="input-field py-2 text-sm w-auto"
+      >
+        <option value="all">All assignees</option>
+        <option value="assigned">Assigned</option>
+        <option value="unassigned">Unassigned</option>
+        <option
+          v-for="driver in vehicleStore.assignmentDriverOptions"
+          :key="driver.id"
+          :value="driver.id"
+        >
+          {{ driver.name || "Unnamed driver" }}
+        </option>
+      </select>
+
+      <select
+        v-model="vehicleStore.typeFilter"
+        @change="vehicleStore.setTypeFilter(vehicleStore.typeFilter)"
+        class="input-field py-2 text-sm w-auto"
+      >
+        <option value="all">All Types</option>
+        <option
+          v-for="type in vehicleStore.vehicleTypes"
+          :key="type.id"
+          :value="type.id"
+        >
+          {{ type.name }}
+        </option>
+      </select>
+
+      <select
+        v-model="vehicleStore.brandFilter"
+        @change="vehicleStore.setBrandFilter(vehicleStore.brandFilter)"
+        class="input-field py-2 text-sm w-auto"
+      >
+        <option value="all">All Brands</option>
+        <option
+          v-for="brand in vehicleStore.brandOptions"
+          :key="brand"
+          :value="brand"
+        >
+          {{ brand }}
+        </option>
+      </select>
 
       <button @click="openAddModal" class="btn-primary gap-2 text-sm">
         <Plus :size="16" /> {{ store.t("addVehicle") }}
@@ -172,6 +219,21 @@
                   </span>
                 </td>
 
+                <td
+                  class="px-4 py-3 text-sm whitespace-nowrap cursor-pointer"
+                  @click="router.push(`/vehicles/${v.id}`)"
+                >
+                  <span
+                    :class="
+                      v.active_assignment
+                        ? 'text-gray-600 dark:text-gray-300'
+                        : 'text-gray-400 dark:text-gray-500'
+                    "
+                  >
+                    {{ assignedToLabel(v) }}
+                  </span>
+                </td>
+
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-1">
                     <button
@@ -249,6 +311,7 @@ type Vehicle = {
   odometer?: number | null;
   status: VehicleStatus;
   photo_url?: string | null;
+  active_assignment?: any | null;
 };
 
 const store = useAppStore();
@@ -270,7 +333,12 @@ watch(localSearch, (value) => {
 watch(
   () => authStore.companyId,
   async (companyId) => {
-    if (companyId) await vehicleStore.fetchVehicles();
+    if (companyId) {
+      await Promise.all([
+        vehicleStore.fetchVehicleTypes(),
+        vehicleStore.fetchVehicles(),
+      ]);
+    }
   },
   { immediate: true }
 );
@@ -302,6 +370,12 @@ const vehicleStats = computed(() => [
     count: vehicleStore.statusCounts["in-repair"] || 0,
     color: "text-gray-700 dark:text-gray-300",
   },
+  {
+    status: "assigned",
+    label: "Assigned",
+    count: vehicleStore.statusCounts.assigned || 0,
+    color: "text-blue-600 dark:text-blue-400",
+  },
 ]);
 
 const statusConfig = computed(() => ({
@@ -322,8 +396,25 @@ const vehicleHeaders = computed(() => [
   store.t("vin"),
   store.t("odometer"),
   store.t("status"),
+  "Assigned To",
   "",
 ]);
+
+function isStatActive(stat: { status: string }) {
+  if (stat.status === "assigned") return vehicleStore.assignedFilter === "assigned";
+  return vehicleStore.statusFilter === stat.status;
+}
+
+async function applyStatFilter(stat: { status: string }) {
+  if (stat.status === "assigned") {
+    await vehicleStore.setStatusFilter("all");
+    await vehicleStore.setAssignedFilter("assigned");
+    return;
+  }
+
+  await vehicleStore.setAssignedFilter("all");
+  await vehicleStore.setStatusFilter(stat.status);
+}
 
 function getVehicleName(v: Vehicle) {
   return `${v.make || ""} ${v.model || ""}`.trim();
@@ -331,6 +422,13 @@ function getVehicleName(v: Vehicle) {
 
 function getVehicleTypeName(v: Vehicle) {
   return v.vehicle_types?.name || "—";
+}
+
+function assignedToLabel(v: Vehicle) {
+  const assignment = v.active_assignment;
+  if (!assignment) return "Unassigned";
+  const driver = Array.isArray(assignment.drivers) ? assignment.drivers[0] : assignment.drivers;
+  return driver?.name || "Assigned";
 }
 
 function hideBrokenImage(e: Event) {

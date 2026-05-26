@@ -25,6 +25,8 @@ export const useInspectionItemCategoryStore = defineStore(
     const loading = ref(false)
     const error = ref<string | null>(null)
     const success = ref<string | null>(null)
+    const search = ref('')
+    const severityFilter = ref('all')
     const page = ref(1)
     const pageSize = ref(10)
     const total = ref(0)
@@ -39,12 +41,22 @@ export const useInspectionItemCategoryStore = defineStore(
 
       const from = (page.value - 1) * pageSize.value
       const to = from + pageSize.value - 1
-      const { data, count, error: fetchError } = await supabase
+      let query = supabase
         .from('inspection_item_categories')
         .select('id, name, severity, sort_order, created_at', { count: 'exact' })
         .order('sort_order', { ascending: true })
         .order('name', { ascending: true })
-        .range(from, to)
+
+      if (severityFilter.value !== 'all') {
+        query = query.eq('severity', severityFilter.value)
+      }
+
+      const searchValue = search.value.trim()
+      if (searchValue) {
+        query = query.or(`name.ilike.%${searchValue}%,severity.ilike.%${searchValue}%`)
+      }
+
+      const { data, count, error: fetchError } = await query.range(from, to)
 
       if (fetchError) {
         error.value = fetchError.message
@@ -166,6 +178,18 @@ export const useInspectionItemCategoryStore = defineStore(
       await fetchCategories()
     }
 
+    async function setSearch(value: string) {
+      search.value = value
+      page.value = 1
+      await fetchCategories()
+    }
+
+    async function setSeverityFilter(value: string) {
+      severityFilter.value = value
+      page.value = 1
+      await fetchCategories()
+    }
+
     function clearMessages() {
       error.value = null
       success.value = null
@@ -200,6 +224,8 @@ export const useInspectionItemCategoryStore = defineStore(
       loading,
       error,
       success,
+      search,
+      severityFilter,
       page,
       pageSize,
       total,
@@ -210,6 +236,8 @@ export const useInspectionItemCategoryStore = defineStore(
       deleteCategory,
       setPage,
       setPageSize,
+      setSearch,
+      setSeverityFilter,
       clearMessages,
     }
   }

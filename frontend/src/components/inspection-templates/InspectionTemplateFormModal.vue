@@ -45,39 +45,42 @@
 
             <div>
               <label class="label">Vehicle type <span class="text-red-500">*</span></label>
-              <select v-model="form.vehicle_type_id" class="input-field" required>
+              <select
+                v-model="form.vehicle_type_id"
+                class="input-field"
+                :disabled="vehicleTypes.length === 0"
+                required
+              >
                 <option value="" disabled>Select vehicle type</option>
                 <option
-                  v-for="vehicleType in templateStore.vehicleTypes"
+                  v-for="vehicleType in vehicleTypes"
                   :key="vehicleType.id"
                   :value="vehicleType.id"
                 >
                   {{ vehicleType.name }}
                 </option>
               </select>
+              <p
+                v-if="!template && vehicleTypes.length === 0"
+                class="mt-2 text-sm text-gray-500 dark:text-gray-400"
+              >
+                All vehicle types already have inspection templates.
+              </p>
             </div>
 
-            <label class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <div>
-                <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                  Default template
-                </span>
-                <span class="block text-xs text-gray-500 dark:text-gray-400">
-                  Use this first for this vehicle type.
-                </span>
-              </div>
-              <input v-model="form.is_default" type="checkbox" class="h-5 w-5 accent-blue-600" />
-            </label>
-
-            <p v-if="validationError" class="text-sm text-red-500">
-              {{ validationError }}
+            <p v-if="formError" class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-500 dark:bg-red-900/20 dark:text-red-400">
+              {{ formError }}
             </p>
 
             <div class="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
               <button type="button" class="btn-secondary px-5 py-2.5" @click="close">
                 Cancel
               </button>
-              <button type="submit" class="btn-primary px-6 py-2.5 gap-2" :disabled="loading">
+              <button
+                type="submit"
+                class="btn-primary px-6 py-2.5 gap-2"
+                :disabled="loading || (!template && vehicleTypes.length === 0)"
+              >
                 <Save :size="16" />
                 {{ loading ? "Saving..." : "Save" }}
               </button>
@@ -90,13 +93,14 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Save, X } from 'lucide-vue-next'
-import { useInspectionTemplateStore } from '@/stores/inspectionTemplateStore'
 
 const props = defineProps<{
   modelValue: boolean
   template?: any | null
+  vehicleTypes: Array<{ id: string; name: string }>
+  error?: string | null
   loading?: boolean
 }>()
 
@@ -110,8 +114,8 @@ const emit = defineEmits<{
   }]
 }>()
 
-const templateStore = useInspectionTemplateStore()
 const validationError = ref('')
+const formError = computed(() => validationError.value || props.error || '')
 const form = reactive({
   name: '',
   description: '',
@@ -128,10 +132,9 @@ watch(
       name: props.template?.name || '',
       description: props.template?.description || '',
       vehicle_type_id: props.template?.vehicle_type_id || '',
-      is_default: Boolean(props.template?.is_default),
+      is_default: true,
     })
     validationError.value = ''
-    await templateStore.fetchVehicleTypes()
   },
   { immediate: true }
 )
@@ -150,7 +153,7 @@ function submitForm() {
     name: form.name,
     description: form.description.trim() || null,
     vehicle_type_id: form.vehicle_type_id,
-    is_default: form.is_default,
+    is_default: true,
   })
 }
 </script>

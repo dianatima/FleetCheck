@@ -1,12 +1,15 @@
 <template>
-  <div>
-    <div class="mb-4">
-      <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
-        Inspection Templates
-      </h2>
+  <div class="card overflow-hidden">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Inspection Templates</h2>
+        <p class="section-description">
+          Manage reusable inspection templates for different vehicle types.
+        </p>
+      </div>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 mb-5">
+    <div class="section-toolbar">
       <div class="relative flex-1 min-w-52">
         <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
@@ -32,30 +35,29 @@
             {{ vehicleType.name }}
           </option>
         </select>
-        <select
-          v-model="templateStore.defaultFilter"
-          class="input-field py-2 text-sm w-auto"
-          @change="templateStore.setDefaultFilter(templateStore.defaultFilter)"
-        >
-          <option value="all">All templates</option>
-          <option value="default">Default only</option>
-          <option value="custom">Custom only</option>
-        </select>
       </div>
 
-      <button class="btn-primary gap-2 text-sm" @click="openCreateModal">
+      <button
+        class="btn-primary gap-2 text-sm disabled:opacity-45 disabled:cursor-not-allowed"
+        :disabled="!canCreateTemplate"
+        :title="canCreateTemplate ? 'Create Inspection Template' : allTypesUsedMessage"
+        @click="openCreateModal"
+      >
         <Plus :size="16" />
         Create Inspection Template
       </button>
+      <p v-if="!canCreateTemplate" class="basis-full text-xs text-gray-500 dark:text-gray-400">
+        {{ allTypesUsedMessage }}
+      </p>
     </div>
 
-    <div v-if="templateStore.loading" class="card p-6 text-sm text-gray-500">
+    <div v-if="templateStore.loading" class="p-6 text-sm text-gray-500">
       Loading inspection templates...
     </div>
-    <div v-else-if="templateStore.error" class="card p-6 text-sm text-red-500">
+    <div v-else-if="templateStore.error && !showModal" class="p-6 text-sm text-red-500">
       {{ templateStore.error }}
     </div>
-    <div v-else class="card overflow-hidden">
+    <div v-else>
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
@@ -95,10 +97,6 @@
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                 {{ template.inspection_template_items.length }}
               </td>
-              <td class="px-4 py-3">
-                <span v-if="template.is_default" class="badge-blue">Default</span>
-                <span v-else class="text-xs text-gray-400">—</span>
-              </td>
               <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
                 {{ formatDate(template.created_at) }}
               </td>
@@ -132,6 +130,8 @@
     <InspectionTemplateFormModal
       v-model="showModal"
       :template="editingTemplate"
+      :vehicle-types="modalVehicleTypes"
+      :error="showModal ? templateStore.error : null"
       :loading="templateStore.loading"
       @save="saveTemplate"
     />
@@ -156,12 +156,30 @@ const templateStore = useInspectionTemplateStore()
 const showModal = ref(false)
 const editingTemplate = ref<any | null>(null)
 const localSearch = ref(templateStore.search)
-const headers = ['Template name', 'Vehicle type', 'Items', 'Default', 'Created', '']
+const headers = ['Template name', 'Vehicle type', 'Items', 'Created', '']
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const templates = computed(() => templateStore.templates)
+const usedVehicleTypeIds = computed(() => new Set(templateStore.templateVehicleTypeIds))
+const availableVehicleTypesForCreate = computed(() =>
+  templateStore.vehicleTypes.filter((vehicleType) => !usedVehicleTypeIds.value.has(vehicleType.id))
+)
+const modalVehicleTypes = computed(() => {
+  const currentVehicleTypeId = editingTemplate.value?.vehicle_type_id
 
-onMounted(() => templateStore.fetchVehicleTypes())
+  return templateStore.vehicleTypes.filter(
+    (vehicleType) =>
+      vehicleType.id === currentVehicleTypeId ||
+      !usedVehicleTypeIds.value.has(vehicleType.id)
+  )
+})
+const canCreateTemplate = computed(() => availableVehicleTypesForCreate.value.length > 0)
+const allTypesUsedMessage = 'All vehicle types already have inspection templates.'
+
+onMounted(async () => {
+  await templateStore.fetchVehicleTypes()
+  await templateStore.fetchTemplateVehicleTypeUsage()
+})
 
 watch(
   () => authStore.companyId,
@@ -188,12 +206,19 @@ function openTemplate(id: string) {
   router.push(`/settings/inspection-templates/${id}`)
 }
 
-function openCreateModal() {
+async function openCreateModal() {
+  if (!canCreateTemplate.value) return
+  templateStore.clearError()
+  await templateStore.fetchVehicleTypes()
+  await templateStore.fetchTemplateVehicleTypeUsage()
   editingTemplate.value = null
   showModal.value = true
 }
 
-function startEdit(template: any) {
+async function startEdit(template: any) {
+  templateStore.clearError()
+  await templateStore.fetchVehicleTypes()
+  await templateStore.fetchTemplateVehicleTypeUsage()
   editingTemplate.value = template
   showModal.value = true
 }
@@ -220,6 +245,22 @@ async function confirmDelete(template: any) {
 </script>
 
 <style scoped>
+.section-header {
+  @apply p-6 border-b border-gray-100 dark:border-gray-700;
+}
+
+.section-title {
+  @apply font-bold text-gray-900 dark:text-white;
+}
+
+.section-description {
+  @apply text-sm text-gray-500 dark:text-gray-400 mt-1;
+}
+
+.section-toolbar {
+  @apply flex flex-wrap items-center gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900;
+}
+
 .icon-btn {
   @apply w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200;
 }

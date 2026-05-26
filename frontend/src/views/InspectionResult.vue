@@ -111,13 +111,15 @@
           </div>
           <p class="text-xs text-red-600 dark:text-red-400 mt-1.5 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg">{{ item.comment }}</p>
           <div v-if="item.photos.length" class="mt-3 flex flex-wrap gap-2">
-            <img
+            <button
               v-for="(photo, index) in item.photos"
               :key="`${item.item}-${index}`"
-              :src="photo"
-              alt=""
-              class="w-20 h-20 rounded-lg object-cover border border-red-100 dark:border-red-900/40"
-            />
+              type="button"
+              class="photo-thumb"
+              @click="openPhotoLightbox(item.photos, index)"
+            >
+              <img :src="photo" alt="" class="w-full h-full object-cover" />
+            </button>
           </div>
         </div>
       </div>
@@ -146,6 +148,12 @@
         <RotateCcw :size="16" /> {{ store.t('backToDashboard') }}
       </RouterLink>
     </div>
+
+    <PhotoLightbox
+      v-model="photoLightboxOpen"
+      :photos="lightboxPhotos"
+      :start-index="lightboxStartIndex"
+    />
   </AppLayout>
 </template>
 
@@ -157,6 +165,7 @@ import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '../components/layout/AppLayout.vue'
+import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { formatDateTime } from '@/lib/dateFormat'
 import { downloadInspectionReportPdf } from '@/lib/reportPdf'
 
@@ -167,6 +176,9 @@ const inspection = ref<any | null>(null)
 const results = ref<any[]>([])
 const downloading = ref(false)
 const pdfError = ref<string | null>(null)
+const photoLightboxOpen = ref(false)
+const lightboxPhotos = ref<string[]>([])
+const lightboxStartIndex = ref(0)
 
 onMounted(loadInspectionResult)
 
@@ -296,6 +308,14 @@ async function downloadPdf() {
 function hideBrokenImage(e: Event) {
   ;(e.target as HTMLImageElement).style.display = 'none'
 }
+
+function openPhotoLightbox(photos: string[] | null | undefined, index = 0) {
+  const cleanPhotos = (photos || []).filter(Boolean)
+  if (!cleanPhotos.length) return
+  lightboxPhotos.value = cleanPhotos
+  lightboxStartIndex.value = index
+  photoLightboxOpen.value = true
+}
 </script>
 
 <style scoped>
@@ -321,5 +341,9 @@ function hideBrokenImage(e: Event) {
 
 .open-vehicle-btn {
   @apply inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 whitespace-nowrap self-start lg:self-center;
+}
+
+.photo-thumb {
+  @apply w-20 h-20 rounded-lg overflow-hidden border border-red-100 bg-red-50 cursor-pointer transition-all hover:ring-2 hover:ring-blue-500 hover:opacity-90 dark:border-red-900/40 dark:bg-red-900/10;
 }
 </style>

@@ -53,12 +53,12 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
   const templates = ref<any[]>([])
   const selectedTemplate = ref<any | null>(null)
   const vehicleTypes = ref<any[]>([])
+  const templateVehicleTypeIds = ref<string[]>([])
   const itemCategories = ref<any[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   const search = ref('')
   const vehicleTypeFilter = ref('all')
-  const defaultFilter = ref('all')
   const page = ref(1)
   const pageSize = ref(10)
   const total = ref(0)
@@ -100,6 +100,29 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     return true
   }
 
+  async function fetchTemplateVehicleTypeUsage() {
+    if (!authStore.companyId) {
+      templateVehicleTypeIds.value = []
+      return false
+    }
+
+    const { data, error: usageError } = await supabase
+      .from('inspection_templates')
+      .select('vehicle_type_id')
+      .eq('company_id', authStore.companyId)
+
+    if (usageError) {
+      error.value = usageError.message
+      templateVehicleTypeIds.value = []
+      return false
+    }
+
+    templateVehicleTypeIds.value = [
+      ...new Set((data || []).map((row) => row.vehicle_type_id).filter(Boolean)),
+    ]
+    return true
+  }
+
   async function fetchTemplates() {
     loading.value = true
     error.value = null
@@ -123,10 +146,6 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       query = query.eq('vehicle_type_id', vehicleTypeFilter.value)
     }
 
-    if (defaultFilter.value !== 'all') {
-      query = query.eq('is_default', defaultFilter.value === 'default')
-    }
-
     const searchValue = search.value.trim()
 
     if (searchValue) {
@@ -146,6 +165,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       total.value = count || 0
     }
 
+    await fetchTemplateVehicleTypeUsage()
     loading.value = false
   }
 
@@ -186,6 +206,22 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return null
     }
 
+    const { data: existingTemplate, error: existingError } =
+      await findTemplateByVehicleType(payload.vehicle_type_id)
+
+    if (existingError) {
+      error.value = existingError.message
+      loading.value = false
+      return null
+    }
+
+    if (existingTemplate) {
+      error.value =
+        'An inspection template for this vehicle type already exists. Edit the existing template instead.'
+      loading.value = false
+      return null
+    }
+
     if (!itemCategories.value.length) {
       await fetchItemCategories()
     }
@@ -198,21 +234,23 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return null
     }
 
-    if (payload.is_default) {
-      await clearDefaultTemplate(payload.vehicle_type_id)
-    }
-
     const { data, error: createError } = await supabase
       .from('inspection_templates')
       .insert({
-        ...payload,
+        name: payload.name,
+        description: payload.description,
+        vehicle_type_id: payload.vehicle_type_id,
+        is_default: true,
         company_id: authStore.companyId,
       })
       .select('id')
       .single()
 
     if (createError || !data) {
-      error.value = createError?.message || 'Template could not be created'
+      error.value =
+        createError?.code === '23505'
+          ? 'An inspection template for this vehicle type already exists. Edit the existing template instead.'
+          : createError?.message || 'Template could not be created'
       loading.value = false
       return null
     }
@@ -251,18 +289,38 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return false
     }
 
-    if (payload.is_default) {
-      await clearDefaultTemplate(payload.vehicle_type_id, id)
+    const { data: existingTemplate, error: existingError } =
+      await findTemplateByVehicleType(payload.vehicle_type_id, id)
+
+    if (existingError) {
+      error.value = existingError.message
+      loading.value = false
+      return false
+    }
+
+    if (existingTemplate) {
+      error.value =
+        'An inspection template for this vehicle type already exists. Edit the existing template instead.'
+      loading.value = false
+      return false
     }
 
     const { error: updateError } = await supabase
       .from('inspection_templates')
-      .update(payload)
+      .update({
+        name: payload.name,
+        description: payload.description,
+        vehicle_type_id: payload.vehicle_type_id,
+        is_default: true,
+      })
       .eq('id', id)
       .eq('company_id', authStore.companyId)
 
     if (updateError) {
-      error.value = updateError.message
+      error.value =
+        updateError.code === '23505'
+          ? 'An inspection template for this vehicle type already exists. Edit the existing template instead.'
+          : updateError.message
       loading.value = false
       return false
     }
@@ -373,18 +431,21 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     return true
   }
 
-  async function clearDefaultTemplate(vehicleTypeId: string, exceptId?: string) {
-    if (!authStore.companyId) return
+  function clearError() {
+    error.value = null
+  }
 
+  async function findTemplateByVehicleType(vehicleTypeId: string, exceptId?: string) {
     let query = supabase
       .from('inspection_templates')
-      .update({ is_default: false })
+      .select('id, name')
       .eq('company_id', authStore.companyId)
       .eq('vehicle_type_id', vehicleTypeId)
+      .limit(1)
 
     if (exceptId) query = query.neq('id', exceptId)
 
-    await query
+    return query.maybeSingle()
   }
 
   function sortTemplateItems(template: any) {
@@ -408,12 +469,6 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     await fetchTemplates()
   }
 
-  async function setDefaultFilter(value: string) {
-    defaultFilter.value = value
-    page.value = 1
-    await fetchTemplates()
-  }
-
   async function setPage(nextPage: number) {
     if (nextPage < 1 || nextPage > totalPages.value) return
     page.value = nextPage
@@ -430,12 +485,12 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     templates,
     selectedTemplate,
     vehicleTypes,
+    templateVehicleTypeIds,
     itemCategories,
     loading,
     error,
     search,
     vehicleTypeFilter,
-    defaultFilter,
     page,
     pageSize,
     total,
@@ -443,14 +498,15 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     fetchTemplates,
     fetchTemplateById,
     fetchVehicleTypes,
+    fetchTemplateVehicleTypeUsage,
     fetchItemCategories,
     createTemplate,
     updateTemplate,
     saveTemplateItems,
     deleteTemplate,
+    clearError,
     setSearch,
     setVehicleTypeFilter,
-    setDefaultFilter,
     setPage,
     setPageSize,
   }

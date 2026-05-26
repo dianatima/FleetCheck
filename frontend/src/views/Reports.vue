@@ -66,6 +66,34 @@
       </div>
     </div>
 
+    <div
+      v-if="vehicleFilterId"
+      class="mb-5 inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
+    >
+      <span>Vehicle: {{ vehicleFilterLabel }}</span>
+      <button
+        type="button"
+        class="font-medium hover:underline"
+        @click="clearVehicleFilter"
+      >
+        Clear
+      </button>
+    </div>
+
+    <div
+      v-if="driverFilterId"
+      class="mb-5 inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
+    >
+      <span>Driver: {{ driverFilterLabel }}</span>
+      <button
+        type="button"
+        class="font-medium hover:underline"
+        @click="clearDriverFilter"
+      >
+        Clear
+      </button>
+    </div>
+
     <div v-if="error" class="card p-4 mb-5 text-sm text-red-500">
       {{ error }}
     </div>
@@ -216,7 +244,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   Filter,
   Search,
@@ -249,6 +277,7 @@ type ReviewStatus =
 interface Report {
   id: string;
   vehicleId: string;
+  driverId: string;
   createdAt: string;
   date: string;
   vehicle: string;
@@ -265,6 +294,7 @@ interface Report {
 const store = useAppStore();
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 
 const reports = ref<Report[]>([]);
 const loading = ref(false);
@@ -277,6 +307,22 @@ const endDate = ref("");
 const page = ref(1);
 const pageSize = ref(10);
 const downloadingId = ref<string | null>(null);
+const vehicleFilterId = computed(() => String(route.query.vehicle_id || ""));
+const driverFilterId = computed(() => String(route.query.driver_id || ""));
+const vehicleFilterLabel = computed(() => {
+  if (!vehicleFilterId.value) return "";
+  return (
+    reports.value.find((report) => report.vehicleId === vehicleFilterId.value)
+      ?.vehicle || "Selected vehicle"
+  );
+});
+const driverFilterLabel = computed(() => {
+  if (!driverFilterId.value) return "";
+  return (
+    reports.value.find((report) => report.driverId === driverFilterId.value)
+      ?.driver || "Selected driver"
+  );
+});
 
 onMounted(fetchReports);
 
@@ -286,6 +332,14 @@ watch(
     if (companyId) await fetchReports();
   },
 );
+
+watch(vehicleFilterId, () => {
+  page.value = 1;
+});
+
+watch(driverFilterId, () => {
+  page.value = 1;
+});
 
 async function fetchReports() {
   if (!authStore.companyId) {
@@ -361,6 +415,7 @@ function toReport(inspection: any): Report {
   return {
     id: inspection.id,
     vehicleId: inspection.vehicle_id,
+    driverId: inspection.driver_id,
     createdAt: inspection.submitted_at || inspection.created_at,
     date: formatDate(inspection.submitted_at || inspection.created_at),
     vehicle:
@@ -407,6 +462,18 @@ function viewReport(report: Report) {
 
 function reviewIssue(report: Report) {
   if (report.reviewIssueId) router.push(`/issues/${report.reviewIssueId}`);
+}
+
+function clearVehicleFilter() {
+  const query = { ...route.query };
+  delete query.vehicle_id;
+  router.replace({ path: "/reports", query });
+}
+
+function clearDriverFilter() {
+  const query = { ...route.query };
+  delete query.driver_id;
+  router.replace({ path: "/reports", query });
 }
 
 async function downloadReport(report: Report) {
@@ -561,6 +628,10 @@ const reportHeaders = computed(() => [
 const filtered = computed(() =>
   reports.value.filter((report) => {
     const query = search.value.trim().toLowerCase();
+    const matchVehicle =
+      !vehicleFilterId.value || report.vehicleId === vehicleFilterId.value;
+    const matchDriver =
+      !driverFilterId.value || report.driverId === driverFilterId.value;
     const matchType =
       filterType.value === "all" || report.type === filterType.value;
     const matchResult =
@@ -587,7 +658,15 @@ const filtered = computed(() =>
       .toLowerCase();
     const matchSearch = !query || searchableText.includes(query);
 
-    return matchSearch && matchType && matchResult && afterStart && beforeEnd;
+    return (
+      matchVehicle &&
+      matchDriver &&
+      matchSearch &&
+      matchType &&
+      matchResult &&
+      afterStart &&
+      beforeEnd
+    );
   }),
 );
 

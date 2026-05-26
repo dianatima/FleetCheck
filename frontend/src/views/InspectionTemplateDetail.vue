@@ -26,7 +26,6 @@
               <h2 class="text-xl font-bold text-gray-900 dark:text-white">
                 {{ template.name }}
               </h2>
-              <span v-if="template.is_default" class="badge-blue">Default</span>
             </div>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-2xl">
               {{ template.description || "No description provided." }}
@@ -38,7 +37,7 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
-            <button class="btn-secondary gap-2 text-sm" @click="showEditModal = true">
+            <button class="btn-secondary gap-2 text-sm" @click="openEditModal">
               <Pencil :size="15" />
               Edit Inspection Template
             </button>
@@ -100,6 +99,8 @@
     <InspectionTemplateFormModal
       v-model="showEditModal"
       :template="template"
+      :vehicle-types="modalVehicleTypes"
+      :error="showEditModal ? templateStore.error : null"
       :loading="templateStore.loading"
       @save="saveTemplateMeta"
     />
@@ -130,6 +131,16 @@ const items = ref<TemplateItemDraft[]>([])
 const showEditModal = ref(false)
 const itemError = ref('')
 const dragIndex = ref<number | null>(null)
+const usedVehicleTypeIds = computed(() => new Set(templateStore.templateVehicleTypeIds))
+const modalVehicleTypes = computed(() => {
+  const currentVehicleTypeId = template.value?.vehicle_type_id
+
+  return templateStore.vehicleTypes.filter(
+    (vehicleType) =>
+      vehicleType.id === currentVehicleTypeId ||
+      !usedVehicleTypeIds.value.has(vehicleType.id)
+  )
+})
 
 watch(
   () => authStore.companyId,
@@ -137,6 +148,7 @@ watch(
     if (companyId) {
       await templateStore.fetchTemplateById(templateId.value)
       await templateStore.fetchVehicleTypes()
+      await templateStore.fetchTemplateVehicleTypeUsage()
       await templateStore.fetchItemCategories()
     }
   },
@@ -210,6 +222,13 @@ function syncSortOrder() {
     sort_order: index + 1,
   }))
   itemError.value = ''
+}
+
+async function openEditModal() {
+  templateStore.clearError()
+  await templateStore.fetchVehicleTypes()
+  await templateStore.fetchTemplateVehicleTypeUsage()
+  showEditModal.value = true
 }
 
 async function saveItems() {

@@ -23,12 +23,14 @@
       <div class="card overflow-hidden mb-5">
         <div
           class="h-48 sm:h-64 bg-gray-100 dark:bg-gray-700 relative overflow-hidden"
+          :class="vehicle.photo_url ? 'cursor-pointer group' : ''"
+          @click="openPhotoLightbox(vehicle.photo_url ? [vehicle.photo_url] : [], 0)"
         >
           <img
             v-if="vehicle.photo_url"
             :src="vehicle.photo_url"
             :alt="vehicleName"
-            class="w-full h-full object-cover"
+            class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
           />
           <div
             v-else
@@ -68,23 +70,11 @@
           </button>
 
           <RouterLink
-            to="/reports"
+            :to="reportsPath"
             class="btn-secondary gap-2 text-sm flex-1 sm:flex-none justify-center inline-flex"
           >
             <FileText :size="15" /> {{ store.t("reports") }}
           </RouterLink>
-
-          <button
-            @click="toggleOutOfService"
-            class="gap-2 text-sm flex-1 sm:flex-none justify-center btn-danger"
-          >
-            <XCircle :size="15" />
-            {{
-              vehicle.status === "blocked"
-                ? store.t("restoreService")
-                : store.t("outOfService")
-            }}
-          </button>
         </div>
 
         <div class="grid sm:grid-cols-2 lg:grid-cols-3">
@@ -108,7 +98,14 @@
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ item.label }}
               </p>
-              <p class="text-sm font-semibold text-gray-900 dark:text-white">
+              <p
+                class="text-sm font-semibold"
+                :class="
+                  item.muted
+                    ? 'text-gray-400 dark:text-gray-500'
+                    : 'text-gray-900 dark:text-white'
+                "
+              >
                 {{ item.value }}
               </p>
             </div>
@@ -125,22 +122,26 @@
               {{ store.t("inspectionHistory") }}
             </h3>
             <RouterLink
-              to="/reports"
+              :to="reportsPath"
               class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
             >
               {{ store.t("viewAll") }} <ChevronRight :size="12" />
             </RouterLink>
           </div>
 
-          <div class="divide-y divide-gray-50 dark:divide-gray-700/50">
+          <div v-if="historyLoading" class="p-4 text-sm text-gray-500">
+            Loading inspections...
+          </div>
+          <div v-else class="divide-y divide-gray-50 dark:divide-gray-700/50">
             <div
-              v-for="h in inspHistory"
-              :key="h.date"
-              class="flex items-center gap-3 p-4"
+              v-for="h in inspectionHistory"
+              :key="h.id"
+              class="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+              @click="router.push(`/reports/${h.id}`)"
             >
               <div
                 class="w-2 h-2 rounded-full flex-shrink-0"
-                :class="h.status === 'pass' ? 'bg-green-500' : 'bg-red-500'"
+                :class="h.result === 'pass' ? 'bg-green-500' : h.result === 'draft' ? 'bg-yellow-500' : 'bg-red-500'"
               />
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-900 dark:text-white">
@@ -153,9 +154,15 @@
               <span v-if="h.issues > 0" class="badge-red"
                 >{{ h.issues }} issues</span
               >
-              <span :class="h.status === 'pass' ? 'badge-green' : 'badge-red'">
-                {{ h.status === "pass" ? store.t("pass") : store.t("fail") }}
+              <span :class="historyResultBadge(h.result)">
+                {{ historyResultLabel(h.result) }}
               </span>
+            </div>
+            <div
+              v-if="inspectionHistory.length === 0"
+              class="p-4 text-sm text-gray-500 dark:text-gray-400"
+            >
+              No inspections yet.
             </div>
           </div>
         </div>
@@ -168,18 +175,22 @@
               {{ store.t("repairHistory") }}
             </h3>
             <RouterLink
-              to="/repairs"
+              :to="repairsPath"
               class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
             >
               {{ store.t("viewAll") }} <ChevronRight :size="12" />
             </RouterLink>
           </div>
 
-          <div class="divide-y divide-gray-50 dark:divide-gray-700/50">
+          <div v-if="historyLoading" class="p-4 text-sm text-gray-500">
+            Loading repairs...
+          </div>
+          <div v-else class="divide-y divide-gray-50 dark:divide-gray-700/50">
             <div
               v-for="r in repairHistory"
-              :key="r.issue"
-              class="flex items-center gap-3 p-4"
+              :key="r.id"
+              class="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+              @click="router.push(`/repairs/${r.id}`)"
             >
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-900 dark:text-white">
@@ -198,7 +209,13 @@
               >
                 {{ r.priority }}
               </span>
-              <span class="badge-green">{{ store.t("statusCompleted") }}</span>
+              <span :class="repairStatusBadge(r.status)">{{ repairStatusLabel(r.status) }}</span>
+            </div>
+            <div
+              v-if="repairHistory.length === 0"
+              class="p-4 text-sm text-gray-500 dark:text-gray-400"
+            >
+              No repair history yet.
             </div>
           </div>
         </div>
@@ -211,17 +228,22 @@
       :loading="vehicleStore.loading"
       @save="handleSave"
     />
+
+    <PhotoLightbox
+      v-model="photoLightboxOpen"
+      :photos="lightboxPhotos"
+      :start-index="lightboxStartIndex"
+    />
   </AppLayout>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   ArrowLeft,
   CreditCard as Edit,
   FileText,
-  XCircle,
   Camera,
   Fuel,
   Gauge,
@@ -229,13 +251,17 @@ import {
   Hash,
   ChevronRight,
   MapPin,
+  User,
 } from "lucide-vue-next";
 
 import AppLayout from "../components/layout/AppLayout.vue";
 import VehicleFormModal from "@/components/vehicles/VehicleFormModal.vue";
+import PhotoLightbox from "@/components/shared/PhotoLightbox.vue";
 import { useAppStore } from "../stores/app";
 import { useVehicleStore } from "@/stores/vehicleStore";
 import { useAuthStore } from "@/stores/authStore";
+import { formatDateTime } from "@/lib/dateFormat";
+import { supabase } from "@/lib/supabase";
 
 type VehicleStatus = "active" | "needs-attention" | "blocked" | "in-repair";
 
@@ -253,14 +279,22 @@ type Vehicle = {
   engine_hours?: number | null;
   status: VehicleStatus;
   photo_url?: string | null;
+  active_assignment?: any | null;
 };
 
 const store = useAppStore();
 const route = useRoute();
+const router = useRouter();
 const vehicleStore = useVehicleStore();
 const authStore = useAuthStore();
 
 const showEditModal = ref(false);
+const historyLoading = ref(false);
+const inspectionHistory = ref<any[]>([]);
+const repairHistory = ref<any[]>([]);
+const photoLightboxOpen = ref(false);
+const lightboxPhotos = ref<string[]>([]);
+const lightboxStartIndex = ref(0);
 const vehicleId = computed(() => route.params.id as string);
 const vehicle = computed<Vehicle | null>(
   () => vehicleStore.selectedVehicle as Vehicle | null
@@ -269,10 +303,19 @@ const vehicle = computed<Vehicle | null>(
 watch(
   () => authStore.companyId,
   async (companyId) => {
-    if (companyId) await vehicleStore.fetchVehicleById(vehicleId.value);
+    if (companyId) {
+      await vehicleStore.fetchVehicleById(vehicleId.value);
+      await fetchVehicleHistory();
+    }
   },
   { immediate: true }
 );
+
+watch(vehicleId, async () => {
+  if (!authStore.companyId) return;
+  await vehicleStore.fetchVehicleById(vehicleId.value);
+  await fetchVehicleHistory();
+});
 
 const statusConfig = computed(() => ({
   active: { label: store.t("statusActive"), badge: "badge-green" },
@@ -288,6 +331,9 @@ const vehicleName = computed(() => {
   if (!vehicle.value) return "";
   return `${vehicle.value.make || ""} ${vehicle.value.model || ""}`.trim();
 });
+
+const reportsPath = computed(() => `/reports?vehicle_id=${vehicleId.value}`);
+const repairsPath = computed(() => `/repairs?vehicle_id=${vehicleId.value}`);
 
 const details = computed(() => {
   if (!vehicle.value) return [];
@@ -325,8 +371,45 @@ const details = computed(() => {
       label: store.t("type"),
       value: vehicle.value.vehicle_types?.name || "—",
     },
+    {
+      icon: User,
+      label: "Assigned To",
+      value: assignedToLabel(vehicle.value),
+      muted: !vehicle.value.active_assignment,
+    },
+    {
+      icon: Calendar,
+      label: "Assignment Start",
+      value: assignmentStartLabel(vehicle.value),
+    },
+    {
+      icon: Hash,
+      label: "Assignment Status",
+      value: vehicle.value.active_assignment?.status || "Unassigned",
+      muted: !vehicle.value.active_assignment,
+    },
   ];
 });
+
+function assignedToLabel(value: Vehicle) {
+  const assignment = value.active_assignment;
+  if (!assignment) return "Unassigned";
+  const driver = Array.isArray(assignment.drivers) ? assignment.drivers[0] : assignment.drivers;
+  return driver?.name || "Assigned";
+}
+
+function assignmentStartLabel(value: Vehicle) {
+  const startedAt = value.active_assignment?.start_at;
+  return startedAt ? formatDateTime(startedAt, store.language) : "—";
+}
+
+function openPhotoLightbox(photos: string[] | null | undefined, index = 0) {
+  const cleanPhotos = (photos || []).filter(Boolean);
+  if (!cleanPhotos.length) return;
+  lightboxPhotos.value = cleanPhotos;
+  lightboxStartIndex.value = index;
+  photoLightboxOpen.value = true;
+}
 
 async function handleSave(payload: any) {
   if (!vehicle.value) return;
@@ -337,55 +420,147 @@ async function handleSave(payload: any) {
   showEditModal.value = false;
 }
 
-async function toggleOutOfService() {
-  if (!vehicle.value) return;
+async function fetchVehicleHistory() {
+  if (!authStore.companyId || !vehicleId.value) return;
 
-  const nextStatus = vehicle.value.status === "blocked" ? "active" : "blocked";
+  historyLoading.value = true;
 
-  await vehicleStore.updateVehicle(vehicle.value.id, {
-    status: nextStatus,
-  });
+  const [inspectionsResult, repairsResult] = await Promise.all([
+    supabase
+      .from("inspections")
+      .select(
+        `
+        id,
+        type,
+        status,
+        created_at,
+        submitted_at,
+        drivers (
+          id,
+          name
+        ),
+        inspection_results (
+          id,
+          result,
+          photo_urls
+        ),
+        issues (
+          id,
+          status
+        )
+      `,
+      )
+      .eq("company_id", authStore.companyId)
+      .eq("vehicle_id", vehicleId.value)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("repairs")
+      .select(
+        `
+        id,
+        issue_id,
+        title,
+        description,
+        status,
+        created_at,
+        issues (
+          title,
+          severity
+        )
+      `,
+      )
+      .eq("company_id", authStore.companyId)
+      .eq("vehicle_id", vehicleId.value)
+      .order("created_at", { ascending: false })
+      .limit(5),
+  ]);
 
-  await vehicleStore.fetchVehicleById(vehicle.value.id);
+  if (!inspectionsResult.error) {
+    inspectionHistory.value = (inspectionsResult.data || []).map(toInspectionHistory);
+  }
+
+  if (!repairsResult.error) {
+    repairHistory.value = (repairsResult.data || []).map(toRepairHistory);
+  }
+
+  historyLoading.value = false;
 }
 
-const inspHistory = [
-  {
-    date: "Today 7:24 AM",
-    type: "Pre-Trip",
-    driver: "John Smith",
-    status: "pass",
-    issues: 0,
-  },
-  {
-    date: "Yesterday 6:15 PM",
-    type: "Post-Trip",
-    driver: "John Smith",
-    status: "pass",
-    issues: 0,
-  },
-  {
-    date: "May 11, 7:02 AM",
-    type: "Pre-Trip",
-    driver: "John Smith",
-    status: "fail",
-    issues: 2,
-  },
-];
+function toInspectionHistory(inspection: any) {
+  const results = relationArray(inspection.inspection_results);
+  const issues = relationArray(inspection.issues);
+  const failed = results.some((result: any) => result.result === "fail");
+  const result =
+    inspection.status === "draft" ? "draft" : failed ? "fail" : "pass";
+  const driver = relation(inspection.drivers);
 
-const repairHistory = [
-  { date: "May 8", issue: "Left rear tire pressure", priority: "medium" },
-  { date: "Apr 28", issue: "Windshield wiper replacement", priority: "low" },
-  { date: "Apr 10", issue: "Brake pad inspection", priority: "high" },
-];
+  return {
+    id: inspection.id,
+    type: inspection.type === "post-trip" ? store.t("postTrip") : store.t("preTrip"),
+    date: formatDateTime(inspection.submitted_at || inspection.created_at, store.language),
+    driver: driver?.name || "—",
+    result,
+    issues: issues.length,
+  };
+}
+
+function toRepairHistory(repair: any) {
+  const issue = relation(repair.issues);
+
+  return {
+    id: repair.id,
+    issue: repair.title || issue?.title || "Repair",
+    date: formatDateTime(repair.created_at, store.language),
+    priority: issue?.severity || "medium",
+    status: repair.status || "open",
+  };
+}
+
+function relation(value: any) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function relationArray(value: any) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function historyResultBadge(result: string) {
+  if (result === "draft") return "badge-yellow";
+  return result === "pass" ? "badge-green" : "badge-red";
+}
+
+function historyResultLabel(result: string) {
+  if (result === "draft") return store.t("statusDraft");
+  return result === "pass" ? store.t("pass") : store.t("fail");
+}
+
+function repairStatusLabel(status: string) {
+  return {
+    open: "Open",
+    "in-progress": "In Progress",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  }[status] || status || "—";
+}
+
+function repairStatusBadge(status: string) {
+  return {
+    open: "badge-red",
+    "in-progress": "badge-orange",
+    completed: "badge-green",
+    cancelled: "badge-gray",
+  }[status] || "badge-gray";
+}
 </script>
 
 <style scoped>
-.badge-orange {
-  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400;
+.badge-yellow {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400;
 }
 
-.btn-danger {
-  @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition-colors;
+.badge-orange {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400;
 }
 </style>

@@ -22,6 +22,37 @@
           <option value="rejected">{{ store.t('statusRejected') }}</option>
         </select>
       </div>
+      <select v-model="filterDriver" class="input-field py-2 text-sm w-auto">
+        <option value="all">All Drivers</option>
+        <option v-for="driver in driverOptions" :key="driver.id" :value="driver.id">
+          {{ driver.name }}
+        </option>
+      </select>
+      <select v-model="filterSeverity" class="input-field py-2 text-sm w-auto">
+        <option value="all">All Severities</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+      <select v-model="filterVehicle" class="input-field py-2 text-sm w-auto">
+        <option value="all">All Vehicles</option>
+        <option v-for="vehicle in vehicleOptions" :key="vehicle.id" :value="vehicle.id">
+          {{ vehicle.label }}
+        </option>
+      </select>
+    </div>
+
+    <div v-if="activeFilterChips.length" class="flex flex-wrap gap-2 mb-5">
+      <span
+        v-for="chip in activeFilterChips"
+        :key="chip.key"
+        class="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
+      >
+        {{ chip.label }}
+        <button type="button" class="font-medium hover:underline" @click="clearFilterChip(chip.key)">
+          Clear
+        </button>
+      </span>
     </div>
 
     <div v-if="loading" class="card p-6 text-sm text-gray-500">Loading issues...</div>
@@ -104,6 +135,9 @@ const store = useAppStore()
 const authStore = useAuthStore()
 const search = ref('')
 const filterStatus = ref('all')
+const filterDriver = ref('all')
+const filterSeverity = ref('all')
+const filterVehicle = ref('all')
 const issues = ref<any[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -117,11 +151,19 @@ const statusBadge: Record<string, string> = {
   rejected: 'badge-gray',
 }
 
-onMounted(fetchIssues)
+onMounted(async () => {
+  syncFiltersFromQuery()
+  await fetchIssues()
+})
 
 watch(
   () => authStore.companyId,
   async () => fetchIssues()
+)
+
+watch(
+  () => route.query,
+  () => syncFiltersFromQuery()
 )
 
 async function fetchIssues() {
@@ -193,6 +235,55 @@ const summaryStats = computed(() => [
   { label: store.t('statusFixed'), count: issues.value.filter(i => i.status === 'fixed').length, color: 'text-green-600 dark:text-green-400' },
 ])
 
+const driverOptions = computed(() => {
+  const byId = new Map<string, { id: string; name: string }>()
+
+  for (const issue of issues.value) {
+    const driver = relation(issue.drivers)
+    if (driver?.id) byId.set(driver.id, { id: driver.id, name: driver.name || 'Unnamed driver' })
+  }
+
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
+})
+
+const vehicleOptions = computed(() => {
+  const byId = new Map<string, { id: string; label: string }>()
+
+  for (const issue of issues.value) {
+    const vehicle = relation(issue.vehicles)
+    if (vehicle?.id) byId.set(vehicle.id, { id: vehicle.id, label: vehicleLabel({ vehicles: vehicle }) })
+  }
+
+  return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label))
+})
+
+const activeFilterChips = computed(() => {
+  const chips: Array<{ key: string; label: string }> = []
+
+  if (filterDriver.value !== 'all') {
+    chips.push({
+      key: 'driver_id',
+      label: `Driver: ${driverOptions.value.find((driver) => driver.id === filterDriver.value)?.name || 'Selected driver'}`,
+    })
+  }
+
+  if (filterVehicle.value !== 'all') {
+    chips.push({
+      key: 'vehicle_id',
+      label: `Vehicle: ${vehicleOptions.value.find((vehicle) => vehicle.id === filterVehicle.value)?.label || 'Selected vehicle'}`,
+    })
+  }
+
+  if (filterSeverity.value !== 'all') {
+    chips.push({
+      key: 'severity',
+      label: `Severity: ${severityLabel(filterSeverity.value)}`,
+    })
+  }
+
+  return chips
+})
+
 const issueHeaders = computed(() => [
   store.t('issue'),
   store.t('severity'),
@@ -218,13 +309,16 @@ const filtered = computed(() => issues.value.filter((issue) => {
   ].filter(Boolean).join(' ').toLowerCase()
   const matchSearch = !q || haystack.includes(q)
   const matchStatus = filterStatus.value === 'all' || issue.status === filterStatus.value
+  const matchDriver = filterDriver.value === 'all' || issue.driver_id === filterDriver.value
+  const matchSeverity = filterSeverity.value === 'all' || issue.severity === filterSeverity.value
+  const matchVehicle = filterVehicle.value === 'all' || issue.vehicle_id === filterVehicle.value
   const matchCategory =
     !selectedCategory ||
     templateItem?.category_id === selectedCategory ||
     templateItem?.inspection_item_categories?.id === selectedCategory ||
     templateItem?.inspection_item_categories?.name === selectedCategory
 
-  return matchSearch && matchStatus && matchCategory
+  return matchSearch && matchStatus && matchDriver && matchSeverity && matchVehicle && matchCategory
 }))
 
 const paginatedIssues = computed(() => {
@@ -232,9 +326,35 @@ const paginatedIssues = computed(() => {
   return filtered.value.slice(start, start + pageSize.value)
 })
 
-watch([search, filterStatus, pageSize, () => route.query.category], () => {
+watch([
+  search,
+  filterStatus,
+  filterDriver,
+  filterSeverity,
+  filterVehicle,
+  pageSize,
+  () => route.query.category,
+], () => {
   page.value = 1
 })
+
+function syncFiltersFromQuery() {
+  filterDriver.value = String(route.query.driver_id || 'all')
+  filterVehicle.value = String(route.query.vehicle_id || 'all')
+  filterSeverity.value = String(route.query.severity || 'all')
+  page.value = 1
+}
+
+function clearFilterChip(key: string) {
+  const query = { ...route.query }
+  delete query[key]
+
+  if (key === 'driver_id') filterDriver.value = 'all'
+  if (key === 'vehicle_id') filterVehicle.value = 'all'
+  if (key === 'severity') filterSeverity.value = 'all'
+
+  router.replace({ path: '/issues', query })
+}
 
 function setPageSize(size: number) {
   pageSize.value = size

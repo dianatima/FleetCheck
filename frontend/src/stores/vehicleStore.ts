@@ -6,7 +6,9 @@ import { useAuthStore } from '@/stores/authStore'
 export const useVehicleStore = defineStore('vehicles', () => {
   const authStore = useAuthStore()
   const vehicles = ref<any[]>([])
+  const sourceVehicles = ref<any[]>([])
   const vehicleTypes = ref<any[]>([])
+  const assignmentDriverOptions = ref<any[]>([])
   const selectedVehicle = ref<any | null>(null)
 
   const loading = ref(false)
@@ -18,16 +20,25 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
   const search = ref('')
   const statusFilter = ref('all')
+  const assignedFilter = ref('all')
+  const typeFilter = ref('all')
+  const brandFilter = ref('all')
   const statusCounts = ref<Record<string, number>>({
     active: 0,
     'needs-attention': 0,
     blocked: 0,
     'in-repair': 0,
+    assigned: 0,
   })
 
   const totalPages = computed(() => {
     return Math.max(1, Math.ceil(total.value / pageSize.value))
   })
+
+  const brandOptions = computed(() =>
+    [...new Set(sourceVehicles.value.map((vehicle) => vehicle.make).filter(Boolean))]
+      .sort((a, b) => String(a).localeCompare(String(b)))
+  )
 
   const vehicleSelect = `
     id,
@@ -58,60 +69,113 @@ export const useVehicleStore = defineStore('vehicles', () => {
       
     if (!authStore.companyId) {
         vehicles.value = []
+        sourceVehicles.value = []
         total.value = 0
         statusCounts.value = {
           active: 0,
           'needs-attention': 0,
           blocked: 0,
           'in-repair': 0,
+          assigned: 0,
         }
+        assignmentDriverOptions.value = []
         loading.value = false
         return
     }
 
     let query = supabase
       .from('vehicles')
-      .select(vehicleSelect, { count: 'exact' })
+      .select(vehicleSelect)
       .eq('company_id', authStore.companyId)
       .order('created_at', { ascending: false })
 
-    if (statusFilter.value !== 'all') {
-      query = query.eq('status', statusFilter.value)
-    }
-
-    const searchValue = search.value.trim()
-
-    const matchingTypeIds = searchValue ? await findVehicleTypeIds(searchValue) : []
-
-    if (searchValue) {
-      const filters = [
-        `unit.ilike.%${searchValue}%`,
-        `make.ilike.%${searchValue}%`,
-        `model.ilike.%${searchValue}%`,
-        `plate.ilike.%${searchValue}%`,
-      ]
-
-      if (matchingTypeIds.length) {
-        filters.push(`vehicle_type_id.in.(${matchingTypeIds.join(',')})`)
-      }
-
-      query = query.or(filters.join(','))
-    }
-
-    await fetchStatusCounts(searchValue, matchingTypeIds)
-
-    const { data, count, error: supabaseError } = await query.range(from, to)
+    const { data, error: supabaseError } = await query
 
     if (supabaseError) {
       error.value = supabaseError.message
       vehicles.value = []
+      sourceVehicles.value = []
       total.value = 0
     } else {
-      vehicles.value = data || []
-      total.value = count || 0
+      const enriched = await attachAssignments(data || [])
+      sourceVehicles.value = enriched
+      assignmentDriverOptions.value = await fetchAssignmentDriverOptions(
+        (data || []).map((vehicle) => vehicle.id)
+      )
+      const filtered = filterVehicles(enriched)
+      updateStatusCounts(enriched)
+      total.value = filtered.length
+      vehicles.value = filtered.slice(from, to + 1)
     }
 
     loading.value = false
+  }
+
+  async function attachAssignments(rows: any[]) {
+    if (!rows.length || !authStore.companyId) return rows
+
+    const vehicleIds = rows.map((vehicle) => vehicle.id)
+    const { data: assignments, error: assignmentError } = await supabase
+      .from('vehicle_assignments')
+      .select(`
+        id,
+        vehicle_id,
+        driver_id,
+        status,
+        start_at,
+        end_at,
+        drivers (
+          id,
+          name
+        )
+      `)
+      .eq('status', 'active')
+      .in('vehicle_id', vehicleIds)
+
+    if (assignmentError) {
+      error.value = assignmentError.message
+      return rows.map((vehicle) => ({ ...vehicle, active_assignment: null }))
+    }
+
+    const assignmentByVehicle = new Map(
+      (assignments || []).map((assignment) => [assignment.vehicle_id, assignment])
+    )
+
+    return rows.map((vehicle) => ({
+      ...vehicle,
+      active_assignment: assignmentByVehicle.get(vehicle.id) || null,
+    }))
+  }
+
+  async function fetchAssignmentDriverOptions(vehicleIds: string[]) {
+    if (!vehicleIds.length) return []
+
+    const { data, error: assignmentError } = await supabase
+      .from('vehicle_assignments')
+      .select(`
+        driver_id,
+        drivers (
+          id,
+          name
+        )
+      `)
+      .in('vehicle_id', vehicleIds)
+
+    if (assignmentError) {
+      console.error('[vehicleStore] failed to load assignment drivers', assignmentError)
+      return []
+    }
+
+    const byId = new Map<string, any>()
+
+    for (const assignment of data || []) {
+      const driver = Array.isArray(assignment.drivers) ? assignment.drivers[0] : assignment.drivers
+      if (driver?.id) byId.set(driver.id, driver)
+    }
+
+    return [...byId.values()].sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''))
+    )
   }
 
   async function findVehicleTypeIds(name: string) {
@@ -143,45 +207,47 @@ export const useVehicleStore = defineStore('vehicles', () => {
     return filters.join(',')
   }
 
-  async function fetchStatusCounts(searchValue = search.value.trim(), matchingTypeIds?: string[]) {
-    if (!authStore.companyId) {
-      statusCounts.value = {
-        active: 0,
-        'needs-attention': 0,
-        blocked: 0,
-        'in-repair': 0,
-      }
-      return
+  function updateStatusCounts(rows = sourceVehicles.value) {
+    statusCounts.value = {
+      active: rows.filter((vehicle) => vehicle.status === 'active').length,
+      'needs-attention': rows.filter((vehicle) => vehicle.status === 'needs-attention').length,
+      blocked: rows.filter((vehicle) => vehicle.status === 'blocked').length,
+      'in-repair': rows.filter((vehicle) => vehicle.status === 'in-repair').length,
+      assigned: rows.filter((vehicle) => Boolean(vehicle.active_assignment)).length,
     }
+  }
 
-    const statuses = ['active', 'needs-attention', 'blocked', 'in-repair']
-    const typeIds = matchingTypeIds ?? (searchValue ? await findVehicleTypeIds(searchValue) : [])
-    const counts = { ...statusCounts.value }
+  function filterVehicles(rows = sourceVehicles.value) {
+    const searchValue = search.value.trim().toLowerCase()
 
-    await Promise.all(
-      statuses.map(async (status) => {
-        let query = supabase
-          .from('vehicles')
-          .select('id', { count: 'exact', head: true })
-          .eq('company_id', authStore.companyId)
-          .eq('status', status)
+    return rows.filter((vehicle) => {
+      const activeAssignment = vehicle.active_assignment
+      const driver = relation(activeAssignment?.drivers)
+      const matchesSearch =
+        !searchValue ||
+        [
+          vehicle.unit,
+          vehicle.make,
+          vehicle.model,
+          vehicle.plate,
+          vehicle.vin,
+          vehicle.vehicle_types?.name,
+          driver?.name,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(searchValue))
 
-        if (searchValue) {
-          query = query.or(vehicleSearchExpression(searchValue, typeIds))
-        }
+      const matchesStatus = statusFilter.value === 'all' || vehicle.status === statusFilter.value
+      const matchesAssigned =
+        assignedFilter.value === 'all' ||
+        (assignedFilter.value === 'assigned' && Boolean(activeAssignment)) ||
+        (assignedFilter.value === 'unassigned' && !activeAssignment) ||
+        activeAssignment?.driver_id === assignedFilter.value
+      const matchesType = typeFilter.value === 'all' || vehicle.vehicle_type_id === typeFilter.value
+      const matchesBrand = brandFilter.value === 'all' || vehicle.make === brandFilter.value
 
-        const { count, error: countError } = await query
-
-        if (countError) {
-          console.error('[vehicleStore] failed to count vehicles by status', countError)
-          counts[status] = 0
-        } else {
-          counts[status] = count || 0
-        }
-      })
-    )
-
-    statusCounts.value = counts
+      return matchesSearch && matchesStatus && matchesAssigned && matchesType && matchesBrand
+    })
   }
 
   async function fetchVehicleTypes() {
@@ -208,6 +274,24 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
   async function setStatusFilter(value: string) {
     statusFilter.value = value
+    page.value = 1
+    await fetchVehicles()
+  }
+
+  async function setAssignedFilter(value: string) {
+    assignedFilter.value = value
+    page.value = 1
+    await fetchVehicles()
+  }
+
+  async function setTypeFilter(value: string) {
+    typeFilter.value = value
+    page.value = 1
+    await fetchVehicles()
+  }
+
+  async function setBrandFilter(value: string) {
+    brandFilter.value = value
     page.value = 1
     await fetchVehicles()
   }
@@ -378,7 +462,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
       error.value = supabaseError.message
       selectedVehicle.value = null
     } else {
-      selectedVehicle.value = data
+      selectedVehicle.value = (await attachAssignments([data]))[0] || data
     }
 
     loading.value = false
@@ -387,12 +471,22 @@ export const useVehicleStore = defineStore('vehicles', () => {
   function resetFilters() {
     search.value = ''
     statusFilter.value = 'all'
+    assignedFilter.value = 'all'
+    typeFilter.value = 'all'
+    brandFilter.value = 'all'
     page.value = 1
+  }
+
+  function relation(value: any) {
+    return Array.isArray(value) ? value[0] : value
   }
 
   return {
     vehicles,
+    sourceVehicles,
     vehicleTypes,
+    assignmentDriverOptions,
+    brandOptions,
     selectedVehicle,
 
     loading,
@@ -405,6 +499,9 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
     search,
     statusFilter,
+    assignedFilter,
+    typeFilter,
+    brandFilter,
     statusCounts,
 
     fetchVehicles,
@@ -417,6 +514,9 @@ export const useVehicleStore = defineStore('vehicles', () => {
 
     setSearch,
     setStatusFilter,
+    setAssignedFilter,
+    setTypeFilter,
+    setBrandFilter,
     setPage,
     nextPage,
     prevPage,

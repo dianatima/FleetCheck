@@ -56,25 +56,6 @@
             >
               {{ pendingInvitationMessage }}
             </p>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Password:
-              <span
-                class="font-semibold"
-                :class="
-                  driver.profile_password_set_at
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-orange-600 dark:text-orange-400'
-                "
-              >
-                {{ driver.profile_password_set_at ? "Set" : "Not set" }}
-              </span>
-            </p>
-            <p
-              v-if="activeWithoutPassword"
-              class="text-sm text-orange-700 dark:text-orange-300 mt-2"
-            >
-              Driver is active, but password has not been set yet.
-            </p>
           </div>
 
           <div class="flex flex-wrap justify-end gap-2 self-start">
@@ -221,22 +202,26 @@
             {{ store.t("recentInspections") }}
           </h3>
           <RouterLink
-            to="/reports"
+            :to="reportsPath"
             class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
           >
             {{ store.t("viewAll") }} <ChevronRight :size="12" />
           </RouterLink>
         </div>
 
-        <div class="divide-y divide-gray-50 dark:divide-gray-700/50">
+        <div v-if="inspectionsLoading" class="p-4 text-sm text-gray-500">
+          Loading inspections...
+        </div>
+        <div v-else class="divide-y divide-gray-50 dark:divide-gray-700/50">
           <div
             v-for="r in inspections"
             :key="r.id"
-            class="flex items-center gap-3 p-4"
+            class="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+            @click="router.push(`/reports/${r.id}`)"
           >
             <div
               class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              :class="r.status === 'pass' ? 'bg-green-500' : 'bg-red-500'"
+              :class="r.status === 'pass' ? 'bg-green-500' : r.status === 'draft' ? 'bg-yellow-500' : 'bg-red-500'"
             />
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-gray-900 dark:text-white">
@@ -247,9 +232,15 @@
             <span v-if="r.issues > 0" class="badge-red"
               >{{ r.issues }} issues</span
             >
-            <span :class="r.status === 'pass' ? 'badge-green' : 'badge-red'">
-              {{ r.status === "pass" ? store.t("pass") : store.t("fail") }}
+            <span :class="inspectionResultBadge(r.status)">
+              {{ inspectionResultLabel(r.status) }}
             </span>
+          </div>
+          <div
+            v-if="inspections.length === 0"
+            class="p-4 text-sm text-gray-500 dark:text-gray-400"
+          >
+            No inspections submitted yet.
           </div>
         </div>
       </div>
@@ -274,7 +265,7 @@ import {
   onUnmounted,
   watch,
 } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   ArrowLeft,
   Pencil,
@@ -295,10 +286,12 @@ import {
 
 import AppLayout from "../components/layout/AppLayout.vue";
 import DriverFormModal from "@/components/drivers/DriverFormModal.vue";
+import PhotoLightbox from "@/components/shared/PhotoLightbox.vue";
 import { useAppStore } from "../stores/app";
 import { useDriverStore } from "@/stores/driverStore";
 import { useAuthStore } from "@/stores/authStore";
-import { formatDateOnly } from "@/lib/dateFormat";
+import { formatDateOnly, formatDateTime } from "@/lib/dateFormat";
+import { supabase } from "@/lib/supabase";
 
 type Driver = {
   id: string;
@@ -321,31 +314,43 @@ type Driver = {
   user_id?: string | null;
   invitation_sent_at?: string | null;
   invitation_accepted_at?: string | null;
-  profile_password_set_at?: string | null;
   license_photo_urls?: string[] | null;
   med_card_photo_urls?: string[] | null;
 };
 
 const store = useAppStore();
 const route = useRoute();
+const router = useRouter();
 const driverStore = useDriverStore();
 const authStore = useAuthStore();
 
 const showEditModal = ref(false);
 const statusUpdating = ref(false);
 const invitationSending = ref(false);
+const inspectionsLoading = ref(false);
+const inspections = ref<any[]>([]);
 const driverId = computed(() => route.params.id as string);
 const driver = computed<Driver | null>(
   () => driverStore.selectedDriver as Driver | null
 );
+const reportsPath = computed(() => `/reports?driver_id=${driverId.value}`);
 
 watch(
   () => authStore.companyId,
   async (companyId) => {
-    if (companyId) await driverStore.fetchDriverById(driverId.value);
+    if (companyId) {
+      await driverStore.fetchDriverById(driverId.value);
+      await fetchDriverInspections();
+    }
   },
   { immediate: true }
 );
+
+watch(driverId, async () => {
+  if (!authStore.companyId) return;
+  await driverStore.fetchDriverById(driverId.value);
+  await fetchDriverInspections();
+});
 
 let pendingRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -396,10 +401,6 @@ const canActivateDriver = computed(() => {
 
 const canDeactivateDriver = computed(() => {
   return ["active", "pending"].includes(driver.value?.status || "");
-});
-
-const activeWithoutPassword = computed(() => {
-  return driver.value?.status === "active" && !driver.value.profile_password_set_at;
 });
 
 const pendingInvitationMessage = computed(() => {
@@ -468,6 +469,73 @@ async function sendInvitation() {
   }
 }
 
+async function fetchDriverInspections() {
+  if (!authStore.companyId || !driverId.value) return;
+
+  inspectionsLoading.value = true;
+
+  const { data, error } = await supabase
+    .from("inspections")
+    .select(
+      `
+      id,
+      type,
+      status,
+      created_at,
+      submitted_at,
+      inspection_results (
+        id,
+        result
+      ),
+      issues (
+        id
+      )
+    `,
+    )
+    .eq("company_id", authStore.companyId)
+    .eq("driver_id", driverId.value)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (!error) {
+    inspections.value = (data || []).map(toInspectionRow);
+  } else {
+    inspections.value = [];
+  }
+
+  inspectionsLoading.value = false;
+}
+
+function toInspectionRow(inspection: any) {
+  const results = relationArray(inspection.inspection_results);
+  const failed = results.some((result: any) => result.result === "fail");
+  const status =
+    inspection.status === "draft" ? "draft" : failed ? "fail" : "pass";
+
+  return {
+    id: inspection.id,
+    date: formatDateTime(inspection.submitted_at || inspection.created_at, store.language),
+    type: inspection.type === "post-trip" ? store.t("postTrip") : store.t("preTrip"),
+    status,
+    issues: relationArray(inspection.issues).length,
+  };
+}
+
+function relationArray(value: any) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function inspectionResultBadge(status: string) {
+  if (status === "draft") return "badge-yellow";
+  return status === "pass" ? "badge-green" : "badge-red";
+}
+
+function inspectionResultLabel(status: string) {
+  if (status === "draft") return store.t("statusDraft");
+  return status === "pass" ? store.t("pass") : store.t("fail");
+}
+
 const DetailRow = defineComponent({
   props: {
     icon: Object,
@@ -517,6 +585,15 @@ const PhotoGallery = defineComponent({
     photos: Array as () => string[] | null | undefined,
   },
   setup(props) {
+    const photoLightboxOpen = ref(false);
+    const lightboxStartIndex = ref(0);
+
+    function openPhoto(index: number) {
+      if (!props.photos?.length) return;
+      lightboxStartIndex.value = index;
+      photoLightboxOpen.value = true;
+    }
+
     return () =>
       h("div", { class: "pt-1" }, [
         h(
@@ -530,14 +607,13 @@ const PhotoGallery = defineComponent({
               { class: "grid grid-cols-2 sm:grid-cols-3 gap-2" },
               props.photos.map((photo, index) =>
                 h(
-                  "a",
+                  "button",
                   {
                     key: photo,
-                    href: photo,
-                    target: "_blank",
-                    rel: "noopener noreferrer",
+                    type: "button",
+                    onClick: () => openPhoto(index),
                     class:
-                      "block aspect-[4/3] overflow-hidden rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900",
+                      "block aspect-[4/3] overflow-hidden rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 cursor-pointer transition-all hover:ring-2 hover:ring-blue-500 hover:opacity-90",
                   },
                   [
                     h("img", {
@@ -558,6 +634,14 @@ const PhotoGallery = defineComponent({
               },
               "No photos uploaded."
             ),
+        h(PhotoLightbox, {
+          modelValue: photoLightboxOpen.value,
+          photos: props.photos || [],
+          startIndex: lightboxStartIndex.value,
+          "onUpdate:modelValue": (value: boolean) => {
+            photoLightboxOpen.value = value;
+          },
+        }),
       ]);
   },
 });
@@ -612,23 +696,6 @@ const ExpiryRow = defineComponent({
   },
 });
 
-const inspections = [
-  { id: 1, date: "Today 7:24 AM", type: "Pre-Trip", status: "pass", issues: 0 },
-  {
-    id: 2,
-    date: "Yesterday 6:15 PM",
-    type: "Post-Trip",
-    status: "pass",
-    issues: 0,
-  },
-  {
-    id: 3,
-    date: "May 11, 7:02 AM",
-    type: "Pre-Trip",
-    status: "fail",
-    issues: 2,
-  },
-];
 </script>
 
 <style scoped>

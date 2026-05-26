@@ -18,6 +18,8 @@ export const useDriverStore = defineStore('drivers', () => {
 
   const search = ref('')
   const statusFilter = ref('all')
+  const licenseClassFilter = ref('all')
+  const licenseClassOptions = ref<string[]>([])
   const statusCounts = ref<Record<string, number>>({
     new: 0,
     pending: 0,
@@ -42,6 +44,7 @@ export const useDriverStore = defineStore('drivers', () => {
         active: 0,
         inactive: 0,
       }
+      licenseClassOptions.value = []
       loading.value = false
       return
     }
@@ -59,6 +62,10 @@ export const useDriverStore = defineStore('drivers', () => {
       query = query.eq('status', statusFilter.value)
     }
 
+    if (licenseClassFilter.value !== 'all') {
+      query = query.eq('license_class', licenseClassFilter.value)
+    }
+
     const searchValue = search.value.trim()
 
     if (searchValue) {
@@ -67,7 +74,10 @@ export const useDriverStore = defineStore('drivers', () => {
       )
     }
 
-    await fetchStatusCounts(searchValue)
+    await Promise.all([
+      fetchStatusCounts(searchValue),
+      fetchLicenseClassOptions(),
+    ])
 
     const { data, count, error: supabaseError } = await query.range(from, to)
 
@@ -113,6 +123,10 @@ export const useDriverStore = defineStore('drivers', () => {
           query = query.or(driverSearchExpression(searchValue))
         }
 
+        if (licenseClassFilter.value !== 'all') {
+          query = query.eq('license_class', licenseClassFilter.value)
+        }
+
         const { count, error: countError } = await query
 
         if (countError) {
@@ -125,6 +139,29 @@ export const useDriverStore = defineStore('drivers', () => {
     )
 
     statusCounts.value = counts
+  }
+
+  async function fetchLicenseClassOptions() {
+    if (!authStore.companyId) {
+      licenseClassOptions.value = []
+      return
+    }
+
+    const { data, error: classError } = await supabase
+      .from('drivers')
+      .select('license_class')
+      .eq('company_id', authStore.companyId)
+      .not('license_class', 'is', null)
+
+    if (classError) {
+      console.error('[driverStore] failed to load license classes', classError)
+      licenseClassOptions.value = []
+      return
+    }
+
+    licenseClassOptions.value = [
+      ...new Set((data || []).map((driver) => driver.license_class).filter(Boolean)),
+    ].sort((a, b) => String(a).localeCompare(String(b)))
   }
 
   async function fetchDriverById(id: string, silent = false) {
@@ -148,30 +185,10 @@ export const useDriverStore = defineStore('drivers', () => {
       error.value = supabaseError.message
       selectedDriver.value = null
     } else {
-      selectedDriver.value = {
-        ...data,
-        profile_password_set_at: await fetchDriverPasswordSetAt(id),
-      }
+      selectedDriver.value = data
     }
 
     if (!silent) loading.value = false
-  }
-
-  async function fetchDriverPasswordSetAt(id: string) {
-    const token = authStore.session?.access_token
-
-    if (!token) return null
-
-    const response = await fetch(`/api/drivers/${id}/password-status`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-    const result = await response.json().catch(() => null)
-
-    if (!response.ok) return null
-
-    return result?.password_set_at || null
   }
 
   async function createDriver(driver: any) {
@@ -363,6 +380,12 @@ export const useDriverStore = defineStore('drivers', () => {
     await fetchDrivers()
   }
 
+  async function setLicenseClassFilter(value: string) {
+    licenseClassFilter.value = value
+    page.value = 1
+    await fetchDrivers()
+  }
+
   async function setPage(newPage: number) {
     if (newPage < 1 || newPage > totalPages.value) return
 
@@ -387,6 +410,7 @@ export const useDriverStore = defineStore('drivers', () => {
   function resetFilters() {
     search.value = ''
     statusFilter.value = 'all'
+    licenseClassFilter.value = 'all'
     page.value = 1
   }
 
@@ -404,6 +428,8 @@ export const useDriverStore = defineStore('drivers', () => {
 
     search,
     statusFilter,
+    licenseClassFilter,
+    licenseClassOptions,
     statusCounts,
 
     fetchDrivers,
@@ -417,6 +443,7 @@ export const useDriverStore = defineStore('drivers', () => {
 
     setSearch,
     setStatusFilter,
+    setLicenseClassFilter,
     setPage,
     nextPage,
     prevPage,

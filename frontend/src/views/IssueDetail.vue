@@ -105,10 +105,16 @@
 
           <div class="card p-5">
             <h3 class="section-title"><Camera :size="16" class="text-blue-500" /> {{ store.t('photos') }}</h3>
-            <div v-if="issue.photo_urls?.length" class="grid grid-cols-3 gap-3">
-              <div v-for="(src, i) in issue.photo_urls" :key="i" class="aspect-video rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700">
+            <div v-if="issue.photo_urls?.length" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <button
+                v-for="(src, i) in issue.photo_urls"
+                :key="i"
+                type="button"
+                class="photo-thumb aspect-video"
+                @click="openPhotoLightbox(issue.photo_urls, i)"
+              >
                 <img :src="src" alt="" class="w-full h-full object-cover" />
-              </div>
+              </button>
             </div>
             <div v-else class="py-8 text-center">
               <Camera :size="32" class="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
@@ -143,6 +149,12 @@
       <AlertTriangle :size="40" class="mx-auto text-gray-300 dark:text-gray-600 mb-3" />
       <p class="text-gray-500 dark:text-gray-400">{{ store.t('issueNotFound') }}</p>
     </div>
+
+    <PhotoLightbox
+      v-model="photoLightboxOpen"
+      :photos="lightboxPhotos"
+      :start-index="lightboxStartIndex"
+    />
   </AppLayout>
 </template>
 
@@ -151,6 +163,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, AlertTriangle, Wrench, XCircle, CheckCircle, Ban, FileText, Camera, Truck, Info, ExternalLink, Calendar, User, Hash } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
+import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -164,6 +177,9 @@ const loading = ref(false)
 const busy = ref(false)
 const error = ref<string | null>(null)
 const lastAction = ref('')
+const photoLightboxOpen = ref(false)
+const lightboxPhotos = ref<string[]>([])
+const lightboxStartIndex = ref(0)
 
 const statusBadge: Record<string, string> = {
   'under-review': 'badge-yellow',
@@ -456,6 +472,14 @@ function flash(message: string) {
   lastAction.value = message
   window.setTimeout(() => { lastAction.value = '' }, 3000)
 }
+
+function openPhotoLightbox(photos: string[] | null | undefined, index = 0) {
+  const cleanPhotos = (photos || []).filter(Boolean)
+  if (!cleanPhotos.length) return
+  lightboxPhotos.value = cleanPhotos
+  lightboxStartIndex.value = index
+  photoLightboxOpen.value = true
+}
 </script>
 
 <style scoped>
@@ -467,6 +491,9 @@ function flash(message: string) {
 }
 .action-btn {
   @apply flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed;
+}
+.photo-thumb {
+  @apply overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-700 cursor-pointer transition-all hover:ring-2 hover:ring-blue-500 hover:opacity-90;
 }
 .badge-yellow { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400; }
 .badge-orange { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400; }

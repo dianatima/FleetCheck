@@ -116,8 +116,18 @@
               </label>
               <div v-if="item.photos.length" class="flex gap-1.5">
                 <div v-for="(url, pi) in item.photos" :key="pi" class="relative">
-                  <img :src="url" alt="" class="w-10 h-10 rounded-lg object-cover border border-red-200 dark:border-red-800" />
-                  <button @click="item.photos.splice(pi, 1)" class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white">
+                  <button
+                    type="button"
+                    class="photo-thumb"
+                    @click="openPhotoLightbox(item.photos, pi)"
+                  >
+                    <img :src="url" alt="" class="w-full h-full object-cover" />
+                  </button>
+                  <button
+                    type="button"
+                    @click.stop="item.photos.splice(pi, 1)"
+                    class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white"
+                  >
                     <X :size="7" />
                   </button>
                 </div>
@@ -145,6 +155,12 @@
       </button>
       <button @click="handleSubmit" class="btn-primary flex-1 py-3 text-sm">{{ store.t('submitInspection') }}</button>
     </div>
+
+    <PhotoLightbox
+      v-model="photoLightboxOpen"
+      :photos="lightboxPhotos"
+      :start-index="lightboxStartIndex"
+    />
   </AppLayout>
 </template>
 
@@ -156,6 +172,7 @@ import { useAppStore } from '../stores/app'
 import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '../components/layout/AppLayout.vue'
+import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { formatDateTime } from '@/lib/dateFormat'
 
 const props = defineProps<{ isPostTrip?: boolean }>()
@@ -186,6 +203,9 @@ const expandedIds = ref<Set<string>>(new Set())
 const validationErrors = ref<Record<string, string>>({})
 const savingDraft = ref(false)
 const draftMessage = ref('')
+const photoLightboxOpen = ref(false)
+const lightboxPhotos = ref<string[]>([])
+const lightboxStartIndex = ref(0)
 
 onMounted(loadInspectionItems)
 
@@ -225,6 +245,14 @@ function readFileAsDataUrl(file: File) {
     reader.onerror = () => reject(reader.error)
     reader.readAsDataURL(file)
   })
+}
+
+function openPhotoLightbox(photos: string[] | null | undefined, index = 0) {
+  const cleanPhotos = (photos || []).filter(Boolean)
+  if (!cleanPhotos.length) return
+  lightboxPhotos.value = cleanPhotos
+  lightboxStartIndex.value = index
+  photoLightboxOpen.value = true
 }
 
 function markAllPass() {
@@ -455,4 +483,7 @@ async function createIssuesForFailedResults(inspectionId: string) {
 <style scoped>
 .slide-enter-active, .slide-leave-active { transition: all 0.2s ease; }
 .slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-6px); }
+.photo-thumb {
+  @apply w-10 h-10 rounded-lg overflow-hidden border border-red-200 bg-red-50 cursor-pointer transition-all hover:ring-2 hover:ring-blue-500 hover:opacity-90 dark:border-red-800 dark:bg-red-900/10;
+}
 </style>

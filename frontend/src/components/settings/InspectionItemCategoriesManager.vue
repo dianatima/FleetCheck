@@ -1,13 +1,38 @@
 <template>
-  <div>
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
+  <div class="card overflow-hidden">
+    <div class="section-header">
       <div>
-        <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
+        <h2 class="section-title">
           Inspection Item Categories
         </h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        <p class="section-description">
           Manage reusable checklist categories and default severity levels.
         </p>
+      </div>
+    </div>
+
+    <div class="section-toolbar">
+      <div class="relative flex-1 min-w-52">
+        <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          v-model="localSearch"
+          class="input-field pl-9 py-2 text-sm"
+          placeholder="Search categories..."
+        />
+      </div>
+
+      <div class="flex items-center gap-2">
+        <Filter :size="15" class="text-gray-400" />
+        <select
+          v-model="categoryStore.severityFilter"
+          class="input-field py-2 text-sm w-auto"
+          @change="categoryStore.setSeverityFilter(categoryStore.severityFilter)"
+        >
+          <option value="all">All Severities</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
       </div>
 
       <button class="btn-primary gap-2 text-sm" @click="openCreateModal">
@@ -16,17 +41,17 @@
       </button>
     </div>
 
-    <div v-if="categoryStore.success" class="card p-4 mb-4 text-sm text-green-600 dark:text-green-400">
+    <div v-if="categoryStore.success" class="mx-6 mt-4 rounded-xl border border-green-100 bg-green-50 p-4 text-sm text-green-600 dark:border-green-900/30 dark:bg-green-900/10 dark:text-green-400">
       {{ categoryStore.success }}
     </div>
-    <div v-if="categoryStore.error" class="card p-4 mb-4 text-sm text-red-500">
+    <div v-if="categoryStore.error" class="mx-6 mt-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-500 dark:border-red-900/30 dark:bg-red-900/10">
       {{ categoryStore.error }}
     </div>
 
-    <div v-if="categoryStore.loading" class="card p-6 text-sm text-gray-500">
+    <div v-if="categoryStore.loading" class="p-6 text-sm text-gray-500">
       Loading inspection item categories...
     </div>
-    <div v-else class="card overflow-hidden">
+    <div v-else>
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
@@ -99,8 +124,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import { onMounted, ref, watch } from 'vue'
+import { Filter, Pencil, Plus, Search, Trash2 } from 'lucide-vue-next'
 import BaseTablePagination from '@/components/shared/BaseTablePagination.vue'
 import InspectionItemCategoryFormModal from '@/components/settings/InspectionItemCategoryFormModal.vue'
 import { useAppStore } from '@/stores/app'
@@ -116,9 +141,16 @@ const appStore = useAppStore()
 const categoryStore = useInspectionItemCategoryStore()
 const showModal = ref(false)
 const editingCategory = ref<InspectionItemCategory | null>(null)
+const localSearch = ref(categoryStore.search)
 const headers = ['Name', 'Severity', 'Sort Order', 'Created', 'Actions']
+let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => categoryStore.fetchCategories())
+
+watch(localSearch, (value) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => categoryStore.setSearch(value), 350)
+})
 
 function openCreateModal() {
   categoryStore.clearMessages()
@@ -170,6 +202,22 @@ function formatDate(value: string | null) {
 </script>
 
 <style scoped>
+.section-header {
+  @apply p-6 border-b border-gray-100 dark:border-gray-700;
+}
+
+.section-title {
+  @apply font-bold text-gray-900 dark:text-white;
+}
+
+.section-description {
+  @apply text-sm text-gray-500 dark:text-gray-400 mt-1;
+}
+
+.section-toolbar {
+  @apply flex flex-wrap items-center gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900;
+}
+
 .icon-btn {
   @apply w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200;
 }

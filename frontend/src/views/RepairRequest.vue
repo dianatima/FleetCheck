@@ -22,9 +22,38 @@
           <option value="cancelled">{{ repairStatusLabel('cancelled') }}</option>
         </select>
       </div>
-      <button @click="fetchRepairData" class="btn-secondary gap-2 text-sm">
-        <RefreshCw :size="15" /> Refresh
-      </button>
+      <select v-model="filterVehicle" class="input-field py-2 text-sm w-auto">
+        <option value="all">All Vehicles</option>
+        <option v-for="vehicle in vehicleOptions" :key="vehicle.id" :value="vehicle.id">
+          {{ vehicle.label }}
+        </option>
+      </select>
+      <select v-model="filterIssue" class="input-field py-2 text-sm w-auto">
+        <option value="all">All Issues</option>
+        <option v-for="issue in issueOptions" :key="issue.value" :value="issue.value">
+          {{ issue.label }}
+        </option>
+      </select>
+    </div>
+
+    <div
+      v-if="!selectedRepair && activeFilterChips.length"
+      class="flex flex-wrap gap-2 mb-5"
+    >
+      <span
+        v-for="chip in activeFilterChips"
+        :key="chip.key"
+        class="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
+      >
+        {{ chip.label }}
+        <button
+          type="button"
+          class="font-medium hover:underline"
+          @click="clearFilterChip(chip.key)"
+        >
+          Clear
+        </button>
+      </span>
     </div>
 
     <div v-if="success" class="card p-4 mb-5 bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30">
@@ -195,16 +224,15 @@
               <section>
                 <h3 class="section-title">Related photos</h3>
                 <div v-if="photoUrls(selectedRepair).length" class="flex flex-wrap gap-3">
-                  <a
+                  <button
                     v-for="(photo, index) in photoUrls(selectedRepair)"
                     :key="`${selectedRepair.id}-${index}`"
-                    :href="photo"
-                    target="_blank"
-                    rel="noreferrer"
+                    type="button"
                     class="photo-thumb"
+                    @click="openPhotoLightbox(photoUrls(selectedRepair), index)"
                   >
                     <img :src="photo" alt="" class="w-full h-full object-cover" />
-                  </a>
+                  </button>
                 </div>
                 <p v-else class="text-sm text-gray-500 dark:text-gray-400">No photos attached.</p>
               </section>
@@ -252,6 +280,12 @@
         </article>
       </div>
     </template>
+
+    <PhotoLightbox
+      v-model="photoLightboxOpen"
+      :photos="lightboxPhotos"
+      :start-index="lightboxStartIndex"
+    />
   </AppLayout>
 </template>
 
@@ -266,14 +300,13 @@ import {
   FileText,
   Filter,
   PlayCircle,
-  RefreshCw,
   Search,
   Truck,
-  Wrench,
   XCircle,
 } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
 import BaseTablePagination from '@/components/shared/BaseTablePagination.vue'
+import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -293,9 +326,14 @@ const success = ref('')
 const busyId = ref('')
 const search = ref('')
 const filterStatus = ref('all')
+const filterVehicle = ref('all')
+const filterIssue = ref('all')
 const selectedRepair = ref<any | null>(null)
 const page = ref(1)
 const pageSize = ref(10)
+const photoLightboxOpen = ref(false)
+const lightboxPhotos = ref<string[]>([])
+const lightboxStartIndex = ref(0)
 
 const unresolvedIssueStatuses = ['under-review', 'in-repair']
 const canManage = computed(() => ['owner', 'manager'].includes(authStore.profile?.role || ''))
@@ -308,16 +346,72 @@ const summaryStats = computed(() => [
   { label: repairStatusLabel('cancelled'), count: repairs.value.filter((repair) => repair.status === 'cancelled').length, color: 'text-gray-500 dark:text-gray-400' },
 ])
 
+const vehicleOptions = computed(() => {
+  const byId = new Map<string, { id: string; label: string }>()
+
+  for (const repair of repairs.value) {
+    if (repair.vehicle_id) {
+      byId.set(repair.vehicle_id, {
+        id: repair.vehicle_id,
+        label: vehicleLabel(repair),
+      })
+    }
+  }
+
+  return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label))
+})
+
+const issueOptions = computed(() => {
+  const byValue = new Map<string, { value: string; label: string }>()
+
+  for (const repair of repairs.value) {
+    for (const label of issueFilterLabels(repair)) {
+      const trimmed = label.trim()
+      if (trimmed) byValue.set(trimmed, { value: trimmed, label: trimmed })
+    }
+  }
+
+  return [...byValue.values()].sort((a, b) => a.label.localeCompare(b.label))
+})
+
+const activeFilterChips = computed(() => {
+  const chips: Array<{ key: string; label: string }> = []
+
+  if (filterStatus.value !== 'all') {
+    chips.push({
+      key: 'status',
+      label: `Status: ${repairStatusLabel(filterStatus.value)}`,
+    })
+  }
+
+  if (filterVehicle.value !== 'all') {
+    chips.push({
+      key: 'vehicle_id',
+      label: `Vehicle: ${vehicleOptions.value.find((vehicle) => vehicle.id === filterVehicle.value)?.label || 'Selected vehicle'}`,
+    })
+  }
+
+  if (filterIssue.value !== 'all') {
+    chips.push({
+      key: 'issue',
+      label: `Issue: ${filterIssue.value}`,
+    })
+  }
+
+  return chips
+})
+
 const filteredRepairs = computed(() => {
   const q = search.value.trim().toLowerCase()
 
   return repairs.value.filter((repair) => {
+    const issueLabels = issueFilterLabels(repair)
     const haystack = [
       repair.title,
       repair.description,
       repair.status,
       vehicleLabel(repair),
-      issueTitle(repair.issues),
+      ...issueLabels,
       repair.issues?.description,
       driverLabel(repair.issues),
       inspectionLabel(repair.issues),
@@ -326,7 +420,12 @@ const filteredRepairs = computed(() => {
 
     const matchesSearch = !q || haystack.includes(q)
     const matchesStatus = filterStatus.value === 'all' || repair.status === filterStatus.value
-    return matchesSearch && matchesStatus
+    const matchesVehicle = filterVehicle.value === 'all' || repair.vehicle_id === filterVehicle.value
+    const matchesIssue =
+      filterIssue.value === 'all' ||
+      issueLabels.some((label) => label.toLowerCase() === filterIssue.value.toLowerCase())
+
+    return matchesSearch && matchesStatus && matchesVehicle && matchesIssue
   })
 })
 
@@ -335,11 +434,14 @@ const paginatedRepairs = computed(() => {
   return filteredRepairs.value.slice(start, start + pageSize.value)
 })
 
-watch([search, filterStatus, pageSize], () => {
+watch([search, filterStatus, filterVehicle, filterIssue, pageSize], () => {
   page.value = 1
 })
 
-onMounted(fetchRepairData)
+onMounted(async () => {
+  syncFiltersFromQuery()
+  await fetchRepairData()
+})
 
 watch(
   () => authStore.companyId,
@@ -349,6 +451,11 @@ watch(
 watch(
   () => [route.params.id, route.query.repairId],
   () => selectRepairFromRoute()
+)
+
+watch(
+  () => route.query,
+  () => syncFiltersFromQuery()
 )
 
 async function fetchRepairData() {
@@ -408,8 +515,13 @@ async function fetchRepairData() {
           id,
           comment,
           photo_urls,
-          inspection_template_items (
-            title
+        inspection_template_items (
+            title,
+            category_id,
+            inspection_item_categories (
+              id,
+              name
+            )
           )
         )
       )
@@ -449,6 +561,24 @@ function closeRepairDetail() {
   if (route.params.id || route.query.repairId) {
     router.push('/repairs')
   }
+}
+
+function syncFiltersFromQuery() {
+  filterStatus.value = String(route.query.status || 'all')
+  filterVehicle.value = String(route.query.vehicle_id || 'all')
+  filterIssue.value = String(route.query.issue || 'all')
+  page.value = 1
+}
+
+function clearFilterChip(key: string) {
+  const query = { ...route.query }
+  delete query[key]
+
+  if (key === 'status') filterStatus.value = 'all'
+  if (key === 'vehicle_id') filterVehicle.value = 'all'
+  if (key === 'issue') filterIssue.value = 'all'
+
+  router.replace({ path: '/repairs', query })
 }
 
 async function updateRepairStatus(repair: any, status: RepairStatus) {
@@ -599,6 +729,18 @@ function issueTitle(issue: any) {
   return issue?.title || issue?.inspection_results?.inspection_template_items?.title || 'Inspection issue'
 }
 
+function issueCategoryName(issue: any) {
+  return issue?.inspection_results?.inspection_template_items?.inspection_item_categories?.name || ''
+}
+
+function issueFilterLabels(repair: any) {
+  return [
+    repair?.title,
+    issueTitle(repair?.issues),
+    issueCategoryName(repair?.issues),
+  ].filter(Boolean)
+}
+
 function driverLabel(issue: any) {
   return issue?.drivers?.name || '—'
 }
@@ -699,6 +841,14 @@ function flash(message: string) {
     if (success.value === message) success.value = ''
   }, 3000)
 }
+
+function openPhotoLightbox(photos: string[] | null | undefined, index = 0) {
+  const cleanPhotos = (photos || []).filter(Boolean)
+  if (!cleanPhotos.length) return
+  lightboxPhotos.value = cleanPhotos
+  lightboxStartIndex.value = index
+  photoLightboxOpen.value = true
+}
 </script>
 
 <style scoped>
@@ -739,7 +889,7 @@ function flash(message: string) {
 }
 
 .photo-thumb {
-  @apply w-20 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 hover:ring-2 hover:ring-blue-500 transition-all;
+  @apply w-20 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 cursor-pointer hover:ring-2 hover:ring-blue-500 hover:opacity-90 transition-all;
 }
 
 .action-panel {

@@ -212,22 +212,21 @@
                   class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3"
                 >
                   <div
-                    v-for="photo in existingLicensePhotos"
+                    v-for="(photo, index) in existingLicensePhotos"
                     :key="photo"
                     class="photo-preview"
                   >
-                    <a
-                      :href="photo"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="block h-full"
+                    <button
+                      type="button"
+                      class="block h-full w-full cursor-pointer"
+                      @click="openPhotoPreview(existingLicensePhotos, index)"
                     >
                       <img
                         :src="photo"
                         alt="Driver license photo"
                         class="w-full h-full object-cover"
                       />
-                    </a>
+                    </button>
                     <button
                       type="button"
                       class="photo-remove"
@@ -240,15 +239,21 @@
                   </div>
 
                   <div
-                    v-for="photo in licensePhotoFiles"
+                    v-for="(photo, index) in licensePhotoFiles"
                     :key="photo.previewUrl"
                     class="photo-preview"
                   >
-                    <img
-                      :src="photo.previewUrl"
-                      :alt="photo.file.name"
-                      class="w-full h-full object-cover"
-                    />
+                    <button
+                      type="button"
+                      class="block h-full w-full cursor-pointer"
+                      @click="openPhotoPreview(licensePreviewUrls, index)"
+                    >
+                      <img
+                        :src="photo.previewUrl"
+                        :alt="photo.file.name"
+                        class="w-full h-full object-cover"
+                      />
+                    </button>
                     <button
                       type="button"
                       class="photo-remove"
@@ -316,22 +321,21 @@
                   class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3"
                 >
                   <div
-                    v-for="photo in existingMedCardPhotos"
+                    v-for="(photo, index) in existingMedCardPhotos"
                     :key="photo"
                     class="photo-preview"
                   >
-                    <a
-                      :href="photo"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="block h-full"
+                    <button
+                      type="button"
+                      class="block h-full w-full cursor-pointer"
+                      @click="openPhotoPreview(existingMedCardPhotos, index)"
                     >
                       <img
                         :src="photo"
                         alt="Medical card photo"
                         class="w-full h-full object-cover"
                       />
-                    </a>
+                    </button>
                     <button
                       type="button"
                       class="photo-remove"
@@ -344,15 +348,21 @@
                   </div>
 
                   <div
-                    v-for="photo in medCardPhotoFiles"
+                    v-for="(photo, index) in medCardPhotoFiles"
                     :key="photo.previewUrl"
                     class="photo-preview"
                   >
-                    <img
-                      :src="photo.previewUrl"
-                      :alt="photo.file.name"
-                      class="w-full h-full object-cover"
-                    />
+                    <button
+                      type="button"
+                      class="block h-full w-full cursor-pointer"
+                      @click="openPhotoPreview(medCardPreviewUrls, index)"
+                    >
+                      <img
+                        :src="photo.previewUrl"
+                        :alt="photo.file.name"
+                        class="w-full h-full object-cover"
+                      />
+                    </button>
                     <button
                       type="button"
                       class="photo-remove"
@@ -391,11 +401,17 @@
         </div>
       </div>
     </Transition>
+
+    <PhotoLightbox
+      v-model="photoLightboxOpen"
+      :photos="lightboxPhotos"
+      :start-index="lightboxStartIndex"
+    />
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { reactive, watch, ref } from "vue";
+import { computed, reactive, watch, ref } from "vue";
 import {
   X,
   Save,
@@ -410,6 +426,7 @@ import {
 import { useAppStore } from "@/stores/app";
 import { supabase } from "@/lib/supabase";
 import BaseDateInput from "@/components/shared/BaseDateInput.vue";
+import PhotoLightbox from "@/components/shared/PhotoLightbox.vue";
 
 type DriverStatus = "new" | "active" | "pending" | "inactive";
 
@@ -463,6 +480,16 @@ const medCardPhotoFiles = ref<NewPhoto[]>([]);
 const existingLicensePhotos = ref<string[]>([]);
 const existingMedCardPhotos = ref<string[]>([]);
 const avatarPreview = ref("");
+const photoLightboxOpen = ref(false);
+const lightboxPhotos = ref<string[]>([]);
+const lightboxStartIndex = ref(0);
+
+const licensePreviewUrls = computed(() =>
+  licensePhotoFiles.value.map((photo) => photo.previewUrl)
+);
+const medCardPreviewUrls = computed(() =>
+  medCardPhotoFiles.value.map((photo) => photo.previewUrl)
+);
 
 const licenseClasses = [
   "Class A",
@@ -640,6 +667,14 @@ function removeLicensePhotoFile(previewUrl: string) {
 
 function removeMedCardPhotoFile(previewUrl: string) {
   medCardPhotoFiles.value = removeNewPhoto(medCardPhotoFiles.value, previewUrl);
+}
+
+function openPhotoPreview(photos: string[] | null | undefined, index = 0) {
+  const cleanPhotos = (photos || []).filter(Boolean);
+  if (!cleanPhotos.length) return;
+  lightboxPhotos.value = cleanPhotos;
+  lightboxStartIndex.value = index;
+  photoLightboxOpen.value = true;
 }
 
 async function uploadSingleFile(file: File, folder: string) {

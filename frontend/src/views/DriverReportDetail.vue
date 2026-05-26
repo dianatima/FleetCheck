@@ -107,13 +107,15 @@
             </p>
 
             <div v-if="row.photo_urls?.length" class="mt-3 flex flex-wrap gap-2">
-              <img
+              <button
                 v-for="(url, index) in row.photo_urls"
                 :key="`${row.id}-${index}`"
-                :src="url"
-                alt=""
-                class="w-20 h-20 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
-              />
+                type="button"
+                class="photo-thumb"
+                @click="openPhotoLightbox(row.photo_urls, index)"
+              >
+                <img :src="url" alt="" class="w-full h-full object-cover" />
+              </button>
             </div>
           </div>
         </div>
@@ -137,18 +139,26 @@
             </div>
             <p v-if="issue.description" class="text-sm text-gray-600 dark:text-gray-300 mt-2">{{ issue.description }}</p>
             <div v-if="issue.photo_urls?.length" class="mt-3 flex flex-wrap gap-2">
-              <img
+              <button
                 v-for="(url, index) in issue.photo_urls"
                 :key="`${issue.id}-${index}`"
-                :src="url"
-                alt=""
-                class="w-20 h-20 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
-              />
+                type="button"
+                class="photo-thumb"
+                @click="openPhotoLightbox(issue.photo_urls, index)"
+              >
+                <img :src="url" alt="" class="w-full h-full object-cover" />
+              </button>
             </div>
           </div>
         </div>
       </section>
     </template>
+
+    <PhotoLightbox
+      v-model="photoLightboxOpen"
+      :photos="lightboxPhotos"
+      :start-index="lightboxStartIndex"
+    />
   </AppLayout>
 </template>
 
@@ -157,6 +167,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ChevronRight, Download, Truck } from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -172,6 +183,9 @@ const issues = ref<any[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 const downloading = ref(false)
+const photoLightboxOpen = ref(false)
+const lightboxPhotos = ref<string[]>([])
+const lightboxStartIndex = ref(0)
 const backPath = computed(() => route.path.startsWith('/reports/') ? '/reports' : '/driver/reports')
 
 onMounted(loadReport)
@@ -346,6 +360,14 @@ function severityBadge(severity: string | null) {
 function hideBrokenImage(e: Event) {
   ;(e.target as HTMLImageElement).style.display = 'none'
 }
+
+function openPhotoLightbox(photos: string[] | null | undefined, index = 0) {
+  const cleanPhotos = (photos || []).filter(Boolean)
+  if (!cleanPhotos.length) return
+  lightboxPhotos.value = cleanPhotos
+  lightboxStartIndex.value = index
+  photoLightboxOpen.value = true
+}
 </script>
 
 <style scoped>
@@ -387,5 +409,9 @@ function hideBrokenImage(e: Event) {
 
 .view-vehicle-inline {
   @apply inline-flex items-center gap-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400;
+}
+
+.photo-thumb {
+  @apply w-20 h-20 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 cursor-pointer transition-all hover:ring-2 hover:ring-blue-500 hover:opacity-90 dark:border-gray-700 dark:bg-gray-800;
 }
 </style>

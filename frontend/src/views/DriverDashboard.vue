@@ -331,9 +331,7 @@ async function fetchDashboard() {
   loading.value = false
 }
 
-const availableVehicles = computed(() =>
-  vehicleStore.availableVehicles
-)
+const availableVehicles = computed(() => vehicleStore.inspectableVehicles)
 
 const weekBuckets = computed(() => {
   const days = buildCurrentWeekDays()
@@ -496,7 +494,13 @@ function availabilityBadge(vehicle: any) {
 }
 
 function canStartPreTrip(vehicle: any) {
-  return vehicle.status === 'active' && Boolean(vehicle.available)
+  return (
+    vehicle.status === 'active' &&
+    !vehicle.in_active_repair &&
+    !vehicle.awaiting_manager_review &&
+    !vehicle.assigned_to_other &&
+    (Boolean(vehicle.available) || Boolean(vehicle.assigned_to_me))
+  )
 }
 
 function canStartPostTrip(vehicle: any) {

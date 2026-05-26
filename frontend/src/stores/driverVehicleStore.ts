@@ -46,6 +46,9 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
 
   const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
   const availableVehicles = computed(() => annotatedVehicles.value.filter(isDriverVehicleAvailable))
+  const inspectableVehicles = computed(() =>
+    annotatedVehicles.value.filter(isDriverVehicleInspectable)
+  )
 
   async function fetchDriverContext() {
     const profileId = authStore.profile?.id
@@ -462,6 +465,16 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     return vehicle.status === 'active' && vehicle.available === true
   }
 
+  function isDriverVehicleInspectable(vehicle: any) {
+    return (
+      vehicle.status === 'active' &&
+      !vehicle.in_active_repair &&
+      !vehicle.awaiting_manager_review &&
+      !vehicle.assigned_to_other &&
+      (vehicle.available === true || vehicle.assigned_to_me === true)
+    )
+  }
+
   function paginate(rows: any[]) {
     const from = (page.value - 1) * pageSize.value
     return rows.slice(from, from + pageSize.value)
@@ -654,7 +667,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     const existingDraftId = await findExistingDraftInspection(driver.id, vehicleId, type)
     if (existingDraftId) return existingDraftId
 
-    const template = await findDefaultTemplate(driver.company_id, vehicle.vehicle_type_id)
+    const template = await findTemplateForVehicleType(driver.company_id, vehicle.vehicle_type_id)
 
     if (!template) {
       error.value = 'No inspection template found for this vehicle type'
@@ -751,7 +764,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     return data
   }
 
-  async function findDefaultTemplate(companyId: string, vehicleTypeId: string) {
+  async function findTemplateForVehicleType(companyId: string, vehicleTypeId: string) {
     const { data, error: templateError } = await supabase
       .from('inspection_templates')
       .select(`
@@ -763,7 +776,8 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       `)
       .eq('company_id', companyId)
       .eq('vehicle_type_id', vehicleTypeId)
-      .eq('is_default', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
     if (templateError) {
@@ -838,6 +852,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     annotatedVehicles,
     filteredVehicles,
     availableVehicles,
+    inspectableVehicles,
     selectedVehicle,
     currentDriver,
     activeAssignment,
@@ -862,5 +877,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     setPage,
     setPageSize,
     isDriverVehicleAvailable,
+    isDriverVehicleInspectable,
   }
 })

@@ -50,6 +50,21 @@
         </select>
       </div>
 
+      <select
+        v-model="driverStore.licenseClassFilter"
+        @change="driverStore.setLicenseClassFilter(driverStore.licenseClassFilter)"
+        class="input-field py-2 text-sm w-auto"
+      >
+        <option value="all">All Classes</option>
+        <option
+          v-for="licenseClass in driverStore.licenseClassOptions"
+          :key="licenseClass"
+          :value="licenseClass"
+        >
+          {{ licenseClass }}
+        </option>
+      </select>
+
       <button @click="openAddModal" class="btn-primary gap-2 text-sm">
         <Plus :size="16" /> {{ store.t("addDriver") }}
       </button>
