@@ -1,5 +1,5 @@
 <template>
-  <AppLayout :title="store.t('inspectionResult')">
+  <AppLayout title="Report Details">
     <RouterLink :to="vehiclePath" class="card vehicle-context-card group">
       <div class="vehicle-photo">
         <img
@@ -125,11 +125,22 @@
 
     <!-- Actions -->
     <div class="space-y-3 pb-4">
+      <div v-if="pdfError" class="card p-3 text-sm text-red-500">
+        {{ pdfError }}
+      </div>
+      <button
+        type="button"
+        class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex"
+        :disabled="downloading"
+        @click="downloadPdf"
+      >
+        <Download :size="16" /> {{ downloading ? 'Preparing PDF...' : 'Download PDF' }}
+      </button>
       <RouterLink :to="reportLink" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
         <FileText :size="16" /> {{ store.t('viewFullReport') }}
       </RouterLink>
       <RouterLink to="/driver/vehicles" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
-        <Truck :size="16" /> Back to My Vehicles
+        <Truck :size="16" /> Back to Vehicles
       </RouterLink>
       <RouterLink to="/driver" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
         <RotateCcw :size="16" /> {{ store.t('backToDashboard') }}
@@ -141,18 +152,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { CheckCircle, AlertTriangle, FileText, RotateCcw, Truck, ExternalLink } from 'lucide-vue-next'
+import { CheckCircle, AlertTriangle, Download, FileText, RotateCcw, Truck, ExternalLink } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '../components/layout/AppLayout.vue'
 import { formatDateTime } from '@/lib/dateFormat'
+import { downloadInspectionReportPdf } from '@/lib/reportPdf'
 
 const store = useAppStore()
 const authStore = useAuthStore()
 const route = useRoute()
 const inspection = ref<any | null>(null)
 const results = ref<any[]>([])
+const downloading = ref(false)
+const pdfError = ref<string | null>(null)
 
 onMounted(loadInspectionResult)
 
@@ -258,6 +272,20 @@ async function loadInspectionResult() {
     `)
     .eq('inspection_id', inspectionId)
   results.value = data || []
+}
+
+async function downloadPdf() {
+  if (!inspection.value?.id) return
+  downloading.value = true
+  pdfError.value = null
+
+  try {
+    await downloadInspectionReportPdf(inspection.value.id, store.language)
+  } catch (downloadError: any) {
+    pdfError.value = downloadError?.message || 'Report PDF could not be downloaded.'
+  } finally {
+    downloading.value = false
+  }
 }
 
 function hideBrokenImage(e: Event) {

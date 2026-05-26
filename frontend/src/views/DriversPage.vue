@@ -65,16 +65,21 @@
 
     <template v-else>
       <div class="card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100/80 dark:border-gray-800">
+          <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
+            Drivers
+          </h2>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full">
             <thead>
               <tr
-                class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+                class="table-header-row"
               >
                 <th
                   v-for="h in driverHeaders"
                   :key="h"
-                  class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap"
+                  class="table-th"
                 >
                   {{ h }}
                 </th>
@@ -94,7 +99,7 @@
               <tr
                 v-for="d in drivers"
                 :key="d.id"
-                class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
+                class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
                 @click="router.push(`/drivers/${d.id}`)"
               >
                 <td class="px-4 py-3">

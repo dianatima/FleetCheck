@@ -19,7 +19,7 @@ const translations: Record<Language, Record<string, string>> = {
     drivers: 'Drivers',
     inspections: 'Inspections',
     inspectionTemplates: 'Inspection Templates',
-    myVehicles: 'My Vehicles',
+    myVehicles: 'Vehicles',
     reports: 'Reports',
     issues: 'Issues',
     repairs: 'Repairs',
@@ -30,7 +30,7 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Nav back links
     backToDrivers: 'Back to Drivers',
-    backToFleet: 'Back to Fleet',
+    backToFleet: 'Back to Vehicles',
     backToLogin: 'Back to Login',
     backToInspection: 'Back to Inspection',
     backToIssues: 'Back to Issues',
@@ -74,7 +74,7 @@ const translations: Record<Language, Record<string, string>> = {
     removePhoto: 'Remove photo',
     editVehicle: 'Edit Vehicle',
     editRepair: 'Edit Repair',
-    newRepairRequest: 'New Repair Request',
+    newRepairRequest: 'New Repair',
     newRequest: 'New Request',
     submitRequest: 'Submit Request',
     saveReview: 'Save Review',
@@ -88,7 +88,7 @@ const translations: Record<Language, Record<string, string>> = {
     viewFullReport: 'View Full Report',
     fixAndResubmit: 'Fix & Resubmit',
     viewAll: 'View all',
-    openVehicleCard: 'Open Vehicle Card',
+    openVehicleCard: 'Open Vehicle',
     goToLogin: 'Go to Login',
     backToHome: 'Back to Home',
     goToDashboard: 'Go to Dashboard',
@@ -105,7 +105,6 @@ const translations: Record<Language, Record<string, string>> = {
     createDriverAccount: 'Create Driver Account',
     download: 'Download',
     pdf: 'PDF',
-    csv: 'CSV',
     email: 'Email',
 
     // Form fields
@@ -178,16 +177,18 @@ const translations: Record<Language, Record<string, string>> = {
     searchVehicles: 'Search vehicles...',
     searchRepairs: 'Search repairs...',
     searchIssues: 'Search issues...',
+    from: 'From',
+    to: 'To',
 
     // Section titles
-    reportsCompliance: 'Reports & Compliance',
-    myReports: 'My Reports',
-    fleetVehicles: 'Fleet Vehicles',
-    repairRequests: 'Repair Requests',
-    inspectionResult: 'Inspection Result',
+    reportsCompliance: 'Reports',
+    myReports: 'Reports',
+    fleetVehicles: 'Vehicles',
+    repairRequests: 'Repairs',
+    inspectionResult: 'Report Details',
     issueDetails: 'Issue Details',
-    driverProfile: 'Driver Profile',
-    vehicleDetail: 'Vehicle Detail',
+    driverProfile: 'Driver Details',
+    vehicleDetail: 'Vehicle Details',
     personalInformation: 'Personal Information',
     emergencyContact: 'Emergency Contact',
     driverLicense: 'Driver License',
@@ -321,7 +322,7 @@ const translations: Record<Language, Record<string, string>> = {
     other: 'Other',
 
     // Repair / Issue actions
-    createRepairRequest: 'Create Repair Request',
+    createRepairRequest: 'Create Repair',
     notifyManager: 'Notify Manager',
 
     // Pending
@@ -451,7 +452,7 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Nav back links
     backToDrivers: 'До водіїв',
-    backToFleet: 'До автопарку',
+    backToFleet: 'До транспорту',
     backToLogin: 'До входу',
     backToInspection: 'До огляду',
     backToIssues: 'До проблем',
@@ -495,7 +496,7 @@ const translations: Record<Language, Record<string, string>> = {
     removePhoto: 'Видалити фото',
     editVehicle: 'Редагувати транспорт',
     editRepair: 'Редагувати ремонт',
-    newRepairRequest: 'Нова заявка на ремонт',
+    newRepairRequest: 'Новий ремонт',
     newRequest: 'Нова заявка',
     submitRequest: 'Подати заявку',
     saveReview: 'Зберегти перевірку',
@@ -509,7 +510,7 @@ const translations: Record<Language, Record<string, string>> = {
     viewFullReport: 'Переглянути повний звіт',
     fixAndResubmit: 'Виправити та повторно надіслати',
     viewAll: 'Переглянути всі',
-    openVehicleCard: 'Відкрити картку транспорту',
+    openVehicleCard: 'Відкрити транспорт',
     goToLogin: 'До входу',
     backToHome: 'На головну',
     goToDashboard: 'До панелі',
@@ -526,7 +527,6 @@ const translations: Record<Language, Record<string, string>> = {
     createDriverAccount: 'Створити акаунт водія',
     download: 'Завантажити',
     pdf: 'PDF',
-    csv: 'CSV',
     email: 'Ел. пошта',
 
     // Form fields
@@ -599,15 +599,17 @@ const translations: Record<Language, Record<string, string>> = {
     searchVehicles: 'Пошук транспорту...',
     searchRepairs: 'Пошук ремонтів...',
     searchIssues: 'Пошук проблем...',
+    from: 'Від',
+    to: 'До',
 
     // Section titles
-    reportsCompliance: 'Звіти та відповідність',
-    myReports: 'Мої звіти',
-    fleetVehicles: 'Транспорт автопарку',
-    repairRequests: 'Заявки на ремонт',
-    inspectionResult: 'Результат огляду',
+    reportsCompliance: 'Звіти',
+    myReports: 'Звіти',
+    fleetVehicles: 'Транспорт',
+    repairRequests: 'Ремонти',
+    inspectionResult: 'Деталі звіту',
     issueDetails: 'Деталі проблеми',
-    driverProfile: 'Профіль водія',
+    driverProfile: 'Деталі водія',
     vehicleDetail: 'Деталі транспорту',
     personalInformation: 'Особисті дані',
     emergencyContact: 'Екстрений контакт',
@@ -742,7 +744,7 @@ const translations: Record<Language, Record<string, string>> = {
     other: 'Інше',
 
     // Repair / Issue actions
-    createRepairRequest: 'Створити заявку на ремонт',
+    createRepairRequest: 'Створити ремонт',
     notifyManager: 'Повідомити менеджера',
 
     // Pending
@@ -872,7 +874,7 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Nav back links
     backToDrivers: 'Volver a Conductores',
-    backToFleet: 'Volver a la Flota',
+    backToFleet: 'Volver a Vehículos',
     backToLogin: 'Volver al Inicio de Sesión',
     backToInspection: 'Volver a Inspección',
     backToIssues: 'Volver a Problemas',
@@ -916,7 +918,7 @@ const translations: Record<Language, Record<string, string>> = {
     removePhoto: 'Eliminar foto',
     editVehicle: 'Editar Vehículo',
     editRepair: 'Editar Reparación',
-    newRepairRequest: 'Nueva Solicitud de Reparación',
+    newRepairRequest: 'Nueva Reparación',
     newRequest: 'Nueva Solicitud',
     submitRequest: 'Enviar Solicitud',
     saveReview: 'Guardar Revisión',
@@ -930,7 +932,7 @@ const translations: Record<Language, Record<string, string>> = {
     viewFullReport: 'Ver Reporte Completo',
     fixAndResubmit: 'Corregir y Reenviar',
     viewAll: 'Ver todos',
-    openVehicleCard: 'Abrir Ficha del Vehículo',
+    openVehicleCard: 'Abrir Vehículo',
     goToLogin: 'Ir al Inicio de Sesión',
     backToHome: 'Volver al Inicio',
     goToDashboard: 'Ir al Panel',
@@ -947,7 +949,6 @@ const translations: Record<Language, Record<string, string>> = {
     createDriverAccount: 'Crear Cuenta de Conductor',
     download: 'Descargar',
     pdf: 'PDF',
-    csv: 'CSV',
     email: 'Correo electrónico',
 
     // Form fields
@@ -1020,16 +1021,18 @@ const translations: Record<Language, Record<string, string>> = {
     searchVehicles: 'Buscar vehículos...',
     searchRepairs: 'Buscar reparaciones...',
     searchIssues: 'Buscar problemas...',
+    from: 'Desde',
+    to: 'Hasta',
 
     // Section titles
-    reportsCompliance: 'Reportes y Cumplimiento',
-    myReports: 'Mis Reportes',
-    fleetVehicles: 'Vehículos de la Flota',
-    repairRequests: 'Solicitudes de Reparación',
-    inspectionResult: 'Resultado de Inspección',
+    reportsCompliance: 'Reportes',
+    myReports: 'Reportes',
+    fleetVehicles: 'Vehículos',
+    repairRequests: 'Reparaciones',
+    inspectionResult: 'Detalles del Reporte',
     issueDetails: 'Detalles del Problema',
-    driverProfile: 'Perfil del Conductor',
-    vehicleDetail: 'Detalle del Vehículo',
+    driverProfile: 'Detalles del Conductor',
+    vehicleDetail: 'Detalles del Vehículo',
     personalInformation: 'Información Personal',
     emergencyContact: 'Contacto de Emergencia',
     driverLicense: 'Licencia de Conducir',
@@ -1163,7 +1166,7 @@ const translations: Record<Language, Record<string, string>> = {
     other: 'Otro',
 
     // Repair / Issue actions
-    createRepairRequest: 'Crear Solicitud de Reparación',
+    createRepairRequest: 'Crear Reparación',
     notifyManager: 'Notificar al Gerente',
 
     // Pending
@@ -1293,7 +1296,7 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Nav back links
     backToDrivers: 'Retour aux Conducteurs',
-    backToFleet: 'Retour à la Flotte',
+    backToFleet: 'Retour aux Véhicules',
     backToLogin: 'Retour à la Connexion',
     backToInspection: "Retour à l'Inspection",
     backToIssues: 'Retour aux Problèmes',
@@ -1337,7 +1340,7 @@ const translations: Record<Language, Record<string, string>> = {
     removePhoto: 'Supprimer la photo',
     editVehicle: 'Modifier le Véhicule',
     editRepair: 'Modifier la Réparation',
-    newRepairRequest: 'Nouvelle Demande de Réparation',
+    newRepairRequest: 'Nouvelle Réparation',
     newRequest: 'Nouvelle Demande',
     submitRequest: 'Soumettre la Demande',
     saveReview: 'Enregistrer la Révision',
@@ -1351,7 +1354,7 @@ const translations: Record<Language, Record<string, string>> = {
     viewFullReport: 'Voir le Rapport Complet',
     fixAndResubmit: 'Corriger et Resoumettre',
     viewAll: 'Voir tout',
-    openVehicleCard: 'Ouvrir la Fiche du Véhicule',
+    openVehicleCard: 'Ouvrir le Véhicule',
     goToLogin: 'Aller à la Connexion',
     backToHome: "Retour à l'Accueil",
     goToDashboard: 'Aller au Tableau de bord',
@@ -1368,7 +1371,6 @@ const translations: Record<Language, Record<string, string>> = {
     createDriverAccount: 'Créer un Compte Conducteur',
     download: 'Télécharger',
     pdf: 'PDF',
-    csv: 'CSV',
     email: 'E-mail',
 
     // Form fields
@@ -1441,16 +1443,18 @@ const translations: Record<Language, Record<string, string>> = {
     searchVehicles: 'Rechercher des véhicules...',
     searchRepairs: 'Rechercher des réparations...',
     searchIssues: 'Rechercher des problèmes...',
+    from: 'De',
+    to: 'À',
 
     // Section titles
-    reportsCompliance: 'Rapports et Conformité',
-    myReports: 'Mes Rapports',
-    fleetVehicles: 'Véhicules de la Flotte',
-    repairRequests: 'Demandes de Réparation',
-    inspectionResult: "Résultat de l'Inspection",
+    reportsCompliance: 'Rapports',
+    myReports: 'Rapports',
+    fleetVehicles: 'Véhicules',
+    repairRequests: 'Réparations',
+    inspectionResult: 'Détails du Rapport',
     issueDetails: 'Détails du Problème',
-    driverProfile: 'Profil du Conducteur',
-    vehicleDetail: 'Détail du Véhicule',
+    driverProfile: 'Détails du Conducteur',
+    vehicleDetail: 'Détails du Véhicule',
     personalInformation: 'Informations Personnelles',
     emergencyContact: "Contact d'Urgence",
     driverLicense: 'Permis de Conduire',
@@ -1584,7 +1588,7 @@ const translations: Record<Language, Record<string, string>> = {
     other: 'Autre',
 
     // Repair / Issue actions
-    createRepairRequest: 'Créer une Demande de Réparation',
+    createRepairRequest: 'Créer une Réparation',
     notifyManager: 'Notifier le Gestionnaire',
 
     // Pending

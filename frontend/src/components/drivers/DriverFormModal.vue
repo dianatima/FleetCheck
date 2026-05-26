@@ -104,20 +104,16 @@
                 </div>
 
                 <div>
-                  <label class="label">{{ store.t("dateOfBirth") }}</label>
-                  <input
+                  <BaseDateInput
                     v-model="form.birthday"
-                    class="input-field"
-                    type="date"
+                    :label="store.t('dateOfBirth')"
                   />
                 </div>
 
                 <div>
-                  <label class="label">{{ store.t("hireDate") }}</label>
-                  <input
+                  <BaseDateInput
                     v-model="form.hireDate"
-                    class="input-field"
-                    type="date"
+                    :label="store.t('hireDate')"
                   />
                 </div>
               </div>
@@ -180,11 +176,9 @@
                 </div>
 
                 <div>
-                  <label class="label">{{ store.t("expiryDate") }}</label>
-                  <input
+                  <BaseDateInput
                     v-model="form.licenseExpiry"
-                    class="input-field"
-                    type="date"
+                    :label="store.t('expiryDate')"
                   />
                 </div>
               </div>
@@ -286,11 +280,9 @@
                 </div>
 
                 <div>
-                  <label class="label">{{ store.t("expiryDate") }}</label>
-                  <input
+                  <BaseDateInput
                     v-model="form.medCardExpiry"
-                    class="input-field"
-                    type="date"
+                    :label="store.t('expiryDate')"
                   />
                 </div>
               </div>
@@ -417,6 +409,7 @@ import {
 
 import { useAppStore } from "@/stores/app";
 import { supabase } from "@/lib/supabase";
+import BaseDateInput from "@/components/shared/BaseDateInput.vue";
 
 type DriverStatus = "new" | "active" | "pending" | "inactive";
 

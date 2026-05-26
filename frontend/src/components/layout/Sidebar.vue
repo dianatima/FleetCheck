@@ -14,7 +14,7 @@
     <!-- Nav -->
     <nav class="flex-1 px-3 py-4 overflow-y-auto">
       <!-- Manager section -->
-      <div class="space-y-0.5 mb-4">
+      <div v-if="authStore.role !== 'driver'" class="space-y-0.5 mb-4">
         <RouterLink
           v-for="item in managerItems"
           :key="item.to"
@@ -22,19 +22,15 @@
           custom
           v-slot="{ isActive, navigate }"
         >
-          <button @click="navigate" :class="isActive ? 'sidebar-link-active' : 'sidebar-link'" class="w-full">
+          <button @click="navigate" :class="isNavActive(item.to, isActive) ? 'sidebar-link-active' : 'sidebar-link'" class="w-full">
             <component :is="item.icon" :size="18" />
             <span>{{ store.t(item.label) }}</span>
-            <ChevronRight v-if="isActive" :size="14" class="ml-auto" />
+            <ChevronRight v-if="isNavActive(item.to, isActive)" :size="14" class="ml-auto" />
           </button>
         </RouterLink>
       </div>
 
-      <!-- Driver section separator -->
-      <div class="px-2 mb-2 mt-1">
-        <p class="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{{ store.t('driver') }}</p>
-      </div>
-      <div class="space-y-0.5">
+      <div v-if="authStore.role === 'driver'" class="space-y-0.5">
         <RouterLink
           v-for="item in driverItems"
           :key="item.to"
@@ -42,10 +38,10 @@
           custom
           v-slot="{ isActive, navigate }"
         >
-          <button @click="navigate" :class="isActive ? 'sidebar-link-active' : 'sidebar-link'" class="w-full">
+          <button @click="navigate" :class="isNavActive(item.to, isActive) ? 'sidebar-link-active' : 'sidebar-link'" class="w-full">
             <component :is="item.icon" :size="18" />
             <span>{{ store.t(item.label) }}</span>
-            <ChevronRight v-if="isActive" :size="14" class="ml-auto" />
+            <ChevronRight v-if="isNavActive(item.to, isActive)" :size="14" class="ml-auto" />
           </button>
         </RouterLink>
       </div>
@@ -62,16 +58,19 @@
 </template>
 
 <script setup lang="ts">
-import { LayoutDashboard, Truck, Users, ClipboardList, FileText, Wrench, Settings, ChevronRight, LogOut, User, AlertTriangle } from 'lucide-vue-next'
+import { LayoutDashboard, Truck, Users, FileText, Wrench, Settings, ChevronRight, LogOut, User, AlertTriangle } from 'lucide-vue-next'
+import { useRoute } from 'vue-router'
 import { useAppStore } from '../../stores/app'
+import { useAuthStore } from '@/stores/authStore'
 
 const store = useAppStore()
+const authStore = useAuthStore()
+const route = useRoute()
 
 const managerItems = [
   { icon: LayoutDashboard, label: 'dashboard', to: '/dashboard' },
   { icon: Truck, label: 'vehicles', to: '/vehicles' },
   { icon: Users, label: 'drivers', to: '/drivers' },
-  { icon: ClipboardList, label: 'inspectionTemplates', to: '/inspection-templates' },
   { icon: FileText, label: 'reports', to: '/reports' },
   { icon: AlertTriangle, label: 'issues', to: '/issues' },
   { icon: Wrench, label: 'repairs', to: '/repairs' },
@@ -80,8 +79,14 @@ const managerItems = [
 
 const driverItems = [
   { icon: User, label: 'driverDashboard', to: '/driver' },
-  { icon: Truck, label: 'myVehicles', to: '/driver/vehicles' },
+  { icon: Truck, label: 'vehicles', to: '/driver/vehicles' },
   { icon: FileText, label: 'reports', to: '/driver/reports' },
-  { icon: ClipboardList, label: 'inspections', to: '/inspect/pre' },
 ]
+
+function isNavActive(path: string, routerIsActive: boolean) {
+  if (route.path === path) return true
+  if (path === '/driver') return route.path === '/driver'
+  if (path === '/dashboard') return route.path === '/dashboard'
+  return route.path.startsWith(`${path}/`) || routerIsActive
+}
 </script>

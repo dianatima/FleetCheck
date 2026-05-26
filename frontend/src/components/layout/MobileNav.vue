@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { LayoutDashboard, ClipboardList, Truck, FileText, User } from 'lucide-vue-next'
+import { LayoutDashboard, Truck, FileText, User, AlertTriangle } from 'lucide-vue-next'
 import { useAppStore } from '../../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -32,17 +32,15 @@ const authStore = useAuthStore()
 const items = computed(() =>
   authStore.role === 'driver'
     ? [
-        { icon: LayoutDashboard, label: store.t('home'), to: '/driver' },
-        { icon: Truck, label: store.t('myVehicles'), to: '/driver/vehicles' },
-        { icon: ClipboardList, label: store.t('inspect'), to: '/inspect/pre' },
+        { icon: LayoutDashboard, label: store.t('driverDashboard'), to: '/driver' },
+        { icon: Truck, label: store.t('vehicles'), to: '/driver/vehicles' },
         { icon: FileText, label: store.t('reports'), to: '/driver/reports' },
-        { icon: User, label: store.t('profile'), to: '/settings' },
       ]
     : [
         { icon: LayoutDashboard, label: store.t('home'), to: '/dashboard' },
-        { icon: ClipboardList, label: store.t('inspect'), to: '/inspect/pre' },
         { icon: Truck, label: store.t('vehicles'), to: '/vehicles' },
         { icon: FileText, label: store.t('reports'), to: '/reports' },
+        { icon: AlertTriangle, label: store.t('issues'), to: '/issues' },
         { icon: User, label: store.t('profile'), to: '/settings' },
       ]
 )

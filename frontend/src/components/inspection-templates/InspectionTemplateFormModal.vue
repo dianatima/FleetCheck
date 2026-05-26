@@ -11,7 +11,7 @@
         >
           <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800">
             <h2 class="text-lg font-bold text-gray-900 dark:text-white">
-              {{ template ? "Edit Template" : "Create Template" }}
+              {{ template ? "Edit Inspection Template" : "Create Inspection Template" }}
             </h2>
             <button
               type="button"

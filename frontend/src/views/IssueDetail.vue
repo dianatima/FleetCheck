@@ -122,7 +122,7 @@
               <div class="flex justify-between"><span class="text-gray-400">{{ store.t('status') }}</span><span class="badge-gray">{{ vehicleStatusText }}</span></div>
             </div>
             <RouterLink v-if="issue.vehicle_id" :to="`/vehicles/${issue.vehicle_id}`" class="mt-4 flex items-center justify-center gap-1.5 w-full py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              <ExternalLink :size="12" /> {{ store.t('openVehicleCard') }}
+              <ExternalLink :size="12" /> Open Vehicle
             </RouterLink>
           </div>
 

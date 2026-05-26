@@ -27,10 +27,15 @@
     <div v-if="loading" class="card p-6 text-sm text-gray-500">Loading issues...</div>
     <div v-else-if="error" class="card p-6 text-sm text-red-500">{{ error }}</div>
     <div v-else class="card overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100/80 dark:border-gray-800">
+        <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
+          Issues
+        </h2>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
-            <tr class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <tr class="table-header-row">
               <th v-for="h in issueHeaders" :key="h" class="table-th">{{ h }}</th>
             </tr>
           </thead>
@@ -43,7 +48,7 @@
             <tr
               v-for="issue in paginatedIssues"
               :key="issue.id"
-              class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
+              class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
               @click="router.push(`/issues/${issue.id}`)"
             >
               <td class="px-4 py-3">
@@ -237,11 +242,11 @@ function statusText(status: string) {
 
 <style scoped>
 .table-th {
-  @apply text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap;
+  @apply text-left text-[11px] font-medium tracking-normal text-gray-500 dark:text-gray-400 px-4 py-3.5 whitespace-nowrap;
 }
 
 .table-td {
-  @apply px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap;
+  @apply px-4 py-3.5 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap align-middle;
 }
 
 .badge-yellow { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400; }

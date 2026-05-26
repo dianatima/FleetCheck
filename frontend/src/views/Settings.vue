@@ -6,7 +6,7 @@
       <button
         v-for="tab in tabs"
         :key="tab.id"
-        @click="activeTab = tab.id"
+        @click="selectTab(tab.id)"
         class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all border-b-2 -mb-px"
         :class="
           activeTab === tab.id
@@ -303,7 +303,7 @@
       <div v-else class="overflow-x-auto">
         <table class="w-full">
           <thead>
-            <tr class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <tr class="table-header-row">
               <th class="settings-th">License Class</th>
               <th class="settings-th">Allowed Vehicle Types</th>
               <th class="settings-th">Actions</th>
@@ -358,6 +358,11 @@
       </div>
     </div>
 
+    <!-- Inspection Templates -->
+    <div v-else-if="activeTab === 'inspection-templates'">
+      <InspectionTemplatesManager />
+    </div>
+
     <CompanyFormModal
       v-model="showCompanyModal"
       :company="editingCompany"
@@ -375,8 +380,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import {
   Building2,
+  ClipboardList,
   Globe,
   Sun,
   Moon,
@@ -395,6 +402,7 @@ import type { Language } from "../stores/app";
 import AppLayout from "../components/layout/AppLayout.vue";
 import CompanyFormModal from "@/components/settings/CompanyFormModal.vue";
 import VehicleAccessRuleFormModal from "@/components/settings/VehicleAccessRuleFormModal.vue";
+import InspectionTemplatesManager from "@/components/inspection-templates/InspectionTemplatesManager.vue";
 import {
   useVehicleAccessRulesStore,
   type VehicleAccessRulePayload,
@@ -403,6 +411,8 @@ import {
 const store = useAppStore();
 const authStore = useAuthStore();
 const rulesStore = useVehicleAccessRulesStore();
+const route = useRoute();
+const router = useRouter();
 
 const activeTab = ref("company");
 const appTheme = ref<"light" | "dark">(store.theme as "light" | "dark");
@@ -416,13 +426,22 @@ const editingAccessRule = ref<any | null>(null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 const selectedAvatarFile = ref<File | null>(null);
 
-const tabs = computed(() => [
-  { id: "company", icon: Building2, label: "Company Profile" },
-  { id: "user", icon: User, label: "User Profile" },
-  { id: "language", icon: Globe, label: store.t("languageSettings") },
-  { id: "theme", icon: Sun, label: store.t("appearance") },
-  { id: "vehicle-access", icon: KeyRound, label: "Vehicle Access Rules" },
-]);
+const tabs = computed(() => {
+  const baseTabs = [
+    { id: "company", icon: Building2, label: "Company Profile" },
+    { id: "user", icon: User, label: "User Profile" },
+    { id: "language", icon: Globe, label: store.t("languageSettings") },
+    { id: "theme", icon: Sun, label: store.t("appearance") },
+    { id: "vehicle-access", icon: KeyRound, label: "Vehicle Access Rules" },
+    { id: "inspection-templates", icon: ClipboardList, label: store.t("inspectionTemplates") },
+  ];
+
+  if (authStore.role === "driver") {
+    return baseTabs.filter((tab) => !["vehicle-access", "inspection-templates"].includes(tab.id));
+  }
+
+  return baseTabs;
+});
 
 const languages = [
   { code: "en" as Language, flag: "🇺🇸", name: "English", native: "English" },
@@ -472,6 +491,8 @@ watch(
 );
 
 onMounted(async () => {
+  syncActiveTabFromRoute();
+
   if (!authStore.profile) {
     await authStore.fetchProfile();
   }
@@ -481,6 +502,11 @@ onMounted(async () => {
   await rulesStore.fetchVehicleTypes();
   fillUserForm();
 });
+
+watch(
+  () => route.query.tab,
+  () => syncActiveTabFromRoute()
+);
 
 watch(
   () => authStore.companyId,
@@ -504,6 +530,19 @@ function selectTheme(id: string) {
 
   if (id === "light" && store.theme === "dark") store.toggleTheme();
   if (id === "dark" && store.theme === "light") store.toggleTheme();
+}
+
+function syncActiveTabFromRoute() {
+  const tab = String(route.query.tab || "");
+  if (tabs.value.some((item) => item.id === tab)) {
+    activeTab.value = tab;
+  }
+}
+
+function selectTab(tabId: string) {
+  activeTab.value = tabId;
+  const nextQuery = tabId === "company" ? {} : { tab: tabId };
+  router.replace({ path: "/settings", query: nextQuery });
 }
 
 function formatCompanyAddress(company: any) {
@@ -712,7 +751,7 @@ async function saveUserProfile() {
 }
 
 .settings-th {
-  @apply text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-6 py-3 whitespace-nowrap;
+  @apply text-left text-[11px] font-medium tracking-normal text-gray-500 dark:text-gray-400 px-6 py-3.5 whitespace-nowrap;
 }
 
 .settings-icon-btn {

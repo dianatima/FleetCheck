@@ -1,5 +1,5 @@
 <template>
-  <AppLayout title="Reports &amp; Compliance">
+  <AppLayout title="Reports">
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
       <div
         v-for="s in summaryStats"
@@ -13,17 +13,24 @@
       </div>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 mb-5">
-      <div class="flex items-center gap-2 flex-1 min-w-[260px]">
+    <div class="flex flex-wrap items-center gap-2 mb-5">
+      <div class="relative flex-1 min-w-[220px]">
+        <Search
+          :size="15"
+          class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+        />
+        <input
+          v-model="search"
+          class="input-field pl-9 py-1.5 text-sm"
+          placeholder="Search reports..."
+        />
+      </div>
+      <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
         <Filter :size="14" class="text-gray-400 flex-shrink-0" />
-        <select v-model="filterType" class="input-field py-1.5 text-sm flex-1">
-          <option value="all">{{ store.t("allTypes") }}</option>
-          <option value="pre-trip">{{ store.t("preTrip") }}</option>
-          <option value="post-trip">{{ store.t("postTrip") }}</option>
-        </select>
         <select
           v-model="filterResult"
-          class="input-field py-1.5 text-sm flex-1"
+          class="input-field py-1.5 text-sm w-40"
+          aria-label="Report status"
         >
           <option value="all">{{ store.t("allResults") }}</option>
           <option value="pass">{{ store.t("statusPassed") }}</option>
@@ -33,27 +40,29 @@
             {{ store.t("statusNeedsReview") }}
           </option>
         </select>
+        <select
+          v-model="filterType"
+          class="input-field py-1.5 text-sm w-36"
+          aria-label="Inspection type"
+        >
+          <option value="all">{{ store.t("allTypes") }}</option>
+          <option value="pre-trip">{{ store.t("preTrip") }}</option>
+          <option value="post-trip">{{ store.t("postTrip") }}</option>
+        </select>
       </div>
-      <div class="flex items-center gap-2">
-        <input
+      <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <span class="text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
+          Date range:
+        </span>
+        <BaseDateInput
           v-model="startDate"
-          type="date"
-          class="input-field py-1.5 text-sm"
+          input-class="py-1.5 text-sm w-36"
         />
         <span class="text-gray-400 text-sm">-</span>
-        <input
+        <BaseDateInput
           v-model="endDate"
-          type="date"
-          class="input-field py-1.5 text-sm"
+          input-class="py-1.5 text-sm w-36"
         />
-      </div>
-      <div class="flex gap-2">
-        <button class="btn-secondary gap-1.5 text-sm py-2" disabled>
-          <Download :size="14" /> {{ store.t("pdf") }}
-        </button>
-        <button class="btn-secondary gap-1.5 text-sm py-2" disabled>
-          <Download :size="14" /> {{ store.t("csv") }}
-        </button>
       </div>
     </div>
 
@@ -62,16 +71,21 @@
     </div>
 
     <div class="card overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100/80 dark:border-gray-800">
+        <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
+          Reports
+        </h2>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr
-              class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+              class="table-header-row"
             >
               <th
                 v-for="h in reportHeaders"
                 :key="h"
-                class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap"
+                class="table-th"
               >
                 {{ h }}
               </th>
@@ -89,7 +103,7 @@
             <tr
               v-for="r in paginatedReports"
               :key="r.id"
-              class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
+              class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
               :class="
                 r.reviewStatus === 'needs-review'
                   ? 'bg-yellow-50/40 dark:bg-yellow-900/5'
@@ -176,9 +190,10 @@
                     <FileText :size="13" />
                   </button>
                   <button
-                    title="Download later"
-                    disabled
-                    class="p-1.5 rounded-lg text-gray-300 dark:text-gray-600 cursor-not-allowed"
+                    @click.stop="downloadReport(r)"
+                    :title="downloadingId === r.id ? 'Preparing PDF...' : 'Download PDF'"
+                    :disabled="downloadingId === r.id"
+                    class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-wait transition-colors"
                   >
                     <Download :size="13" />
                   </button>
@@ -204,6 +219,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   Filter,
+  Search,
   Download,
   Truck,
   CheckCircle,
@@ -215,10 +231,12 @@ import {
 } from "lucide-vue-next";
 import AppLayout from "../components/layout/AppLayout.vue";
 import BaseTablePagination from "@/components/shared/BaseTablePagination.vue";
+import BaseDateInput from "@/components/shared/BaseDateInput.vue";
 import { useAppStore } from "../stores/app";
 import { useAuthStore } from "@/stores/authStore";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/dateFormat";
+import { downloadInspectionReportPdf } from "@/lib/reportPdf";
 
 type ReportResult = "pass" | "fail" | "draft";
 type ReviewStatus =
@@ -253,10 +271,12 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const filterType = ref("all");
 const filterResult = ref("all");
+const search = ref("");
 const startDate = ref("");
 const endDate = ref("");
 const page = ref(1);
 const pageSize = ref(10);
+const downloadingId = ref<string | null>(null);
 
 onMounted(fetchReports);
 
@@ -388,6 +408,19 @@ function viewReport(report: Report) {
 
 function reviewIssue(report: Report) {
   if (report.reviewIssueId) router.push(`/issues/${report.reviewIssueId}`);
+}
+
+async function downloadReport(report: Report) {
+  downloadingId.value = report.id;
+  error.value = null;
+
+  try {
+    await downloadInspectionReportPdf(report.id, store.language);
+  } catch (downloadError: any) {
+    error.value = downloadError?.message || "Report PDF could not be downloaded.";
+  } finally {
+    downloadingId.value = null;
+  }
 }
 
 function formatDate(value: string | null) {
@@ -528,6 +561,7 @@ const reportHeaders = computed(() => [
 
 const filtered = computed(() =>
   reports.value.filter((report) => {
+    const query = search.value.trim().toLowerCase();
     const matchType =
       filterType.value === "all" || report.type === filterType.value;
     const matchResult =
@@ -541,7 +575,20 @@ const filtered = computed(() =>
       time >= new Date(`${startDate.value}T00:00:00`).getTime();
     const beforeEnd =
       !endDate.value || time <= new Date(`${endDate.value}T23:59:59`).getTime();
-    return matchType && matchResult && afterStart && beforeEnd;
+    const searchableText = [
+      report.vehicle,
+      report.driver,
+      typeLabel(report.type),
+      resultLabel(report),
+      reviewLabel(report.reviewStatus),
+      report.status,
+      report.date,
+    ]
+      .join(" ")
+      .toLowerCase();
+    const matchSearch = !query || searchableText.includes(query);
+
+    return matchSearch && matchType && matchResult && afterStart && beforeEnd;
   }),
 );
 
@@ -552,7 +599,7 @@ const paginatedReports = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return filtered.value.slice(start, start + pageSize.value);
 });
-watch([filterType, filterResult, startDate, endDate, pageSize], () => {
+watch([search, filterType, filterResult, startDate, endDate, pageSize], () => {
   page.value = 1;
 });
 

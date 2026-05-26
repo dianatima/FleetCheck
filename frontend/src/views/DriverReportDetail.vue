@@ -1,9 +1,21 @@
 <template>
-  <AppLayout title="Inspection Report">
-    <RouterLink :to="backPath" class="back-link">
-      <ArrowLeft :size="16" />
-      Back to Reports
-    </RouterLink>
+  <AppLayout title="Report Details">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <RouterLink :to="backPath" class="back-link !mb-0">
+        <ArrowLeft :size="16" />
+        Back to Reports
+      </RouterLink>
+      <button
+        v-if="inspection"
+        type="button"
+        class="btn-secondary gap-2 text-sm"
+        :disabled="downloading"
+        @click="downloadPdf"
+      >
+        <Download :size="15" />
+        {{ downloading ? 'Preparing PDF...' : 'Download PDF' }}
+      </button>
+    </div>
 
     <div v-if="loading" class="card p-6 text-sm text-gray-500">
       Loading report...
@@ -134,12 +146,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, ChevronRight, Truck } from 'lucide-vue-next'
+import { ArrowLeft, ChevronRight, Download, Truck } from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
+import { downloadInspectionReportPdf } from '@/lib/reportPdf'
 
 const route = useRoute()
 const store = useAppStore()
@@ -149,6 +162,7 @@ const results = ref<any[]>([])
 const issues = ref<any[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const downloading = ref(false)
 const backPath = computed(() => route.path.startsWith('/reports/') ? '/reports' : '/driver/reports')
 
 onMounted(loadReport)
@@ -270,6 +284,20 @@ async function loadReport() {
 
 function formatDate(value: string | null) {
   return formatDateTime(value, store.language)
+}
+
+async function downloadPdf() {
+  if (!inspection.value?.id) return
+  downloading.value = true
+  error.value = null
+
+  try {
+    await downloadInspectionReportPdf(inspection.value.id, store.language)
+  } catch (downloadError: any) {
+    error.value = downloadError?.message || 'Report PDF could not be downloaded.'
+  } finally {
+    downloading.value = false
+  }
 }
 
 function resultLabel(result: string) {

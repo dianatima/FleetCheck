@@ -42,6 +42,21 @@
   .stat-card {
     @apply card p-5 flex items-start gap-4;
   }
+  .table-header-row {
+    @apply border-b border-gray-100/80 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/35;
+  }
+  .table-th {
+    @apply text-left text-[11px] font-medium tracking-normal text-gray-500 dark:text-gray-400 px-4 py-3.5 whitespace-nowrap;
+  }
+  .table-td {
+    @apply px-4 py-3.5 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap align-middle;
+  }
+  .table-main {
+    @apply text-sm font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap;
+  }
+  .table-sub {
+    @apply text-xs text-gray-400 dark:text-gray-500;
+  }
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }

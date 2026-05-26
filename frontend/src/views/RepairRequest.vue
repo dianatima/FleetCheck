@@ -1,5 +1,5 @@
 <template>
-  <AppLayout :title="store.t('repairRequests')">
+  <AppLayout :title="selectedRepair ? 'Repair Details' : 'Repairs'">
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
       <div v-for="s in summaryStats" :key="s.label" class="card p-4 text-center">
         <div class="text-2xl font-bold" :class="s.color">{{ s.count }}</div>
@@ -39,10 +39,15 @@
 
     <template v-else>
       <div v-if="!selectedRepair" class="card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100/80 dark:border-gray-800">
+          <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
+            Repairs
+          </h2>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full">
             <thead>
-              <tr class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <tr class="table-header-row">
                 <th v-for="header in tableHeaders" :key="header" class="table-th">{{ header }}</th>
               </tr>
             </thead>
@@ -55,7 +60,7 @@
               <tr
                 v-for="repair in paginatedRepairs"
                 :key="repair.id"
-                class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
+                class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
                 @click="selectedRepair = repair"
               >
                 <td class="px-4 py-3">
@@ -65,7 +70,7 @@
                       <Truck v-else :size="15" class="text-gray-400" />
                     </div>
                     <div class="min-w-0">
-                      <p class="text-sm font-semibold text-gray-900 dark:text-white truncate">{{ vehicleName(repair) }}</p>
+                      <p class="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{{ vehicleName(repair) }}</p>
                       <p class="text-xs text-gray-500 dark:text-gray-400 truncate">{{ vehicleUnitPlate(repair) }}</p>
                     </div>
                   </div>
@@ -118,7 +123,12 @@
         </button>
 
         <article class="card overflow-hidden">
-          <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+          <div class="px-5 py-3 border-b border-gray-100/80 dark:border-gray-800">
+            <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
+              Repair Details
+            </h2>
+          </div>
+          <div class="p-5 border-b border-gray-100/80 dark:border-gray-800">
             <div class="flex flex-col lg:flex-row lg:items-start gap-5">
               <button
                 type="button"
@@ -247,7 +257,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft,
   CheckCircle,
@@ -272,6 +282,7 @@ import { formatDateTime } from '@/lib/dateFormat'
 type RepairStatus = 'open' | 'in-progress' | 'completed' | 'cancelled'
 
 const router = useRouter()
+const route = useRoute()
 const store = useAppStore()
 const authStore = useAuthStore()
 
@@ -333,6 +344,11 @@ onMounted(fetchRepairData)
 watch(
   () => authStore.companyId,
   () => fetchRepairData()
+)
+
+watch(
+  () => route.query.repairId,
+  () => selectRepairFromRoute()
 )
 
 async function fetchRepairData() {
@@ -413,8 +429,15 @@ async function fetchRepairData() {
   if (selectedRepair.value) {
     selectedRepair.value = repairs.value.find((repair) => repair.id === selectedRepair.value.id) || null
   }
+  selectRepairFromRoute()
 
   loading.value = false
+}
+
+function selectRepairFromRoute() {
+  const repairId = String(route.query.repairId || '')
+  if (!repairId || !repairs.value.length) return
+  selectedRepair.value = repairs.value.find((repair) => repair.id === repairId) || selectedRepair.value
 }
 
 async function updateRepairStatus(repair: any, status: RepairStatus) {
@@ -659,19 +682,19 @@ function flash(message: string) {
 
 <style scoped>
 .table-th {
-  @apply text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap;
+  @apply text-left text-[11px] font-medium tracking-normal text-gray-500 dark:text-gray-400 px-4 py-3.5 whitespace-nowrap;
 }
 
 .table-td {
-  @apply px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap;
+  @apply px-4 py-3.5 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap align-middle;
 }
 
 .table-main {
-  @apply text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap;
+  @apply text-sm font-medium text-gray-800 dark:text-gray-100 whitespace-nowrap;
 }
 
 .table-sub {
-  @apply text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap mt-0.5;
+  @apply text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap mt-0.5;
 }
 
 .detail-photo {
@@ -683,7 +706,7 @@ function flash(message: string) {
 }
 
 .detail-value {
-  @apply text-sm font-semibold text-gray-900 dark:text-white mt-1;
+  @apply text-sm font-medium text-gray-700 dark:text-gray-200 mt-1;
 }
 
 .detail-muted {
@@ -691,7 +714,7 @@ function flash(message: string) {
 }
 
 .section-title {
-  @apply text-sm font-semibold text-gray-900 dark:text-white mb-2;
+  @apply text-sm font-medium text-gray-700 dark:text-gray-200 mb-2;
 }
 
 .photo-thumb {

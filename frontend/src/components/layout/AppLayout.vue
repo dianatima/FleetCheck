@@ -16,20 +16,6 @@
         {{ title }}
       </h1>
 
-      <div class="hidden sm:flex items-center gap-2 flex-1 max-w-xs">
-        <div class="relative flex-1">
-          <Search
-            :size="15"
-            class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-
-          <input
-            class="input-field pl-9 py-1.5 text-sm"
-            :placeholder="store.t('search')"
-          />
-        </div>
-      </div>
-
       <div class="flex items-center gap-1">
         <LanguageSelector :compact="true" />
         <ThemeToggle />
@@ -81,7 +67,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { Menu, Search } from "lucide-vue-next";
+import { Menu } from "lucide-vue-next";
 
 import Sidebar from "./Sidebar.vue";
 import MobileNav from "./MobileNav.vue";

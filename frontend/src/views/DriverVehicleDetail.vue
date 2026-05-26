@@ -1,8 +1,8 @@
 <template>
-  <AppLayout title="My Vehicle">
+  <AppLayout title="Vehicle Details">
     <RouterLink to="/driver/vehicles" class="back-link">
       <ArrowLeft :size="16" />
-      Back to My Vehicles
+      Back to Vehicles
     </RouterLink>
 
     <div v-if="vehicleStore.loading" class="card p-6 text-sm text-gray-500">

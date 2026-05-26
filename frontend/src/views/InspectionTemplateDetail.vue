@@ -1,7 +1,7 @@
 <template>
-  <AppLayout title="Inspection Template">
+  <AppLayout title="Inspection Template Details">
     <RouterLink
-      to="/inspection-templates"
+      to="/settings?tab=inspection-templates"
       class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 text-sm font-medium transition-colors"
     >
       <ArrowLeft :size="16" />
@@ -40,7 +40,7 @@
           <div class="flex flex-wrap items-center gap-2">
             <button class="btn-secondary gap-2 text-sm" @click="showEditModal = true">
               <Pencil :size="15" />
-              Edit Template
+              Edit Inspection Template
             </button>
             <button class="btn-danger gap-2 text-sm" @click="deleteCurrentTemplate">
               <Trash2 :size="15" />
@@ -226,7 +226,7 @@ async function deleteCurrentTemplate() {
   if (!template.value) return
   if (confirm(`Delete "${template.value.name}" and its checklist items?`)) {
     const deleted = await templateStore.deleteTemplate(template.value.id)
-    if (deleted) await router.push('/inspection-templates')
+    if (deleted) await router.push('/settings?tab=inspection-templates')
   }
 }
 </script>

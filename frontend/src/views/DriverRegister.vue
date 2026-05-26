@@ -40,9 +40,9 @@
           </div>
           <div class="grid sm:grid-cols-2 gap-4">
             <div><label class="label">{{ store.t('licenseNumber') }} *</label><input class="input-field" placeholder="DL123456789" required /></div>
-            <div><label class="label">{{ store.t('expiryDate') }} *</label><input class="input-field" type="date" required /></div>
+            <BaseDateInput v-model="licenseExpiry" :label="store.t('expiryDate')" required />
           </div>
-          <div><label class="label">{{ store.t('dateOfBirth') }} *</label><input class="input-field" type="date" required /></div>
+          <BaseDateInput v-model="dateOfBirth" :label="store.t('dateOfBirth')" required />
           <div class="grid sm:grid-cols-2 gap-4">
             <div>
               <label class="label">{{ store.t('password') }} *</label>
@@ -98,11 +98,14 @@ import { ArrowLeft, UserPlus, Eye, EyeOff, Upload } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
 import LanguageSelector from '../components/shared/LanguageSelector.vue'
 import ThemeToggle from '../components/shared/ThemeToggle.vue'
+import BaseDateInput from '@/components/shared/BaseDateInput.vue'
 
 const store = useAppStore()
 const router = useRouter()
 const showPass = ref(false)
 const showConfirm = ref(false)
+const licenseExpiry = ref('')
+const dateOfBirth = ref('')
 
 function handleSubmit() {
   router.push('/pending')

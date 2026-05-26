@@ -30,6 +30,8 @@ const visibleVehicleSelect = `
 export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   const authStore = useAuthStore()
   const vehicles = ref<any[]>([])
+  const annotatedVehicles = ref<any[]>([])
+  const filteredVehicles = ref<any[]>([])
   const selectedVehicle = ref<any | null>(null)
   const currentDriver = ref<any | null>(null)
   const activeAssignment = ref<any | null>(null)
@@ -43,6 +45,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   const availabilityFilter = ref<AvailabilityFilter>('all')
 
   const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+  const availableVehicles = computed(() => annotatedVehicles.value.filter(isDriverVehicleAvailable))
 
   async function fetchDriverContext() {
     const profileId = authStore.profile?.id
@@ -132,6 +135,8 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
 
     if (!driver || !allowedTypeIds.length) {
       vehicles.value = []
+      annotatedVehicles.value = []
+      filteredVehicles.value = []
       total.value = 0
       loading.value = false
       return
@@ -148,6 +153,8 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     if (vehicleError) {
       error.value = vehicleError.message
       vehicles.value = []
+      annotatedVehicles.value = []
+      filteredVehicles.value = []
       total.value = 0
       loading.value = false
       return
@@ -164,6 +171,8 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       preTripReadiness.unresolvedVehicleIds
     )
     const filtered = filterVehicles(annotated)
+    annotatedVehicles.value = annotated
+    filteredVehicles.value = filtered
     total.value = filtered.length
     vehicles.value = paginate(filtered)
     loading.value = false
@@ -447,6 +456,10 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
 
       return matchesSearch && matchesFilter
     })
+  }
+
+  function isDriverVehicleAvailable(vehicle: any) {
+    return vehicle.status === 'active' && vehicle.available === true
   }
 
   function paginate(rows: any[]) {
@@ -822,6 +835,9 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
 
   return {
     vehicles,
+    annotatedVehicles,
+    filteredVehicles,
+    availableVehicles,
     selectedVehicle,
     currentDriver,
     activeAssignment,
@@ -845,5 +861,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     setAvailabilityFilter,
     setPage,
     setPageSize,
+    isDriverVehicleAvailable,
   }
 })

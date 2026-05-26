@@ -1,5 +1,5 @@
 <template>
-  <AppLayout title="Vehicle Detail">
+  <AppLayout title="Vehicle Details">
     <RouterLink
       to="/vehicles"
       class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 text-sm font-medium transition-colors"

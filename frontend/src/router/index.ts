@@ -21,8 +21,12 @@ const router = createRouter({
     { path: '/drivers/:id', name: 'driver-detail', component: () => import('../views/DriverDetail.vue') },
     { path: '/vehicles', name: 'vehicles', component: () => import('../views/VehicleList.vue') },
     { path: '/vehicles/:id', name: 'vehicle-detail', component: () => import('../views/VehicleDetail.vue') },
-    { path: '/inspection-templates', name: 'inspection-templates', component: () => import('../views/InspectionTemplatesPage.vue') },
-    { path: '/inspection-templates/:id', name: 'inspection-template-detail', component: () => import('../views/InspectionTemplateDetail.vue') },
+    { path: '/inspection-templates', redirect: '/settings?tab=inspection-templates' },
+    { path: '/inspection-templates/:id', redirect: to => `/settings/inspection-templates/${to.params.id}` },
+    { path: '/settings/inspection-templates/:id', name: 'inspection-template-detail', component: () => import('../views/InspectionTemplateDetail.vue') },
+    { path: '/driver/inspections', redirect: '/driver/vehicles' },
+    { path: '/driver/inspections/:id', redirect: '/driver/vehicles' },
+    { path: '/inspections', redirect: '/driver/vehicles' },
     { path: '/inspect/pre', name: 'pre-trip', component: () => import('../views/PreTripInspection.vue') },
     { path: '/inspect/post', name: 'post-trip', component: () => import('../views/PreTripInspection.vue'), props: { isPostTrip: true } },
     { path: '/inspect/result', name: 'inspection-result', component: () => import('../views/InspectionResult.vue') },
@@ -40,9 +44,57 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const authStore = useAuthStore()
+  const isDriver = authStore.profile?.role === 'driver' || authStore.role === 'driver'
+
+  if (
+    isDriver &&
+    (
+      to.path.startsWith('/settings/inspection-templates') ||
+      (to.path === '/settings' && to.query.tab === 'inspection-templates')
+    )
+  ) {
+    return { name: 'driver-vehicles' }
+  }
+
+  if (isDriver && to.name === 'manager-dashboard') {
+    return { name: 'driver-dashboard' }
+  }
+
+  const managerOnlyRoutes = [
+    'drivers',
+    'driver-detail',
+    'vehicles',
+    'vehicle-detail',
+    'reports',
+    'report-detail',
+    'issues',
+    'issue-detail',
+    'repairs',
+    'settings',
+    'inspection-template-detail',
+  ]
+
+  if (isDriver && managerOnlyRoutes.includes(String(to.name))) {
+    return { name: 'driver-dashboard' }
+  }
+
+  const isDriverAreaRoute = to.path === '/driver' || to.path.startsWith('/driver/')
+
+  if (!isDriver && authStore.isAuthenticated && isDriverAreaRoute) {
+    return { name: 'manager-dashboard' }
+  }
+
+  if (
+    isDriver &&
+    ['pre-trip', 'post-trip'].includes(String(to.name)) &&
+    !to.query.inspectionId
+  ) {
+    return { name: 'driver-vehicles' }
+  }
+
   const driverIsBlocked =
-    authStore.profile?.role === 'driver' &&
-    (!authStore.passwordSetAt || authStore.profile.status !== 'active')
+    isDriver &&
+    (!authStore.passwordSetAt || authStore.profile?.status !== 'active')
   const blockedDriverRouteName =
     !authStore.passwordSetAt
       ? 'password-setup'

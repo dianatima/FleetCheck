@@ -1,5 +1,5 @@
 <template>
-  <AppLayout title="My Vehicles">
+  <AppLayout title="Vehicles">
     <div class="flex flex-wrap items-center gap-3 mb-5">
       <div class="relative flex-1 min-w-48">
         <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -46,10 +46,15 @@
       </div>
 
       <div class="card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100/80 dark:border-gray-800">
+          <h2 class="text-sm font-medium text-gray-700 dark:text-gray-200">
+            Vehicles
+          </h2>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full">
             <thead>
-              <tr class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <tr class="table-header-row">
                 <th v-for="header in headers" :key="header" class="table-th">
                   {{ header }}
                 </th>
@@ -64,7 +69,7 @@
               <tr
                 v-for="vehicle in vehicles"
                 :key="vehicle.id"
-                class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
               >
                 <td class="px-4 py-3 cursor-pointer" @click="openDetail(vehicle.id)">
                   <div class="flex items-center gap-3">
@@ -178,7 +183,8 @@ function vehicleName(vehicle: any) {
 }
 
 function countBy(availability: string) {
-  return vehicles.value.filter((vehicle) => vehicle.availability === availability).length
+  if (availability === 'available') return vehicleStore.availableVehicles.length
+  return vehicleStore.annotatedVehicles.filter((vehicle) => vehicle.availability === availability).length
 }
 
 function availabilityLabel(vehicle: any) {
@@ -232,11 +238,11 @@ function hideBrokenImage(event: Event) {
 
 <style scoped>
 .table-th {
-  @apply text-left text-xs font-medium text-gray-500 dark:text-gray-400 px-4 py-3 whitespace-nowrap;
+  @apply text-left text-[11px] font-medium tracking-normal text-gray-500 dark:text-gray-400 px-4 py-3.5 whitespace-nowrap;
 }
 
 .table-td {
-  @apply px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap;
+  @apply px-4 py-3.5 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap align-middle;
 }
 
 .icon-btn {
