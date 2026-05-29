@@ -48,6 +48,34 @@
             <section class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
               <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
                 <div>
+                  <h4 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Driver Signature</h4>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Captured when the driver submitted the inspection.</p>
+                </div>
+              </div>
+
+              <div class="p-4">
+                <div
+                  v-if="inspection.signature_data_url"
+                  class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/40"
+                >
+                  <img
+                    :src="inspection.signature_data_url"
+                    alt="Driver signature"
+                    class="h-32 w-full rounded-lg border border-gray-100 object-contain bg-white dark:border-gray-800"
+                  />
+                  <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Signed by {{ signerLabel }} at {{ signedAtLabel }}
+                  </p>
+                </div>
+                <div v-else class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                  No driver signature was attached to this report.
+                </div>
+              </div>
+            </section>
+
+            <section class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
+              <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+                <div>
                   <h4 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Photos</h4>
                   <p class="text-xs text-gray-500 dark:text-gray-400">All report photos are collected here. Click any photo to enlarge it.</p>
                 </div>
@@ -177,6 +205,15 @@ const submittedLabel = computed(() =>
   formatDateTime(inspection.value?.submitted_at || inspection.value?.created_at || null, store.language)
 )
 
+const signedAtLabel = computed(() =>
+  formatDateTime(inspection.value?.signed_at || inspection.value?.submitted_at || inspection.value?.created_at || null, store.language)
+)
+
+const signerLabel = computed(() => {
+  const driver = relation(inspection.value?.drivers)
+  return driver?.name || driver?.email || 'Driver'
+})
+
 const overallResult = computed(() => {
   if (inspection.value?.status === 'draft') return 'draft'
   return results.value.some((row) => row.result === 'fail') ? 'fail' : 'pass'
@@ -216,11 +253,17 @@ async function fetchInspection(inspectionId: string) {
       status,
       created_at,
       submitted_at,
+      signature_data_url,
+      signed_at,
       vehicles (
         unit,
         make,
         model,
         plate
+      ),
+      drivers (
+        name,
+        email
       ),
       inspection_results (
         id,

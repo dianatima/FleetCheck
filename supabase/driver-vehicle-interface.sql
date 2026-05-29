@@ -41,6 +41,9 @@ create table if not exists public.inspections (
   status text not null default 'draft',
   odometer numeric,
   engine_hours numeric,
+  signature_data_url text,
+  signed_at timestamptz,
+  signed_by_driver_id uuid references public.drivers (id) on delete set null,
   started_at timestamptz not null default now(),
   completed_at timestamptz,
   created_at timestamptz not null default now()

@@ -435,6 +435,25 @@ function drawMetricRow(pdf: ReportPdf, results: any[], issues: any[], photos: st
   pdf.y -= 70
 }
 
+function drawDriverSignature(pdf: ReportPdf, signatureImage: PdfImage | null, signedAt: string, signer: string) {
+  drawSectionTitle(pdf, 'Driver Signature')
+
+  if (!signatureImage) {
+    pdf.rect(MARGIN, pdf.y - 44, CONTENT_WIDTH, 44, colors.gray50, colors.gray300)
+    pdf.text('No signature was attached to this inspection.', MARGIN + 12, pdf.y - 26, { size: 10, color: colors.gray500 })
+    pdf.y -= 62
+    return
+  }
+
+  const boxHeight = 100
+  pdf.ensure(boxHeight + 20)
+  pdf.rect(MARGIN, pdf.y - boxHeight, CONTENT_WIDTH, boxHeight, colors.gray50, colors.gray300)
+  pdf.drawImage(signatureImage, MARGIN + 12, pdf.y - boxHeight + 16, 220, 68)
+  pdf.text(`Signed by: ${text(signer, 'Driver')}`, MARGIN + 246, pdf.y - 34, { size: 10, color: colors.gray700, maxWidth: CONTENT_WIDTH - 258 })
+  pdf.text(`Signed at: ${text(signedAt, '-')}`, MARGIN + 246, pdf.y - 52, { size: 9, color: colors.gray500, maxWidth: CONTENT_WIDTH - 258 })
+  pdf.y -= boxHeight + 16
+}
+
 function drawSectionTitle(pdf: ReportPdf, title: string) {
   pdf.ensure(30)
   pdf.text(title, MARGIN, pdf.y, { size: 14, bold: true, color: colors.gray900 })
@@ -541,6 +560,8 @@ export async function downloadInspectionReportPdf(
       status,
       created_at,
       submitted_at,
+      signature_data_url,
+      signed_at,
       vehicle_id,
       driver_id,
       vehicles (
@@ -607,6 +628,8 @@ export async function downloadInspectionReportPdf(
   ]
   const dateValue = inspection.submitted_at || inspection.created_at
   const generatedAt = formatDateTime(new Date().toISOString(), language as any, '-')
+  const signedAt = formatDateTime(inspection.signed_at || inspection.submitted_at || inspection.created_at, language as any, '-')
+  const signer = text(driver?.name || driver?.email, 'Driver')
   const result = reportResult(inspection.status, results)
 
   const { data: repairs } = issues.length
@@ -619,8 +642,9 @@ export async function downloadInspectionReportPdf(
     relationArray(repairs).map((repair: any) => [repair.issue_id, repair])
   )
 
-  const [vehiclePhoto, ...photoImages] = await Promise.all([
+  const [vehiclePhoto, signatureImage, ...photoImages] = await Promise.all([
     loadImage(vehicle?.photo_url, 'ImVehicle'),
+    loadImage(inspection.signature_data_url, 'ImSignature'),
     ...photos.slice(0, 12).map((url: string, index: number) =>
       loadImage(url, `ImPhoto${index + 1}`)
     ),
@@ -639,6 +663,7 @@ export async function downloadInspectionReportPdf(
     language
   )
   drawMetricRow(pdf, results, issues, photos)
+  drawDriverSignature(pdf, signatureImage, signedAt, signer)
   drawChecklist(pdf, results)
   drawIssues(pdf, issues, repairsByIssueId)
   drawPhotos(pdf, photoImages.filter(Boolean) as PdfImage[])

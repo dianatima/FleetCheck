@@ -141,6 +141,36 @@
       </div>
     </div>
 
+    <div class="card p-4 mb-4">
+      <div class="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Driver Signature</h3>
+          <p class="text-xs text-gray-500 dark:text-gray-400">Sign by hand on the screen to submit this inspection.</p>
+        </div>
+        <button type="button" class="btn-secondary px-3 py-1.5 text-xs" @click="clearSignature">
+          Clear signature
+        </button>
+      </div>
+
+      <div class="rounded-xl border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-900/40">
+        <canvas
+          ref="signatureCanvas"
+          class="signature-canvas"
+          @pointerdown="startSignature"
+          @pointermove="moveSignature"
+          @pointerup="endSignature"
+          @pointerleave="endSignature"
+          @pointercancel="endSignature"
+        />
+      </div>
+      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        {{ signatureDataUrl ? 'Signature captured.' : 'No signature yet.' }}
+      </p>
+      <p v-if="signatureError" class="mt-2 text-xs text-red-500 dark:text-red-400">
+        {{ signatureError }}
+      </p>
+    </div>
+
     <!-- Submit -->
     <p v-if="draftMessage" class="mb-3 text-sm text-green-600 dark:text-green-400">
       {{ draftMessage }}
@@ -165,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Camera, Check, CheckCheck, X, FileText } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
@@ -206,8 +236,22 @@ const draftMessage = ref('')
 const photoLightboxOpen = ref(false)
 const lightboxPhotos = ref<string[]>([])
 const lightboxStartIndex = ref(0)
+const signatureCanvas = ref<HTMLCanvasElement | null>(null)
+const signatureDataUrl = ref('')
+const signatureError = ref('')
+const isSignatureDrawing = ref(false)
+const signatureLastPoint = ref<{ x: number; y: number } | null>(null)
 
-onMounted(loadInspectionItems)
+onMounted(async () => {
+  await loadInspectionItems()
+  await nextTick()
+  initializeSignatureCanvas()
+  window.addEventListener('resize', handleSignatureResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleSignatureResize)
+})
 
 const inspectionType = computed<'pre-trip' | 'post-trip'>(() =>
   inspection.value?.type === 'post-trip' || props.isPostTrip ? 'post-trip' : 'pre-trip'
@@ -259,6 +303,126 @@ function markAllPass() {
   items.forEach(i => { i.state = 'pass' })
 }
 
+function initializeSignatureCanvas() {
+  const canvas = signatureCanvas.value
+  if (!canvas) return
+
+  const currentDataUrl = signatureDataUrl.value
+  const rect = canvas.getBoundingClientRect()
+  const ratio = window.devicePixelRatio || 1
+
+  canvas.width = Math.max(1, Math.floor(rect.width * ratio))
+  canvas.height = Math.max(1, Math.floor(180 * ratio))
+  canvas.style.height = '180px'
+
+  const context = canvas.getContext('2d')
+  if (!context) return
+
+  context.setTransform(1, 0, 0, 1, 0, 0)
+  context.scale(ratio, ratio)
+  paintSignatureCanvasBackground(context, rect.width, 180)
+
+  if (currentDataUrl) {
+    drawSignatureFromDataUrl(currentDataUrl)
+  }
+}
+
+function handleSignatureResize() {
+  initializeSignatureCanvas()
+}
+
+function paintSignatureCanvasBackground(context: CanvasRenderingContext2D, width: number, height: number) {
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, width, height)
+
+  context.strokeStyle = '#e5e7eb'
+  context.lineWidth = 1
+  context.setLineDash([6, 6])
+  context.beginPath()
+  context.moveTo(12, height - 24)
+  context.lineTo(width - 12, height - 24)
+  context.stroke()
+  context.setLineDash([])
+}
+
+function getCanvasPoint(event: PointerEvent) {
+  const canvas = signatureCanvas.value
+  if (!canvas) return null
+  const rect = canvas.getBoundingClientRect()
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  }
+}
+
+function startSignature(event: PointerEvent) {
+  if (!signatureCanvas.value) return
+  signatureCanvas.value.setPointerCapture(event.pointerId)
+  isSignatureDrawing.value = true
+  signatureLastPoint.value = getCanvasPoint(event)
+  signatureError.value = ''
+}
+
+function moveSignature(event: PointerEvent) {
+  if (!isSignatureDrawing.value || !signatureCanvas.value) return
+
+  const context = signatureCanvas.value.getContext('2d')
+  const nextPoint = getCanvasPoint(event)
+  const lastPoint = signatureLastPoint.value
+  if (!context || !nextPoint || !lastPoint) return
+
+  context.strokeStyle = '#0f172a'
+  context.lineWidth = 2.1
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.beginPath()
+  context.moveTo(lastPoint.x, lastPoint.y)
+  context.lineTo(nextPoint.x, nextPoint.y)
+  context.stroke()
+
+  signatureLastPoint.value = nextPoint
+}
+
+function endSignature(event: PointerEvent) {
+  if (!isSignatureDrawing.value) return
+
+  isSignatureDrawing.value = false
+  signatureLastPoint.value = null
+
+  if (!signatureCanvas.value) return
+
+  try {
+    signatureCanvas.value.releasePointerCapture(event.pointerId)
+  } catch {
+    // ignore pointer capture mismatch
+  }
+
+  signatureDataUrl.value = signatureCanvas.value.toDataURL('image/png')
+}
+
+function clearSignature() {
+  signatureDataUrl.value = ''
+  signatureError.value = ''
+  initializeSignatureCanvas()
+}
+
+function drawSignatureFromDataUrl(value: string) {
+  const canvas = signatureCanvas.value
+  if (!canvas || !value) return
+
+  const context = canvas.getContext('2d')
+  if (!context) return
+
+  const image = new Image()
+  image.onload = () => {
+    const width = canvas.getBoundingClientRect().width
+    const height = 180
+    paintSignatureCanvasBackground(context, width, height)
+    context.drawImage(image, 0, 0, width, height)
+  }
+  image.src = value
+}
+
 async function loadInspectionItems() {
   const inspectionId = String(route.query.inspectionId || '')
   if (!inspectionId) return
@@ -271,6 +435,7 @@ async function loadInspectionItems() {
       type,
       status,
       created_at,
+      signature_data_url,
       odometer,
       vehicle_id,
       driver_id,
@@ -287,7 +452,10 @@ async function loadInspectionItems() {
     .eq('id', inspectionId)
     .single()
 
-  if (!inspectionError) inspection.value = inspectionData
+  if (!inspectionError) {
+    inspection.value = inspectionData
+    signatureDataUrl.value = inspectionData?.signature_data_url || ''
+  }
 
   const { data, error } = await supabase
     .from('inspection_results')
@@ -369,6 +537,10 @@ async function handleSubmit() {
   const vehicleId = String(route.query.vehicleId || '')
 
   if (inspectionId && vehicleId) {
+    if (!signatureDataUrl.value) {
+      signatureError.value = 'Driver signature is required before submit.'
+      return
+    }
     if (!validateInspection()) return
     await saveInspectionResults()
     await createIssuesForFailedResults(inspectionId)
@@ -376,7 +548,8 @@ async function handleSubmit() {
       inspectionId,
       vehicleId,
       inspectionType.value,
-      failCount.value > 0
+      failCount.value > 0,
+      signatureDataUrl.value
     )
   }
 
@@ -485,5 +658,12 @@ async function createIssuesForFailedResults(inspectionId: string) {
 .slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-6px); }
 .photo-thumb {
   @apply w-10 h-10 rounded-lg overflow-hidden border border-red-200 bg-red-50 cursor-pointer transition-all hover:ring-2 hover:ring-blue-500 hover:opacity-90 dark:border-red-800 dark:bg-red-900/10;
+}
+
+.signature-canvas {
+  @apply block w-full rounded-lg;
+  height: 180px;
+  touch-action: none;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 </style>

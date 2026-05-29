@@ -792,13 +792,20 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     inspectionId: string,
     vehicleId: string,
     type: InspectionType,
-    hasFailedItems = false
+    hasFailedItems = false,
+    signatureDataUrl: string | null = null
   ) {
+    const driver = await fetchDriverContext()
+    if (!driver) return false
+
     const { error: inspectionError } = await supabase
       .from('inspections')
       .update({
         status: 'submitted',
         submitted_at: new Date().toISOString(),
+        signature_data_url: signatureDataUrl,
+        signed_at: signatureDataUrl ? new Date().toISOString() : null,
+        signed_by_driver_id: signatureDataUrl ? driver.id : null,
       })
       .eq('id', inspectionId)
 
@@ -808,9 +815,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     }
 
     if (type === 'post-trip') return closeVehicleAssignment(vehicleId)
-
-    const driver = await fetchDriverContext()
-    if (!driver) return false
 
     const hasUnresolvedIssues = hasFailedItems || await hasUnresolvedPreTripIssues(driver.id, vehicleId)
 
