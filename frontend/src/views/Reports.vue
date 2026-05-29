@@ -239,6 +239,11 @@
         @update:page-size="setPageSize"
       />
     </div>
+
+    <InspectionReportModal
+      v-model="inspectionModalOpen"
+      :inspection-id="selectedInspectionId"
+    />
   </AppLayout>
 </template>
 
@@ -260,6 +265,7 @@ import {
 import AppLayout from "../components/layout/AppLayout.vue";
 import BaseTablePagination from "@/components/shared/BaseTablePagination.vue";
 import BaseDateInput from "@/components/shared/BaseDateInput.vue";
+import InspectionReportModal from "@/components/shared/InspectionReportModal.vue";
 import { useAppStore } from "../stores/app";
 import { useAuthStore } from "@/stores/authStore";
 import { supabase } from "@/lib/supabase";
@@ -307,6 +313,8 @@ const endDate = ref("");
 const page = ref(1);
 const pageSize = ref(10);
 const downloadingId = ref<string | null>(null);
+const inspectionModalOpen = ref(false);
+const selectedInspectionId = ref<string | null>(null);
 const vehicleFilterId = computed(() => String(route.query.vehicle_id || ""));
 const driverFilterId = computed(() => String(route.query.driver_id || ""));
 const vehicleFilterLabel = computed(() => {
@@ -457,7 +465,8 @@ function getReviewStatus(
 }
 
 function viewReport(report: Report) {
-  router.push(`/reports/${report.id}`);
+  selectedInspectionId.value = report.id;
+  inspectionModalOpen.value = true;
 }
 
 function reviewIssue(report: Report) {

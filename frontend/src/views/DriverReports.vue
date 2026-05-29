@@ -70,7 +70,7 @@
               v-for="r in paginatedReports"
               :key="r.id"
               class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
-              @click="viewReport(r)"
+              @click="openInspectionModal(r)"
             >
               <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ r.date }}</td>
               <td class="px-4 py-3">
@@ -120,7 +120,7 @@
                   </template>
                   <template v-else>
                     <button
-                      @click.stop="viewReport(r)"
+                      @click.stop="openInspectionModal(r)"
                       title="View report"
                       class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
                       <FileText :size="13" />
@@ -147,6 +147,11 @@
         @update:page-size="setPageSize"
       />
     </div>
+
+    <InspectionReportModal
+      v-model="inspectionModalOpen"
+      :inspection-id="selectedInspectionId"
+    />
   </AppLayout>
 </template>
 
@@ -157,6 +162,7 @@ import { Filter, Search, Download, Truck, CheckCircle, XCircle, Camera, FileText
 import AppLayout from '../components/layout/AppLayout.vue'
 import BaseTablePagination from '@/components/shared/BaseTablePagination.vue'
 import BaseDateInput from '@/components/shared/BaseDateInput.vue'
+import InspectionReportModal from '@/components/shared/InspectionReportModal.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -177,6 +183,8 @@ const error = ref<string | null>(null)
 const page = ref(1)
 const pageSize = ref(10)
 const downloadingId = ref<string | null>(null)
+const inspectionModalOpen = ref(false)
+const selectedInspectionId = ref<string | null>(null)
 
 interface Report {
   id: string
@@ -302,6 +310,11 @@ function continueDraft(r: Report) {
 
 function viewReport(r: Report) {
   router.push(`/driver/reports/${r.id}`)
+}
+
+async function openInspectionModal(r: Report) {
+  selectedInspectionId.value = r.id
+  inspectionModalOpen.value = true
 }
 
 async function downloadReport(r: Report) {
