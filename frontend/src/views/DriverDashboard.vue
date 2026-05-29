@@ -131,7 +131,10 @@
         <section class="card">
           <div class="flex items-center justify-between p-5 border-b border-gray-100/80 dark:border-gray-800">
             <h2 class="font-medium text-gray-700 dark:text-gray-200 text-sm">Recent Reports</h2>
-            <RouterLink to="/driver/reports" class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5">
+            <RouterLink
+              to="/driver/reports"
+              class="flex items-center gap-0.5 text-xs text-blue-600 hover:underline dark:text-blue-400"
+            >
               {{ store.t('viewAll') }} <ChevronRight :size="12" />
             </RouterLink>
           </div>
@@ -151,35 +154,44 @@
                 <tr
                   v-for="report in recentReports"
                   :key="report.id"
-                  class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
-                  @click="router.push(`/driver/reports/${report.id}`)"
+                  class="cursor-pointer border-b border-gray-100/70 transition-colors hover:bg-gray-50/70 dark:border-gray-800/70 dark:hover:bg-gray-800/45"
+                  @click="openInspectionModal(report.id)"
                 >
                   <td class="px-4 py-3">
-                    <div class="flex items-center gap-3 min-w-56">
-                      <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    <div class="flex min-w-56 items-center gap-3">
+                      <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700">
                         <img
                           v-if="relation(report.vehicles)?.photo_url"
                           :src="relation(report.vehicles)?.photo_url"
                           alt=""
-                          class="w-full h-full object-cover"
+                          class="h-full w-full object-cover"
                         />
                         <Truck v-else :size="15" class="text-gray-400" />
                       </div>
                       <div>
-                        <p class="text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                        <p class="whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                           {{ vehicleName(relation(report.vehicles)) }}
                         </p>
-                        <p class="text-xs font-mono text-gray-400">{{ vehicleSubtitle(relation(report.vehicles)) }}</p>
+                        <p class="text-xs font-mono text-gray-400">
+                          {{ vehicleSubtitle(relation(report.vehicles)) }}
+                        </p>
                       </div>
                     </div>
                   </td>
                   <td class="table-td">{{ typeLabel(report.type) }}</td>
-                  <td class="px-5 py-3"><span :class="reportResultBadge(report)">{{ reportResultLabel(report) }}</span></td>
+                  <td class="px-5 py-3">
+                    <span :class="reportResultBadge(report)">{{ reportResultLabel(report) }}</span>
+                  </td>
                   <td class="table-td">{{ formatDate(report.submitted_at || report.created_at) }}</td>
                   <td class="px-5 py-3" @click.stop>
-                    <RouterLink :to="`/driver/reports/${report.id}`" class="icon-btn" title="Open Report" @click.stop>
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      title="Open Report"
+                      @click.stop="openInspectionModal(report.id)"
+                    >
                       <FileText :size="14" />
-                    </RouterLink>
+                    </button>
                   </td>
                 </tr>
               </tbody>
@@ -187,6 +199,11 @@
           </div>
         </section>
       </div>
+
+      <InspectionReportModal
+        v-model="inspectionModalOpen"
+        :inspection-id="selectedInspectionId"
+      />
     </template>
   </AppLayout>
 </template>
@@ -205,6 +222,7 @@ import {
   Truck,
 } from 'lucide-vue-next'
 import AppLayout from '../components/layout/AppLayout.vue'
+import InspectionReportModal from '@/components/shared/InspectionReportModal.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
@@ -223,6 +241,8 @@ const analyticsReports = ref<any[]>([])
 const reportsSubmittedCount = ref(0)
 const failedReportsCount = ref(0)
 const startingVehicleId = ref('')
+const inspectionModalOpen = ref(false)
+const selectedInspectionId = ref<string | null>(null)
 
 onMounted(fetchDashboard)
 
@@ -541,5 +561,10 @@ function reportResultBadge(report: any) {
 
 function formatDate(value: string | null) {
   return formatDateTime(value, store.language)
+}
+
+async function openInspectionModal(inspectionId: string) {
+  selectedInspectionId.value = inspectionId
+  inspectionModalOpen.value = true
 }
 </script>

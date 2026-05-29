@@ -137,7 +137,7 @@
               v-for="h in inspectionHistory"
               :key="h.id"
               class="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
-              @click="router.push(`/reports/${h.id}`)"
+              @click="openInspectionModal(h.id)"
             >
               <div
                 class="w-2 h-2 rounded-full flex-shrink-0"
@@ -229,6 +229,11 @@
       @save="handleSave"
     />
 
+    <InspectionReportModal
+      v-model="inspectionModalOpen"
+      :inspection-id="selectedInspectionId"
+    />
+
     <PhotoLightbox
       v-model="photoLightboxOpen"
       :photos="lightboxPhotos"
@@ -256,6 +261,7 @@ import {
 
 import AppLayout from "../components/layout/AppLayout.vue";
 import VehicleFormModal from "@/components/vehicles/VehicleFormModal.vue";
+import InspectionReportModal from "@/components/shared/InspectionReportModal.vue";
 import PhotoLightbox from "@/components/shared/PhotoLightbox.vue";
 import { useAppStore } from "../stores/app";
 import { useVehicleStore } from "@/stores/vehicleStore";
@@ -295,6 +301,8 @@ const repairHistory = ref<any[]>([]);
 const photoLightboxOpen = ref(false);
 const lightboxPhotos = ref<string[]>([]);
 const lightboxStartIndex = ref(0);
+const inspectionModalOpen = ref(false);
+const selectedInspectionId = ref<string | null>(null);
 const vehicleId = computed(() => route.params.id as string);
 const vehicle = computed<Vehicle | null>(
   () => vehicleStore.selectedVehicle as Vehicle | null
@@ -409,6 +417,11 @@ function openPhotoLightbox(photos: string[] | null | undefined, index = 0) {
   lightboxPhotos.value = cleanPhotos;
   lightboxStartIndex.value = index;
   photoLightboxOpen.value = true;
+}
+
+async function openInspectionModal(inspectionId: string) {
+  selectedInspectionId.value = inspectionId;
+  inspectionModalOpen.value = true;
 }
 
 async function handleSave(payload: any) {

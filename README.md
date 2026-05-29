@@ -25,3 +25,16 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - **Offline режим** — робота без інтернету з подальшою синхронізацією.
 - **PWA / Mobile-first** — адаптація під мобільні пристрої та браузер.
 
+## Останні зміни (May 2026)
+
+- **Єдина модалка перегляду звітів** — додано спільний компонент `InspectionReportModal` для перегляду готових inspection-звітів.
+- **Перегляд звіту без переходу на окрему сторінку** — звіти відкриваються у модальному вікні в таких екранах:
+	- `Driver Reports`
+	- `Driver Dashboard (Recent Reports)`
+	- `Vehicle Detail (Inspection History)`
+	- `Manager Reports`
+- **Зведена фотогалерея звіту** — усі фото зі звіту показуються разом у блоці `Photos`.
+- **Zoom для фото** — клік по фото відкриває збільшений перегляд через `PhotoLightbox`.
+- **Порядок пунктів checklist збережено** — `Checklist Summary` у модалці йде за `sort_order` з inspection template.
+- **Потік заповнення інспекції не змінено** — під час проходження pre-trip/post-trip питання як і раніше відображаються окремо.
+
