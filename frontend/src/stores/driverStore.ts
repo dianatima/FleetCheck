@@ -11,6 +11,7 @@ export const useDriverStore = defineStore('drivers', () => {
 
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const invitationMessage = ref<string | null>(null)
 
   const page = ref(1)
   const pageSize = ref(10)
@@ -257,6 +258,7 @@ export const useDriverStore = defineStore('drivers', () => {
   async function sendDriverInvitation(id: string) {
     loading.value = true
     error.value = null
+    invitationMessage.value = null
 
     const token = authStore.session?.access_token
 
@@ -273,7 +275,7 @@ export const useDriverStore = defineStore('drivers', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?driver_invite=1`,
       }),
     })
 
@@ -284,6 +286,12 @@ export const useDriverStore = defineStore('drivers', () => {
       loading.value = false
       return false
     }
+
+    invitationMessage.value =
+      result?.message ||
+      (result?.resent
+        ? 'Invitation email was sent again.'
+        : 'Invitation email was sent.')
 
     await fetchDrivers()
 
@@ -420,6 +428,7 @@ export const useDriverStore = defineStore('drivers', () => {
 
     loading,
     error,
+    invitationMessage,
 
     page,
     pageSize,

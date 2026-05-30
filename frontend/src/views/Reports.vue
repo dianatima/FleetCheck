@@ -14,7 +14,7 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-2 mb-5">
-      <div class="relative flex-1 min-w-[220px]">
+      <div class="relative w-full sm:flex-1 sm:min-w-[220px]">
         <Search
           :size="15"
           class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -25,11 +25,11 @@
           placeholder="Search reports..."
         />
       </div>
-      <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+      <div class="flex w-full items-center gap-2 flex-wrap sm:w-auto sm:flex-nowrap">
         <Filter :size="14" class="text-gray-400 flex-shrink-0" />
         <select
           v-model="filterResult"
-          class="input-field py-1.5 text-sm w-40"
+          class="input-field py-1.5 text-sm sm:w-40"
           aria-label="Report status"
         >
           <option value="all">{{ store.t("allResults") }}</option>
@@ -42,7 +42,7 @@
         </select>
         <select
           v-model="filterType"
-          class="input-field py-1.5 text-sm w-36"
+          class="input-field py-1.5 text-sm sm:w-36"
           aria-label="Inspection type"
         >
           <option value="all">{{ store.t("allTypes") }}</option>
@@ -50,18 +50,18 @@
           <option value="post-trip">{{ store.t("postTrip") }}</option>
         </select>
       </div>
-      <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+      <div class="flex w-full items-center gap-2 flex-wrap sm:w-auto sm:flex-nowrap">
         <span class="text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
           Date range:
         </span>
         <BaseDateInput
           v-model="startDate"
-          input-class="py-1.5 text-sm w-36"
+          input-class="py-1.5 text-sm w-full sm:w-36"
         />
         <span class="text-gray-400 text-sm">-</span>
         <BaseDateInput
           v-model="endDate"
-          input-class="py-1.5 text-sm w-36"
+          input-class="py-1.5 text-sm w-full sm:w-36"
         />
       </div>
     </div>
@@ -104,7 +104,7 @@
           Reports
         </h2>
       </div>
-      <div class="overflow-x-auto">
+      <div class="hidden md:block overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr
@@ -230,6 +230,69 @@
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+        <div v-if="paginatedReports.length === 0" class="px-4 py-12 text-center text-sm text-gray-400">
+          {{ loading ? "Loading reports..." : store.t("noReportsFound") }}
+        </div>
+        <div
+          v-for="r in paginatedReports"
+          :key="r.id"
+          class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+          :class="r.reviewStatus === 'needs-review' ? 'bg-yellow-50/40 dark:bg-yellow-900/5' : ''"
+          role="button"
+          tabindex="0"
+          @click="viewReport(r)"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="mobile-card-title truncate">{{ r.vehicle }}</p>
+              <p class="mobile-card-meta">{{ r.driver }} · {{ typeLabel(r.type) }}</p>
+              <p class="mobile-card-meta">{{ r.date }}</p>
+            </div>
+            <span :class="resultBadge(r)" class="flex-shrink-0 text-xs">
+              {{ resultLabel(r) }}
+            </span>
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+              <p class="text-gray-400">Review</p>
+              <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">
+                {{ reviewLabel(r.reviewStatus) }}
+              </p>
+            </div>
+            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+              <p class="text-gray-400">Issues / photos</p>
+              <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">
+                {{ r.issues }} issues · {{ r.photos }} photos
+              </p>
+            </div>
+          </div>
+
+          <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3" @click.stop>
+            <button
+              v-if="r.reviewStatus === 'needs-review' && r.reviewIssueId"
+              class="btn-secondary w-full text-sm"
+              @click.stop="reviewIssue(r)"
+            >
+              <ClipboardCheck :size="15" />
+              Review
+            </button>
+            <button class="btn-secondary w-full text-sm" @click.stop="viewReport(r)">
+              <FileText :size="15" />
+              Open
+            </button>
+            <button
+              class="btn-secondary w-full text-sm"
+              :disabled="downloadingId === r.id"
+              @click.stop="downloadReport(r)"
+            >
+              <Download :size="15" />
+              PDF
+            </button>
+          </div>
+        </div>
       </div>
       <BaseTablePagination
         :total="filtered.length"

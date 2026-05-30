@@ -1,7 +1,7 @@
 <template>
   <AppLayout title="Vehicles">
     <div class="flex flex-wrap items-center gap-3 mb-5">
-      <div class="relative flex-1 min-w-48">
+      <div class="relative w-full sm:flex-1 sm:min-w-48">
         <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           v-model="localSearch"
@@ -9,11 +9,11 @@
           :placeholder="store.t('searchVehicles')"
         />
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex w-full items-center gap-2 sm:w-auto">
         <Filter :size="15" class="text-gray-400" />
         <select
           v-model="vehicleStore.availabilityFilter"
-          class="input-field py-2 text-sm w-auto"
+          class="input-field py-2 text-sm sm:w-auto"
           @change="vehicleStore.setAvailabilityFilter(vehicleStore.availabilityFilter)"
         >
           <option value="all">All</option>
@@ -51,7 +51,7 @@
             Vehicles
           </h2>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full">
             <thead>
               <tr class="table-header-row">
@@ -110,27 +110,103 @@
                       <Eye :size="15" />
                     </button>
                     <button
-                      class="btn-primary px-2 py-1.5 text-xs whitespace-nowrap"
-                      :disabled="!vehicle.available || startingId === vehicle.id"
+                      class="px-2 py-1.5 text-xs whitespace-nowrap"
+                      :class="inspectionActionState(vehicle).canStartPreTrip ? 'btn-primary' : 'btn-secondary'"
+                      :disabled="!inspectionActionState(vehicle).canStartPreTrip || startingId === vehicle.id"
+                      :title="inspectionActionState(vehicle).preTripDisabledReason || 'Start pre-trip inspection'"
                       @click="startPreTrip(vehicle)"
                     >
                       Pre-trip
                     </button>
                     <button
-                      class="btn-secondary px-2 py-1.5 text-xs whitespace-nowrap"
-                      :disabled="!vehicle.post_trip_ready || startingId === vehicle.id"
+                      class="px-2 py-1.5 text-xs whitespace-nowrap"
+                      :class="inspectionActionState(vehicle).canStartPostTrip ? 'btn-primary' : 'btn-secondary'"
+                      :disabled="!inspectionActionState(vehicle).canStartPostTrip || startingId === vehicle.id"
+                      :title="inspectionActionState(vehicle).postTripDisabledReason || 'Start post-trip inspection'"
                       @click="startPostTrip(vehicle)"
                     >
                       Post-trip
                     </button>
                   </div>
-                  <p v-if="vehicle.awaiting_manager_review" class="mt-2 text-xs text-yellow-700 dark:text-yellow-400">
-                    Manager review required before post-trip
+                  <p v-if="inspectionActionHint(vehicle)" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {{ inspectionActionHint(vehicle) }}
                   </p>
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+          <div v-if="vehicles.length === 0" class="px-4 py-12 text-center text-sm text-gray-400">
+            No vehicles are available for your license class.
+          </div>
+          <div
+            v-for="vehicle in vehicles"
+            :key="vehicle.id"
+            class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+            role="button"
+            tabindex="0"
+            @click="openDetail(vehicle.id)"
+          >
+            <div class="flex gap-3">
+              <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-700">
+                <img
+                  v-if="vehicle.photo_url"
+                  :src="vehicle.photo_url"
+                  alt=""
+                  class="h-full w-full object-cover"
+                  @error="hideBrokenImage"
+                />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="mobile-card-title truncate">{{ vehicleName(vehicle) }}</p>
+                    <p class="mobile-card-meta">
+                      {{ [vehicle.unit ? `Unit ${vehicle.unit}` : '', vehicle.plate || ''].filter(Boolean).join(' · ') || '—' }}
+                    </p>
+                    <p class="mobile-card-meta">{{ vehicle.vehicle_types?.name || '—' }}</p>
+                  </div>
+                  <span :class="availabilityBadge(vehicle)" class="flex-shrink-0">
+                    {{ availabilityLabel(vehicle) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p v-if="vehicle.odometer != null" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              Odometer: {{ Number(vehicle.odometer).toLocaleString() }} mi
+            </p>
+            <p v-if="inspectionActionHint(vehicle)" class="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-900/40 dark:text-gray-400">
+              {{ inspectionActionHint(vehicle) }}
+            </p>
+
+            <div class="mobile-action-grid-3 mt-3" @click.stop>
+              <button class="mobile-icon-action" title="View vehicle" @click.stop="openDetail(vehicle.id)">
+                <Eye :size="15" />
+                View
+              </button>
+              <button
+                class="text-sm"
+                :class="inspectionActionState(vehicle).canStartPreTrip ? 'btn-primary' : 'btn-secondary'"
+                :disabled="!inspectionActionState(vehicle).canStartPreTrip || startingId === vehicle.id"
+                :title="inspectionActionState(vehicle).preTripDisabledReason || 'Start pre-trip inspection'"
+                @click.stop="startPreTrip(vehicle)"
+              >
+                Pre-trip
+              </button>
+              <button
+                class="text-sm"
+                :class="inspectionActionState(vehicle).canStartPostTrip ? 'btn-primary' : 'btn-secondary'"
+                :disabled="!inspectionActionState(vehicle).canStartPostTrip || startingId === vehicle.id"
+                :title="inspectionActionState(vehicle).postTripDisabledReason || 'Start post-trip inspection'"
+                @click.stop="startPostTrip(vehicle)"
+              >
+                Post-trip
+              </button>
+            </div>
+          </div>
         </div>
 
         <BaseTablePagination
@@ -188,10 +264,10 @@ function countBy(availability: string) {
 }
 
 function availabilityLabel(vehicle: any) {
-  return vehicle.assigned_to_me
-    ? 'Assigned to you'
-    : vehicle.awaiting_manager_review
+  return vehicle.status === 'needs-attention' || vehicle.awaiting_manager_review
     ? 'Awaiting manager review'
+    : vehicle.assigned_to_me
+    ? 'Assigned to you'
     : vehicle.locked_by_current_assignment
     ? 'Post-trip required first'
     : vehicle.in_active_repair
@@ -202,10 +278,10 @@ function availabilityLabel(vehicle: any) {
 }
 
 function availabilityBadge(vehicle: any) {
-  return vehicle.assigned_to_me
-    ? 'badge-blue'
-    : vehicle.awaiting_manager_review
+  return vehicle.status === 'needs-attention' || vehicle.awaiting_manager_review
     ? 'badge-yellow'
+    : vehicle.assigned_to_me
+    ? 'badge-blue'
     : vehicle.in_active_repair
     ? 'badge-orange'
     : vehicle.available
@@ -213,11 +289,35 @@ function availabilityBadge(vehicle: any) {
     : 'badge-gray'
 }
 
+function inspectionActionState(vehicle: any) {
+  return vehicleStore.getInspectionActionState(vehicle)
+}
+
+function inspectionActionHint(vehicle: any) {
+  const state = inspectionActionState(vehicle)
+
+  if (state.canStartPostTrip) return state.preTripDisabledReason
+  if (vehicle.status === 'needs-attention' || vehicle.awaiting_manager_review) {
+    return 'Vehicle is waiting for manager review.'
+  }
+  if (!state.canStartPreTrip && !state.canStartPostTrip) {
+    return state.preTripDisabledReason || state.postTripDisabledReason
+  }
+
+  return ''
+}
+
 function openDetail(id: string) {
   router.push(`/driver/vehicles/${id}`)
 }
 
 async function startPreTrip(vehicle: any) {
+  const state = inspectionActionState(vehicle)
+  if (!state.canStartPreTrip) {
+    vehicleStore.error = state.preTripDisabledReason || 'Pre-trip is not available.'
+    return
+  }
+
   startingId.value = vehicle.id
   const inspectionId = await vehicleStore.startPreTripInspection(vehicle.id)
   startingId.value = ''
@@ -225,6 +325,12 @@ async function startPreTrip(vehicle: any) {
 }
 
 async function startPostTrip(vehicle: any) {
+  const state = inspectionActionState(vehicle)
+  if (!state.canStartPostTrip) {
+    vehicleStore.error = state.postTripDisabledReason || 'Post-trip is not available.'
+    return
+  }
+
   startingId.value = vehicle.id
   const inspectionId = await vehicleStore.startPostTripInspection(vehicle.id)
   startingId.value = ''

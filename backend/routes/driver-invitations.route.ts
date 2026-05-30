@@ -11,6 +11,10 @@ type StatusBody = {
     status?: 'active' | 'pending' | 'inactive'
 }
 
+type VehicleAttentionBody = {
+    inspectionId?: string
+}
+
 type InviteMetadata = {
     driver_id?: string
     company_id?: string
@@ -18,6 +22,12 @@ type InviteMetadata = {
     last_name?: string
     phone?: string | null
     role?: string
+}
+
+type AuthUser = {
+    id: string
+    email?: string | null
+    user_metadata?: Record<string, unknown> | null
 }
 
 function bearerToken(header?: string) {
@@ -30,6 +40,66 @@ function splitName(name: string) {
     const firstName = parts.shift() || ''
     const lastName = parts.join(' ')
     return { firstName, lastName }
+}
+
+function isAlreadyRegisteredInviteError(error: { message?: string } | null) {
+    const message = error?.message?.toLowerCase() || ''
+
+    return [
+        'already been registered',
+        'already registered',
+        'already exists',
+        'user already',
+    ].some((pattern) => message.includes(pattern))
+}
+
+function driverInviteMetadata(driver: {
+    id: string
+    company_id: string
+    name?: string | null
+    phone?: string | null
+}) {
+    const { firstName, lastName } = splitName(driver.name || '')
+
+    return {
+        role: 'driver',
+        driver_id: driver.id,
+        company_id: driver.company_id,
+        first_name: firstName,
+        last_name: lastName,
+        phone: driver.phone || null,
+    }
+}
+
+async function findAuthUserByEmail(email: string) {
+    const normalizedEmail = email.trim().toLowerCase()
+    let page = 1
+    const perPage = 1000
+
+    while (true) {
+        const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+            page,
+            perPage,
+        })
+
+        if (error) {
+            return { user: null, error }
+        }
+
+        const user = data.users.find(
+            (candidate) => candidate.email?.trim().toLowerCase() === normalizedEmail
+        )
+
+        if (user) {
+            return { user: user as AuthUser, error: null }
+        }
+
+        if (!data.nextPage || data.users.length < perPage) {
+            return { user: null, error: null }
+        }
+
+        page = data.nextPage
+    }
 }
 
 const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
@@ -89,22 +159,75 @@ const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
                 return reply.code(409).send({ error: 'Driver already accepted the invitation' })
             }
 
-            const { firstName, lastName } = splitName(driver.name || '')
+            const metadata = driverInviteMetadata(driver)
+            let authUserId: string | null = null
+            let resent = false
+
             const { data: inviteData, error: inviteError } =
                 await supabaseAdmin.auth.admin.inviteUserByEmail(driver.email, {
                     redirectTo: request.body?.redirectTo,
-                    data: {
-                        role: 'driver',
-                        driver_id: driver.id,
-                        company_id: driver.company_id,
-                        first_name: firstName,
-                        last_name: lastName,
-                        phone: driver.phone || null,
-                    },
+                    data: metadata,
                 })
 
             if (inviteError) {
-                return reply.code(400).send({ error: inviteError.message })
+                if (!isAlreadyRegisteredInviteError(inviteError)) {
+                    return reply.code(400).send({ error: inviteError.message })
+                }
+
+                resent = true
+
+                const { user: existingUser, error: existingUserError } =
+                    await findAuthUserByEmail(driver.email)
+
+                if (existingUserError) {
+                    request.log.error(
+                        { err: existingUserError, driverId: driver.id, driverEmail: driver.email },
+                        'Existing driver auth user could not be loaded for invitation resend'
+                    )
+
+                    return reply.code(400).send({
+                        error: 'Existing auth user could not be loaded for invitation resend',
+                    })
+                }
+
+                if (existingUser) {
+                    authUserId = existingUser.id
+
+                    const { error: metadataError } =
+                        await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+                            user_metadata: {
+                                ...(existingUser.user_metadata || {}),
+                                ...metadata,
+                            },
+                        })
+
+                    if (metadataError) {
+                        request.log.error(
+                            { err: metadataError, driverId: driver.id, driverEmail: driver.email },
+                            'Existing driver auth metadata could not be refreshed for invitation resend'
+                        )
+
+                        return reply.code(400).send({
+                            error: 'Invitation metadata could not be refreshed for the existing user',
+                        })
+                    }
+                } else {
+                    request.log.warn(
+                        { driverId: driver.id, driverEmail: driver.email },
+                        'Invite resend detected existing auth email but the auth user was not returned by listUsers'
+                    )
+                }
+
+                const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(
+                    driver.email,
+                    { redirectTo: request.body?.redirectTo }
+                )
+
+                if (resetError) {
+                    return reply.code(400).send({ error: resetError.message })
+                }
+            } else {
+                authUserId = inviteData.user?.id || null
             }
 
             const invitationSentAt = new Date().toISOString()
@@ -121,9 +244,13 @@ const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
             }
 
             return {
-                user_id: inviteData.user?.id || null,
+                user_id: authUserId,
                 status: 'pending',
                 invitation_sent_at: invitationSentAt,
+                resent,
+                message: resent
+                    ? 'Invitation email was sent again.'
+                    : 'Invitation email was sent.',
             }
         }
     )
@@ -225,6 +352,155 @@ const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
             }
 
             return { status }
+        }
+    )
+
+    app.post('/api/drivers/password-completed', async (request, reply) => {
+        const token = bearerToken(request.headers.authorization)
+
+        if (!token) {
+            return reply.code(401).send({ error: 'Missing access token' })
+        }
+
+        const { data: userData, error: userError } =
+            await supabaseAdmin.auth.getUser(token)
+
+        if (userError || !userData.user) {
+            return reply.code(401).send({ error: 'Invalid access token' })
+        }
+
+        const { data: profile, error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .select('id, company_id, role, email')
+            .eq('auth_user_id', userData.user.id)
+            .single()
+
+        if (profileError || !profile) {
+            return reply.code(404).send({ error: 'Driver profile not found' })
+        }
+
+        if (profile.role !== 'driver') {
+            return { updated: false }
+        }
+
+        const { error: updateProfileError } = await supabaseAdmin
+            .from('profiles')
+            .update({ status: 'active' })
+            .eq('id', profile.id)
+
+        if (updateProfileError) {
+            return reply.code(400).send({ error: updateProfileError.message })
+        }
+
+        const { data: linkedDrivers, error: linkedDriverError } = await supabaseAdmin
+            .from('drivers')
+            .update({ status: 'active' })
+            .eq('company_id', profile.company_id)
+            .eq('user_id', profile.id)
+            .select('id')
+
+        if (linkedDriverError) {
+            return reply.code(400).send({ error: linkedDriverError.message })
+        }
+
+        if (!linkedDrivers?.length && profile.email) {
+            const { error: emailDriverError } = await supabaseAdmin
+                .from('drivers')
+                .update({ status: 'active' })
+                .eq('company_id', profile.company_id)
+                .eq('email', profile.email)
+
+            if (emailDriverError) {
+                return reply.code(400).send({ error: emailDriverError.message })
+            }
+        }
+
+        return { updated: true }
+    })
+
+    app.post<{ Params: { id: string }; Body: VehicleAttentionBody }>(
+        '/api/driver/vehicles/:id/needs-attention',
+        async (request, reply) => {
+            const token = bearerToken(request.headers.authorization)
+            const inspectionId = request.body?.inspectionId
+
+            if (!token) {
+                return reply.code(401).send({ error: 'Missing access token' })
+            }
+
+            if (!inspectionId) {
+                return reply.code(400).send({ error: 'Inspection ID is required' })
+            }
+
+            const { data: userData, error: userError } =
+                await supabaseAdmin.auth.getUser(token)
+
+            if (userError || !userData.user) {
+                return reply.code(401).send({ error: 'Invalid access token' })
+            }
+
+            const { data: profile, error: profileError } = await supabaseAdmin
+                .from('profiles')
+                .select('id, role')
+                .eq('auth_user_id', userData.user.id)
+                .single()
+
+            if (profileError || !profile || profile.role !== 'driver') {
+                return reply.code(403).send({ error: 'Only drivers can report vehicle attention from inspections' })
+            }
+
+            const { data: driver, error: driverError } = await supabaseAdmin
+                .from('drivers')
+                .select('id, company_id, status, user_id')
+                .eq('user_id', profile.id)
+                .eq('status', 'active')
+                .maybeSingle()
+
+            if (driverError || !driver) {
+                return reply.code(403).send({ error: 'Active driver profile was not found' })
+            }
+
+            const { data: inspection, error: inspectionError } = await supabaseAdmin
+                .from('inspections')
+                .select('id, company_id, vehicle_id, driver_id, status')
+                .eq('id', inspectionId)
+                .eq('vehicle_id', request.params.id)
+                .eq('driver_id', driver.id)
+                .eq('company_id', driver.company_id)
+                .eq('status', 'submitted')
+                .maybeSingle()
+
+            if (inspectionError || !inspection) {
+                return reply.code(403).send({
+                    error: 'Submitted inspection was not found for this driver and vehicle',
+                })
+            }
+
+            const { count, error: failedResultError } = await supabaseAdmin
+                .from('inspection_results')
+                .select('id', { count: 'exact', head: true })
+                .eq('inspection_id', inspection.id)
+                .eq('result', 'fail')
+
+            if (failedResultError) {
+                return reply.code(400).send({ error: failedResultError.message })
+            }
+
+            if (!count) {
+                return reply.code(409).send({ error: 'Inspection does not have failed results' })
+            }
+
+            const { error: vehicleError } = await supabaseAdmin
+                .from('vehicles')
+                .update({ status: 'needs-attention' })
+                .eq('id', request.params.id)
+                .eq('company_id', driver.company_id)
+
+            if (vehicleError) {
+                return reply.code(400).send({ error: vehicleError.message })
+            }
+
+            return { status: 'needs-attention' }
         }
     )
 

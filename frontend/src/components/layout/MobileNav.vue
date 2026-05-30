@@ -9,7 +9,7 @@
     >
       <button
         @click="navigate"
-        class="flex-1 flex flex-col items-center gap-0.5 py-2.5 relative transition-colors"
+        class="relative flex min-h-[58px] flex-1 flex-col items-center justify-center gap-0.5 py-2.5 transition-colors"
         :class="isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'"
       >
         <div v-if="isActive" class="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-b-full" />

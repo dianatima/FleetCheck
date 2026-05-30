@@ -8,13 +8,13 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-3 mb-5">
-      <div class="relative flex-1 min-w-48">
+      <div class="relative w-full sm:flex-1 sm:min-w-48">
         <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input v-model="search" class="input-field pl-9 py-2 text-sm" :placeholder="store.t('searchIssues')" />
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex w-full items-center gap-2 sm:w-auto">
         <Filter :size="14" class="text-gray-400 flex-shrink-0" />
-        <select v-model="filterStatus" class="input-field py-2 text-sm w-auto">
+        <select v-model="filterStatus" class="input-field py-2 text-sm sm:w-auto">
           <option value="all">{{ store.t('allStatus') }}</option>
           <option value="under-review">{{ store.t('statusUnderReview') }}</option>
           <option value="in-repair">{{ store.t('statusInRepair') }}</option>
@@ -22,19 +22,19 @@
           <option value="rejected">{{ store.t('statusRejected') }}</option>
         </select>
       </div>
-      <select v-model="filterDriver" class="input-field py-2 text-sm w-auto">
+      <select v-model="filterDriver" class="input-field py-2 text-sm sm:w-auto">
         <option value="all">All Drivers</option>
         <option v-for="driver in driverOptions" :key="driver.id" :value="driver.id">
           {{ driver.name }}
         </option>
       </select>
-      <select v-model="filterSeverity" class="input-field py-2 text-sm w-auto">
+      <select v-model="filterSeverity" class="input-field py-2 text-sm sm:w-auto">
         <option value="all">All Severities</option>
         <option value="low">Low</option>
         <option value="medium">Medium</option>
         <option value="high">High</option>
       </select>
-      <select v-model="filterVehicle" class="input-field py-2 text-sm w-auto">
+      <select v-model="filterVehicle" class="input-field py-2 text-sm sm:w-auto">
         <option value="all">All Vehicles</option>
         <option v-for="vehicle in vehicleOptions" :key="vehicle.id" :value="vehicle.id">
           {{ vehicle.label }}
@@ -63,7 +63,7 @@
           Issues
         </h2>
       </div>
-      <div class="overflow-x-auto">
+      <div class="hidden md:block overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr class="table-header-row">
@@ -107,6 +107,48 @@
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+        <div v-if="paginatedIssues.length === 0" class="px-4 py-12 text-center text-sm text-gray-400">
+          {{ store.t('noIssuesFound') }}
+        </div>
+        <div
+          v-for="issue in paginatedIssues"
+          :key="issue.id"
+          class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+          role="button"
+          tabindex="0"
+          @click="router.push(`/issues/${issue.id}`)"
+        >
+          <div class="flex items-start gap-3">
+            <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-900/20">
+              <Wrench :size="16" class="text-orange-500" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <p class="text-xs font-mono text-blue-600 dark:text-blue-400">{{ issueNumber(issue) }}</p>
+                  <p class="mobile-card-title truncate">{{ issue.title || 'Inspection issue' }}</p>
+                  <p class="mobile-card-meta">{{ vehicleLabel(issue) }}</p>
+                </div>
+                <span :class="severityBadge(issue.severity)" class="flex-shrink-0">
+                  {{ severityLabel(issue.severity) }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+              <p class="text-gray-400">Driver</p>
+              <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">{{ issue.drivers?.name || '—' }}</p>
+            </div>
+            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+              <p class="text-gray-400">Status</p>
+              <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">{{ statusText(issue.status) }}</p>
+            </div>
+          </div>
+        </div>
       </div>
       <BaseTablePagination
         :total="filtered.length"

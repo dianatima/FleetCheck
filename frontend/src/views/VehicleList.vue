@@ -23,7 +23,7 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-3 mb-5">
-      <div class="relative flex-1 min-w-48">
+      <div class="relative w-full sm:flex-1 sm:min-w-48">
         <Search
           :size="15"
           class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -35,12 +35,12 @@
         />
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex w-full items-center gap-2 sm:w-auto">
         <Filter :size="15" class="text-gray-400" />
         <select
           v-model="vehicleStore.statusFilter"
           @change="vehicleStore.setStatusFilter(vehicleStore.statusFilter)"
-          class="input-field py-2 text-sm w-auto"
+          class="input-field py-2 text-sm sm:w-auto"
         >
           <option value="all">{{ store.t("allStatus") }}</option>
           <option value="active">{{ store.t("statusActive") }}</option>
@@ -55,7 +55,7 @@
       <select
         v-model="vehicleStore.assignedFilter"
         @change="vehicleStore.setAssignedFilter(vehicleStore.assignedFilter)"
-        class="input-field py-2 text-sm w-auto"
+        class="input-field py-2 text-sm sm:w-auto"
       >
         <option value="all">All assignees</option>
         <option value="assigned">Assigned</option>
@@ -72,7 +72,7 @@
       <select
         v-model="vehicleStore.typeFilter"
         @change="vehicleStore.setTypeFilter(vehicleStore.typeFilter)"
-        class="input-field py-2 text-sm w-auto"
+        class="input-field py-2 text-sm sm:w-auto"
       >
         <option value="all">All Types</option>
         <option
@@ -87,7 +87,7 @@
       <select
         v-model="vehicleStore.brandFilter"
         @change="vehicleStore.setBrandFilter(vehicleStore.brandFilter)"
-        class="input-field py-2 text-sm w-auto"
+        class="input-field py-2 text-sm sm:w-auto"
       >
         <option value="all">All Brands</option>
         <option
@@ -99,7 +99,7 @@
         </option>
       </select>
 
-      <button @click="openAddModal" class="btn-primary gap-2 text-sm">
+      <button @click="openAddModal" class="btn-primary w-full gap-2 text-sm sm:w-auto">
         <Plus :size="16" /> {{ store.t("addVehicle") }}
       </button>
     </div>
@@ -119,7 +119,7 @@
             Vehicles
           </h2>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full">
             <thead>
               <tr
@@ -263,6 +263,74 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+          <div
+            v-for="v in vehicles"
+            :key="v.id"
+            class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+            role="button"
+            tabindex="0"
+            @click="router.push(`/vehicles/${v.id}`)"
+          >
+            <div class="flex gap-3">
+              <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-700">
+                <img
+                  v-if="v.photo_url"
+                  :src="v.photo_url"
+                  alt=""
+                  class="h-full w-full object-cover"
+                  @error="hideBrokenImage"
+                />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="mobile-card-title truncate">{{ getVehicleName(v) }}</p>
+                    <p class="mobile-card-meta">{{ [v.unit ? `Unit ${v.unit}` : '', v.plate || ''].filter(Boolean).join(' · ') || '—' }}</p>
+                    <p class="mobile-card-meta">{{ getVehicleTypeName(v) }}</p>
+                  </div>
+                  <span :class="statusConfig[v.status]?.badge || 'badge-gray'" class="flex-shrink-0">
+                    {{ statusConfig[v.status]?.label || v.status }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+                <p class="text-gray-400">Assigned to</p>
+                <p
+                  class="mt-1 font-medium"
+                  :class="v.active_assignment ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'"
+                >
+                  {{ assignedToLabel(v) }}
+                </p>
+              </div>
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+                <p class="text-gray-400">Odometer</p>
+                <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">
+                  {{ v.odometer != null ? Number(v.odometer).toLocaleString() + " mi" : "—" }}
+                </p>
+              </div>
+            </div>
+
+            <div class="mobile-action-grid mt-3" @click.stop>
+              <button class="btn-secondary w-full text-sm" @click.stop="startEdit(v)">
+                <Pencil :size="15" />
+                Edit
+              </button>
+              <button class="btn-danger w-full text-sm" @click.stop="confirmDelete(v)">
+                <Trash2 :size="15" />
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <div v-if="vehicles.length === 0" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            No vehicles found.
+          </div>
         </div>
 
         <BaseTablePagination

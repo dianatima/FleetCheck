@@ -7,7 +7,7 @@
       {{ error || vehicleStore.error }}
     </div>
     <template v-else>
-      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      <div class="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <div
           v-for="stat in statsCards"
           :key="stat.label"
@@ -57,7 +57,7 @@
             {{ store.t('viewAll') }} <ChevronRight :size="12" />
           </RouterLink>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full">
             <thead>
               <tr class="table-header-row">
@@ -103,27 +103,93 @@
                       <Eye :size="15" />
                     </RouterLink>
                     <button
-                      class="btn-primary px-2 py-1.5 text-xs whitespace-nowrap"
+                      class="px-2 py-1.5 text-xs whitespace-nowrap"
+                      :class="inspectionActionState(vehicle).canStartPreTrip ? 'btn-primary' : 'btn-secondary'"
                       :disabled="!canStartPreTrip(vehicle) || startingVehicleId === vehicle.id"
+                      :title="inspectionActionState(vehicle).preTripDisabledReason || 'Start pre-trip inspection'"
                       @click.stop="startPreTrip(vehicle)"
                     >
                       Pre-trip
                     </button>
                     <button
-                      class="btn-secondary px-2 py-1.5 text-xs whitespace-nowrap"
+                      class="px-2 py-1.5 text-xs whitespace-nowrap"
+                      :class="inspectionActionState(vehicle).canStartPostTrip ? 'btn-primary' : 'btn-secondary'"
                       :disabled="!canStartPostTrip(vehicle) || startingVehicleId === vehicle.id"
+                      :title="inspectionActionState(vehicle).postTripDisabledReason || 'Start post-trip inspection'"
                       @click.stop="startPostTrip(vehicle)"
                     >
                       Post-trip
                     </button>
                   </div>
-                  <p v-if="vehicle.awaiting_manager_review" class="mt-2 text-xs text-yellow-700 dark:text-yellow-400">
-                    Manager review required before post-trip.
+                  <p v-if="inspectionActionHint(vehicle)" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {{ inspectionActionHint(vehicle) }}
                   </p>
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+          <div v-if="availableVehicles.length === 0" class="px-5 py-10 text-center text-sm text-gray-400">
+            No active vehicles are available for inspection right now.
+          </div>
+          <div
+            v-for="vehicle in availableVehicles"
+            :key="vehicle.id"
+            class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+            role="button"
+            tabindex="0"
+            @click="router.push(`/driver/vehicles/${vehicle.id}`)"
+          >
+            <div class="flex gap-3">
+              <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-700">
+                <img v-if="vehicle.photo_url" :src="vehicle.photo_url" alt="" class="h-full w-full object-cover" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="mobile-card-title truncate">{{ vehicleName(vehicle) }}</p>
+                    <p class="mobile-card-meta">
+                      {{ [vehicle.unit ? `Unit ${vehicle.unit}` : '', vehicle.plate || ''].filter(Boolean).join(' · ') || '—' }}
+                    </p>
+                    <p class="mobile-card-meta">{{ vehicle.vehicle_types?.name || '—' }}</p>
+                  </div>
+                  <span :class="availabilityBadge(vehicle)" class="flex-shrink-0">
+                    {{ availabilityLabel(vehicle) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p v-if="inspectionActionHint(vehicle)" class="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-900/40 dark:text-gray-400">
+              {{ inspectionActionHint(vehicle) }}
+            </p>
+
+            <div class="mobile-action-grid-3 mt-3" @click.stop>
+              <RouterLink :to="`/driver/vehicles/${vehicle.id}`" class="mobile-icon-action">
+                <Eye :size="15" />
+                View
+              </RouterLink>
+              <button
+                class="text-sm"
+                :class="inspectionActionState(vehicle).canStartPreTrip ? 'btn-primary' : 'btn-secondary'"
+                :disabled="!canStartPreTrip(vehicle) || startingVehicleId === vehicle.id"
+                :title="inspectionActionState(vehicle).preTripDisabledReason || 'Start pre-trip inspection'"
+                @click.stop="startPreTrip(vehicle)"
+              >
+                Pre-trip
+              </button>
+              <button
+                class="text-sm"
+                :class="inspectionActionState(vehicle).canStartPostTrip ? 'btn-primary' : 'btn-secondary'"
+                :disabled="!canStartPostTrip(vehicle) || startingVehicleId === vehicle.id"
+                :title="inspectionActionState(vehicle).postTripDisabledReason || 'Start post-trip inspection'"
+                @click.stop="startPostTrip(vehicle)"
+              >
+                Post-trip
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -138,7 +204,7 @@
               {{ store.t('viewAll') }} <ChevronRight :size="12" />
             </RouterLink>
           </div>
-          <div class="overflow-x-auto">
+          <div class="hidden md:block overflow-x-auto">
             <table class="w-full">
               <thead>
                 <tr class="table-header-row">
@@ -196,6 +262,55 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+            <div v-if="recentReports.length === 0" class="px-5 py-10 text-center text-sm text-gray-400">
+              No submitted reports yet.
+            </div>
+            <div
+              v-for="report in recentReports"
+              :key="report.id"
+              class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+              role="button"
+              tabindex="0"
+              @click="openInspectionModal(report.id)"
+            >
+              <div class="flex items-start gap-3">
+                <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-700">
+                  <img
+                    v-if="relation(report.vehicles)?.photo_url"
+                    :src="relation(report.vehicles)?.photo_url"
+                    alt=""
+                    class="h-full w-full object-cover"
+                  />
+                  <Truck v-else :size="16" class="text-gray-400" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <p class="mobile-card-title truncate">{{ vehicleName(relation(report.vehicles)) }}</p>
+                      <p class="mobile-card-meta">{{ vehicleSubtitle(relation(report.vehicles)) }}</p>
+                    </div>
+                    <span :class="reportResultBadge(report)" class="flex-shrink-0">
+                      {{ reportResultLabel(report) }}
+                    </span>
+                  </div>
+                  <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                    <span>{{ typeLabel(report.type) }}</span>
+                    <span>·</span>
+                    <span>{{ formatDate(report.submitted_at || report.created_at) }}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="btn-secondary mt-3 w-full text-sm"
+                @click.stop="openInspectionModal(report.id)"
+              >
+                <FileText :size="15" />
+                Open Report
+              </button>
+            </div>
           </div>
         </section>
       </div>
@@ -488,10 +603,10 @@ function vehicleLabel(vehicle: any) {
 }
 
 function availabilityLabel(vehicle: any) {
-  return vehicle.assigned_to_me
-    ? 'Assigned to you'
-    : vehicle.awaiting_manager_review
+  return vehicle.status === 'needs-attention' || vehicle.awaiting_manager_review
     ? 'Awaiting manager review'
+    : vehicle.assigned_to_me
+    ? 'Assigned to you'
     : vehicle.locked_by_current_assignment
     ? 'Post-trip required first'
     : vehicle.in_active_repair
@@ -502,10 +617,10 @@ function availabilityLabel(vehicle: any) {
 }
 
 function availabilityBadge(vehicle: any) {
-  return vehicle.assigned_to_me
-    ? 'badge-blue'
-    : vehicle.awaiting_manager_review
+  return vehicle.status === 'needs-attention' || vehicle.awaiting_manager_review
     ? 'badge-yellow'
+    : vehicle.assigned_to_me
+    ? 'badge-blue'
     : vehicle.in_active_repair
     ? 'badge-orange'
     : vehicle.available
@@ -513,22 +628,39 @@ function availabilityBadge(vehicle: any) {
     : 'badge-gray'
 }
 
+function inspectionActionState(vehicle: any) {
+  return vehicleStore.getInspectionActionState(vehicle)
+}
+
+function inspectionActionHint(vehicle: any) {
+  const state = inspectionActionState(vehicle)
+
+  if (state.canStartPostTrip) return state.preTripDisabledReason
+  if (vehicle.status === 'needs-attention' || vehicle.awaiting_manager_review) {
+    return 'Vehicle is waiting for manager review.'
+  }
+  if (!state.canStartPreTrip && !state.canStartPostTrip) {
+    return state.preTripDisabledReason || state.postTripDisabledReason
+  }
+
+  return ''
+}
+
 function canStartPreTrip(vehicle: any) {
-  return (
-    vehicle.status === 'active' &&
-    !vehicle.in_active_repair &&
-    !vehicle.awaiting_manager_review &&
-    !vehicle.assigned_to_other &&
-    (Boolean(vehicle.available) || Boolean(vehicle.assigned_to_me))
-  )
+  return inspectionActionState(vehicle).canStartPreTrip
 }
 
 function canStartPostTrip(vehicle: any) {
-  return vehicle.status === 'active' && Boolean(vehicle.post_trip_ready)
+  return inspectionActionState(vehicle).canStartPostTrip
 }
 
 async function startPreTrip(vehicle: any) {
-  if (!canStartPreTrip(vehicle)) return
+  const state = inspectionActionState(vehicle)
+  if (!state.canStartPreTrip) {
+    vehicleStore.error = state.preTripDisabledReason || 'Pre-trip is not available.'
+    return
+  }
+
   startingVehicleId.value = vehicle.id
   const inspectionId = await vehicleStore.startPreTripInspection(vehicle.id)
   startingVehicleId.value = ''
@@ -536,7 +668,12 @@ async function startPreTrip(vehicle: any) {
 }
 
 async function startPostTrip(vehicle: any) {
-  if (!canStartPostTrip(vehicle)) return
+  const state = inspectionActionState(vehicle)
+  if (!state.canStartPostTrip) {
+    vehicleStore.error = state.postTripDisabledReason || 'Post-trip is not available.'
+    return
+  }
+
   startingVehicleId.value = vehicle.id
   const inspectionId = await vehicleStore.startPostTripInspection(vehicle.id)
   startingVehicleId.value = ''

@@ -23,7 +23,7 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-3 mb-5">
-      <div class="relative flex-1 min-w-48">
+      <div class="relative w-full sm:flex-1 sm:min-w-48">
         <Search
           :size="15"
           class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -35,12 +35,12 @@
         />
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex w-full items-center gap-2 sm:w-auto">
         <Filter :size="15" class="text-gray-400" />
         <select
           v-model="driverStore.statusFilter"
           @change="driverStore.setStatusFilter(driverStore.statusFilter)"
-          class="input-field py-2 text-sm w-auto"
+          class="input-field py-2 text-sm sm:w-auto"
         >
           <option value="all">{{ store.t("allStatus") }}</option>
           <option value="new">New</option>
@@ -53,7 +53,7 @@
       <select
         v-model="driverStore.licenseClassFilter"
         @change="driverStore.setLicenseClassFilter(driverStore.licenseClassFilter)"
-        class="input-field py-2 text-sm w-auto"
+        class="input-field py-2 text-sm sm:w-auto"
       >
         <option value="all">All Classes</option>
         <option
@@ -65,7 +65,7 @@
         </option>
       </select>
 
-      <button @click="openAddModal" class="btn-primary gap-2 text-sm">
+      <button @click="openAddModal" class="btn-primary w-full gap-2 text-sm sm:w-auto">
         <Plus :size="16" /> {{ store.t("addDriver") }}
       </button>
     </div>
@@ -85,7 +85,7 @@
             Drivers
           </h2>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full">
             <thead>
               <tr
@@ -241,6 +241,84 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+          <div v-if="drivers.length === 0" class="px-4 py-12 text-center text-sm text-gray-400">
+            {{ store.t("noDriversFound") }}
+          </div>
+          <div
+            v-for="d in drivers"
+            :key="d.id"
+            class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+            role="button"
+            tabindex="0"
+            @click="router.push(`/drivers/${d.id}`)"
+          >
+            <div class="flex items-start gap-3">
+              <div
+                class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                :style="{ background: d.avatar_color || '#3b82f6' }"
+              >
+                {{ initials(d.name) }}
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="mobile-card-title truncate">{{ d.name }}</p>
+                    <p class="mobile-card-meta truncate">{{ d.email }}</p>
+                    <p class="mobile-card-meta">{{ d.license_class || "No license class" }}</p>
+                  </div>
+                  <span :class="statusConfig[d.status]?.badge || 'badge-gray'" class="flex-shrink-0">
+                    {{ statusConfig[d.status]?.label || d.status }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p v-if="invitationMessage(d)" class="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-900/40 dark:text-gray-400">
+              {{ invitationMessage(d) }}
+            </p>
+
+            <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+                <p class="text-gray-400">Phone</p>
+                <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">{{ d.phone || "—" }}</p>
+              </div>
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+                <p class="text-gray-400">License</p>
+                <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">{{ d.license_no || "—" }}</p>
+              </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" @click.stop>
+              <button
+                v-if="canInviteDriver(d)"
+                class="btn-secondary w-full text-sm"
+                :disabled="invitingDriverId === d.id"
+                @click.stop="sendInvitation(d)"
+              >
+                <MailPlus :size="15" />
+                {{ inviteLabel(d) }}
+              </button>
+              <button
+                v-if="canActivateDriver(d)"
+                class="btn-primary w-full text-sm"
+                :disabled="statusUpdatingDriverId === d.id"
+                @click.stop="activateDriver(d)"
+              >
+                Activate
+              </button>
+              <button class="btn-secondary w-full text-sm" @click.stop="startEdit(d)">
+                <Pencil :size="15" />
+                Edit
+              </button>
+              <button class="btn-danger w-full text-sm" @click.stop="confirmDelete(d)">
+                <Trash2 :size="15" />
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
 
         <BaseTablePagination

@@ -417,7 +417,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
         !unavailableStatus &&
         !lockedByCurrentAssignment
 
-      return {
+      const annotatedVehicle = {
         ...vehicle,
         active_assignment: activeAssignment || null,
         assigned_to_me: assignedToMe,
@@ -438,6 +438,11 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
           : available
           ? 'available'
           : 'unavailable',
+      }
+
+      return {
+        ...annotatedVehicle,
+        inspection_action_state: getInspectionActionState(annotatedVehicle),
       }
     })
   }
@@ -466,13 +471,101 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   }
 
   function isDriverVehicleInspectable(vehicle: any) {
-    return (
-      vehicle.status === 'active' &&
-      !vehicle.in_active_repair &&
-      !vehicle.awaiting_manager_review &&
-      !vehicle.assigned_to_other &&
-      (vehicle.available === true || vehicle.assigned_to_me === true)
-    )
+    const actionState = getInspectionActionState(vehicle)
+    return actionState.canStartPreTrip || actionState.canStartPostTrip
+  }
+
+  function getInspectionActionState(vehicle: any) {
+    const managerReviewReason = 'Vehicle is waiting for manager review.'
+    const unavailableReason = 'Vehicle is not available.'
+
+    if (!vehicle) {
+      return {
+        canStartPreTrip: false,
+        canStartPostTrip: false,
+        preTripDisabledReason: unavailableReason,
+        postTripDisabledReason: unavailableReason,
+      }
+    }
+
+    if (vehicle.status === 'needs-attention' || vehicle.awaiting_manager_review) {
+      return {
+        canStartPreTrip: false,
+        canStartPostTrip: false,
+        preTripDisabledReason: managerReviewReason,
+        postTripDisabledReason: managerReviewReason,
+      }
+    }
+
+    if (vehicle.status !== 'active') {
+      const reason = vehicle.status === 'in-repair' || vehicle.in_active_repair
+        ? 'Vehicle is not available while repair is in progress.'
+        : unavailableReason
+
+      return {
+        canStartPreTrip: false,
+        canStartPostTrip: false,
+        preTripDisabledReason: reason,
+        postTripDisabledReason: reason,
+      }
+    }
+
+    if (vehicle.in_active_repair) {
+      return {
+        canStartPreTrip: false,
+        canStartPostTrip: false,
+        preTripDisabledReason: 'Vehicle is not available while repair is in progress.',
+        postTripDisabledReason: 'Vehicle is not available while repair is in progress.',
+      }
+    }
+
+    if (vehicle.assigned_to_other) {
+      return {
+        canStartPreTrip: false,
+        canStartPostTrip: false,
+        preTripDisabledReason: 'Vehicle is assigned to another driver.',
+        postTripDisabledReason: 'Vehicle is assigned to another driver.',
+      }
+    }
+
+    if (vehicle.locked_by_current_assignment) {
+      return {
+        canStartPreTrip: false,
+        canStartPostTrip: false,
+        preTripDisabledReason: 'Complete post-trip inspection for your assigned vehicle first.',
+        postTripDisabledReason: 'Post-trip is only available for your assigned vehicle.',
+      }
+    }
+
+    if (vehicle.assigned_to_me) {
+      const preTripReason = 'Pre-trip already completed. Complete post-trip to release this vehicle.'
+      const postTripReason = vehicle.post_trip_ready
+        ? ''
+        : 'Submit a successful pre-trip inspection before post-trip.'
+
+      return {
+        canStartPreTrip: false,
+        canStartPostTrip: Boolean(vehicle.post_trip_ready),
+        preTripDisabledReason: preTripReason,
+        postTripDisabledReason: postTripReason,
+      }
+    }
+
+    if (vehicle.available) {
+      return {
+        canStartPreTrip: true,
+        canStartPostTrip: false,
+        preTripDisabledReason: '',
+        postTripDisabledReason: 'Post-trip is available after a successful pre-trip.',
+      }
+    }
+
+    return {
+      canStartPreTrip: false,
+      canStartPostTrip: false,
+      preTripDisabledReason: unavailableReason,
+      postTripDisabledReason: unavailableReason,
+    }
   }
 
   function paginate(rows: any[]) {
@@ -603,8 +696,8 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
 
         error.value =
           driverAssignment.vehicle_id === vehicleId
-            ? 'This vehicle is already assigned to you. Complete the post-trip inspection to release it.'
-            : 'Submit the post-trip inspection for your assigned vehicle before choosing another vehicle.'
+            ? 'Pre-trip already completed. Complete post-trip to release this vehicle.'
+            : 'Complete post-trip inspection for your assigned vehicle first.'
         return null
       }
 
@@ -807,7 +900,13 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       return false
     }
 
-    if (type === 'post-trip') return closeVehicleAssignment(vehicleId)
+    if (type === 'post-trip') {
+      if (hasFailedItems) {
+        await markVehicleNeedsAttention(vehicleId, inspectionId)
+      }
+
+      return closeVehicleAssignment(vehicleId)
+    }
 
     const driver = await fetchDriverContext()
     if (!driver) return false
@@ -815,12 +914,40 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     const hasUnresolvedIssues = hasFailedItems || await hasUnresolvedPreTripIssues(driver.id, vehicleId)
 
     if (hasUnresolvedIssues) {
+      await markVehicleNeedsAttention(vehicleId, inspectionId)
       const assignment = await fetchActiveDriverAssignment(driver.id)
       if (assignment?.vehicle_id === vehicleId) await cancelVehicleAssignment(assignment.id)
       return true
     }
 
     return createVehicleAssignmentIfNeeded(vehicleId)
+  }
+
+  async function markVehicleNeedsAttention(vehicleId: string, inspectionId: string) {
+    const token = authStore.session?.access_token
+
+    if (!token) {
+      error.value = 'Access token is missing'
+      return false
+    }
+
+    const response = await fetch(`/api/driver/vehicles/${vehicleId}/needs-attention`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ inspectionId }),
+    })
+
+    const result = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      error.value = result?.error || 'Vehicle could not be marked as needing attention'
+      return false
+    }
+
+    return true
   }
 
   async function setSearch(value: string) {
@@ -878,5 +1005,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     setPageSize,
     isDriverVehicleAvailable,
     isDriverVehicleInspectable,
+    getInspectionActionState,
   }
 })

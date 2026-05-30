@@ -44,14 +44,29 @@
           >
             Awaiting manager review. Manager review required before post-trip.
           </p>
-          <button class="btn-primary gap-2 text-sm" :disabled="!vehicle.available || starting" @click="startPreTrip">
+          <button
+            class="w-full gap-2 text-sm sm:w-auto"
+            :class="actionState.canStartPreTrip ? 'btn-primary' : 'btn-secondary'"
+            :disabled="!actionState.canStartPreTrip || starting"
+            :title="actionState.preTripDisabledReason || 'Start pre-trip inspection'"
+            @click="startPreTrip"
+          >
             <ClipboardCheck :size="15" />
             Start Pre-trip Inspection
           </button>
-          <button class="btn-secondary gap-2 text-sm" :disabled="!vehicle.post_trip_ready || starting" @click="startPostTrip">
+          <button
+            class="w-full gap-2 text-sm sm:w-auto"
+            :class="actionState.canStartPostTrip ? 'btn-primary' : 'btn-secondary'"
+            :disabled="!actionState.canStartPostTrip || starting"
+            :title="actionState.postTripDisabledReason || 'Start post-trip inspection'"
+            @click="startPostTrip"
+          >
             <ClipboardList :size="15" />
             Start Post-trip Inspection
           </button>
+          <p v-if="actionHint" class="w-full text-xs text-gray-500 dark:text-gray-400">
+            {{ actionHint }}
+          </p>
         </div>
 
         <div class="grid sm:grid-cols-2 lg:grid-cols-3">
@@ -97,16 +112,29 @@ watch(
 
 const availabilityLabel = computed(() => {
   if (!vehicle.value) return ''
+  if (vehicle.value.status === 'needs-attention' || vehicle.value.awaiting_manager_review) return 'Awaiting manager review'
   if (vehicle.value.assigned_to_me) return 'Assigned to you'
-  if (vehicle.value.awaiting_manager_review) return 'Awaiting manager review'
   if (vehicle.value.in_active_repair) return 'In repair'
   return vehicle.value.available ? 'Available' : 'Unavailable'
 })
 const availabilityBadge = computed(() => {
+  if (vehicle.value?.status === 'needs-attention' || vehicle.value?.awaiting_manager_review) return 'badge-yellow'
   if (vehicle.value?.assigned_to_me) return 'badge-blue'
-  if (vehicle.value?.awaiting_manager_review) return 'badge-yellow'
   if (vehicle.value?.in_active_repair) return 'badge-orange'
   return vehicle.value?.available ? 'badge-green' : 'badge-gray'
+})
+const actionState = computed(() => vehicleStore.getInspectionActionState(vehicle.value))
+const actionHint = computed(() => {
+  if (!vehicle.value) return ''
+  if (actionState.value.canStartPostTrip) return actionState.value.preTripDisabledReason
+  if (vehicle.value.status === 'needs-attention' || vehicle.value.awaiting_manager_review) {
+    return 'Vehicle is waiting for manager review.'
+  }
+  if (!actionState.value.canStartPreTrip && !actionState.value.canStartPostTrip) {
+    return actionState.value.preTripDisabledReason || actionState.value.postTripDisabledReason
+  }
+
+  return ''
 })
 const details = computed(() => [
   { icon: Hash, label: 'Unit', value: vehicle.value?.unit || '—' },
@@ -126,6 +154,11 @@ const details = computed(() => [
 
 async function startPreTrip() {
   if (!vehicle.value) return
+  if (!actionState.value.canStartPreTrip) {
+    vehicleStore.error = actionState.value.preTripDisabledReason || 'Pre-trip is not available.'
+    return
+  }
+
   starting.value = true
   const inspectionId = await vehicleStore.startPreTripInspection(vehicle.value.id)
   starting.value = false
@@ -134,6 +167,11 @@ async function startPreTrip() {
 
 async function startPostTrip() {
   if (!vehicle.value) return
+  if (!actionState.value.canStartPostTrip) {
+    vehicleStore.error = actionState.value.postTripDisabledReason || 'Post-trip is not available.'
+    return
+  }
+
   starting.value = true
   const inspectionId = await vehicleStore.startPostTripInspection(vehicle.value.id)
   starting.value = false

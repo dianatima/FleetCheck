@@ -53,7 +53,7 @@
           class="btn-primary w-full py-2.5 justify-center"
           :disabled="authStore.loading"
         >
-          {{ authStore.loading ? "Saving..." : "Save password" }}
+          {{ authStore.loading ? "Saving..." : "Create Password" }}
         </button>
       </form>
     </div>
@@ -74,8 +74,33 @@ const passwordMessage = ref("");
 const passwordSaved = ref(false);
 
 onMounted(async () => {
-  if (authStore.isAuthenticated) {
-    await authStore.acceptDriverInvitation({ reportError: false });
+  const sessionReady = authStore.isAuthenticated
+    ? true
+    : await authStore.loadSession({ validateAccess: false });
+
+  if (!sessionReady) {
+    passwordMessage.value =
+      "Invitation session could not be loaded. Please open the invitation link again.";
+    return;
+  }
+
+  await authStore.acceptDriverInvitation({ reportError: false });
+  await authStore.ensureAuthenticated();
+
+  if (!authStore.isAuthenticated) {
+    passwordMessage.value =
+      authStore.error || "Invitation session could not be verified.";
+    return;
+  }
+
+  if (authStore.profile?.role !== "driver") {
+    passwordMessage.value =
+      "This password setup link is only available for driver invitations.";
+    return;
+  }
+
+  if (authStore.passwordSetAt && authStore.profile?.status === "active") {
+    await router.replace("/driver");
   }
 });
 

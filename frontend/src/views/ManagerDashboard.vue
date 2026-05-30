@@ -82,7 +82,7 @@
               {{ store.t('viewAll') }} <ChevronRight :size="12" />
             </RouterLink>
           </div>
-          <div class="overflow-x-auto">
+          <div class="hidden md:block overflow-x-auto">
             <table class="w-full">
               <thead>
                 <tr class="table-header-row">
@@ -120,6 +120,34 @@
               </tbody>
             </table>
           </div>
+          <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+            <div v-if="openIssues.length === 0" class="px-5 py-10 text-center text-sm text-gray-400">
+              No issues are awaiting review.
+            </div>
+            <div
+              v-for="issue in openIssues"
+              :key="issue.id"
+              class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+              role="button"
+              tabindex="0"
+              @click="router.push(`/issues/${issue.id}`)"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="mobile-card-title truncate">{{ issue.title || 'Inspection issue' }}</p>
+                  <p class="mobile-card-meta">{{ vehicleLabel(relation(issue.vehicles)) }}</p>
+                  <p class="mobile-card-meta">{{ issue.inspection_results?.inspection_template_items?.title || 'Checklist item' }}</p>
+                </div>
+                <span :class="severityBadge(issue.severity)" class="flex-shrink-0">
+                  {{ severityLabel(issue.severity) }}
+                </span>
+              </div>
+              <RouterLink :to="`/issues/${issue.id}`" class="btn-secondary mt-3 w-full text-sm" @click.stop>
+                <ExternalLink :size="15" />
+                Open Issue
+              </RouterLink>
+            </div>
+          </div>
         </section>
 
         <section class="card h-full">
@@ -129,7 +157,7 @@
               {{ store.t('viewAll') }} <ChevronRight :size="12" />
             </RouterLink>
           </div>
-          <div class="overflow-x-auto">
+          <div class="hidden md:block overflow-x-auto">
             <table class="w-full">
               <thead>
                 <tr class="table-header-row">
@@ -162,6 +190,33 @@
               </tbody>
             </table>
           </div>
+          <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+            <div v-if="activeRepairs.length === 0" class="px-5 py-10 text-center text-sm text-gray-400">
+              No open repair work.
+            </div>
+            <div
+              v-for="repair in activeRepairs"
+              :key="repair.id"
+              class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+              role="button"
+              tabindex="0"
+              @click="router.push(`/repairs/${repair.id}`)"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="mobile-card-title truncate">{{ repair.title || repair.issues?.title || 'Repair' }}</p>
+                  <p class="mobile-card-meta">{{ vehicleLabel(relation(repair.vehicles)) }}</p>
+                </div>
+                <span :class="repairStatusBadge(repair.status)" class="flex-shrink-0">
+                  {{ repairStatusLabel(repair.status) }}
+                </span>
+              </div>
+              <RouterLink :to="`/repairs/${repair.id}`" class="btn-secondary mt-3 w-full text-sm" @click.stop>
+                <ExternalLink :size="15" />
+                Open Repair
+              </RouterLink>
+            </div>
+          </div>
         </section>
       </div>
 
@@ -172,7 +227,7 @@
             {{ store.t('viewAll') }} <ChevronRight :size="12" />
           </RouterLink>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full">
             <thead>
               <tr class="table-header-row">
@@ -206,6 +261,34 @@
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+          <div v-if="recentReports.length === 0" class="px-5 py-10 text-center text-sm text-gray-400">
+            No reports yet.
+          </div>
+          <div
+            v-for="report in recentReports"
+            :key="report.id"
+            class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+            role="button"
+            tabindex="0"
+            @click="router.push(`/reports/${report.id}`)"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="mobile-card-title truncate">{{ vehicleLabel(report.vehicle) }}</p>
+                <p class="mobile-card-meta">{{ report.driver }} · {{ typeLabel(report.type) }}</p>
+                <p class="mobile-card-meta">{{ formatDate(report.date) }}</p>
+              </div>
+              <span :class="resultBadge(report.result)" class="flex-shrink-0">
+                {{ resultLabel(report.result) }}
+              </span>
+            </div>
+            <RouterLink :to="`/reports/${report.id}`" class="btn-secondary mt-3 w-full text-sm" @click.stop>
+              <FileText :size="15" />
+              Open Report
+            </RouterLink>
+          </div>
         </div>
       </section>
 

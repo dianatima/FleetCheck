@@ -10,7 +10,7 @@
 
     <!-- Filters -->
     <div class="flex flex-wrap items-center gap-2 mb-5">
-      <div class="relative flex-1 min-w-[220px]">
+      <div class="relative w-full sm:flex-1 sm:min-w-[220px]">
         <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           v-model="search"
@@ -18,26 +18,26 @@
           placeholder="Search reports..."
         />
       </div>
-      <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+      <div class="flex w-full items-center gap-2 flex-wrap sm:w-auto sm:flex-nowrap">
         <Filter :size="14" class="text-gray-400 flex-shrink-0" />
-        <select v-model="filterResult" class="input-field py-1.5 text-sm w-40" aria-label="Report status">
+        <select v-model="filterResult" class="input-field py-1.5 text-sm sm:w-40" aria-label="Report status">
           <option value="all">{{ store.t('allResults') }}</option>
           <option value="pass">{{ store.t('statusPassed') }}</option>
           <option value="fail">{{ store.t('statusFailed') }}</option>
         </select>
-        <select v-model="filterType" class="input-field py-1.5 text-sm w-36" aria-label="Inspection type">
+        <select v-model="filterType" class="input-field py-1.5 text-sm sm:w-36" aria-label="Inspection type">
           <option value="all">{{ store.t('allTypes') }}</option>
           <option value="pre-trip">{{ store.t('preTrip') }}</option>
           <option value="post-trip">{{ store.t('postTrip') }}</option>
         </select>
       </div>
-      <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+      <div class="flex w-full items-center gap-2 flex-wrap sm:w-auto sm:flex-nowrap">
         <span class="text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
           Date range:
         </span>
-        <BaseDateInput v-model="startDate" input-class="py-1.5 text-sm w-36" />
+        <BaseDateInput v-model="startDate" input-class="py-1.5 text-sm w-full sm:w-36" />
         <span class="text-gray-400 text-sm">—</span>
-        <BaseDateInput v-model="endDate" input-class="py-1.5 text-sm w-36" />
+        <BaseDateInput v-model="endDate" input-class="py-1.5 text-sm w-full sm:w-36" />
       </div>
     </div>
 
@@ -52,7 +52,7 @@
           Reports
         </h2>
       </div>
-      <div class="overflow-x-auto">
+      <div class="hidden md:block overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr class="table-header-row">
@@ -70,7 +70,7 @@
               v-for="r in paginatedReports"
               :key="r.id"
               class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
-              @click="openInspectionModal(r)"
+              @click="r.status === 'draft' ? continueDraft(r) : openInspectionModal(r)"
             >
               <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ r.date }}</td>
               <td class="px-4 py-3">
@@ -138,6 +138,75 @@
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+        <div v-if="paginatedReports.length === 0" class="px-4 py-12 text-center text-sm text-gray-400">
+          {{ loading ? 'Loading reports...' : store.t('noReportsFound') }}
+        </div>
+        <div
+          v-for="r in paginatedReports"
+          :key="r.id"
+          class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+          role="button"
+          tabindex="0"
+          @click="r.status === 'draft' ? continueDraft(r) : openInspectionModal(r)"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="mobile-card-title truncate">{{ r.vehicle }}</p>
+              <p class="mobile-card-meta">{{ typeLabel(r.type) }} · {{ r.date }}</p>
+            </div>
+            <span :class="resultBadge(r)" class="flex-shrink-0 text-xs">
+              {{ resultLabel(r) }}
+            </span>
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+              <p class="text-gray-400">Status</p>
+              <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">
+                {{ r.status === 'draft' ? store.t('statusDraft') : store.t('statusSubmitted') }}
+              </p>
+            </div>
+            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+              <p class="text-gray-400">Issues / photos</p>
+              <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">
+                {{ r.issues }} issues · {{ r.photos }} photos
+              </p>
+            </div>
+          </div>
+
+          <div class="mobile-action-grid mt-3" @click.stop>
+            <button
+              v-if="r.status === 'draft'"
+              type="button"
+              class="btn-primary w-full text-sm"
+              @click.stop="continueDraft(r)"
+            >
+              <Pencil :size="15" />
+              Continue
+            </button>
+            <button
+              v-else
+              type="button"
+              class="btn-secondary w-full text-sm"
+              @click.stop="openInspectionModal(r)"
+            >
+              <FileText :size="15" />
+              Open
+            </button>
+            <button
+              v-if="r.status !== 'draft'"
+              type="button"
+              class="btn-secondary w-full text-sm"
+              :disabled="downloadingId === r.id"
+              @click.stop="downloadReport(r)"
+            >
+              <Download :size="15" />
+              PDF
+            </button>
+          </div>
+        </div>
       </div>
       <BaseTablePagination
         :total="filtered.length"

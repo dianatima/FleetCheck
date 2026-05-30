@@ -11,7 +11,7 @@
       Loading driver...
     </div>
 
-    <div v-else-if="driverStore.error" class="card p-6 text-sm text-red-500">
+    <div v-else-if="driverStore.error && !driver" class="card p-6 text-sm text-red-500">
       {{ driverStore.error }}
     </div>
 
@@ -67,7 +67,13 @@
               @click="sendInvitation"
             >
               <MailPlus :size="15" />
-              {{ driver.invitation_sent_at ? "Resend Invitation" : "Send Invitation" }}
+              {{
+                invitationSending
+                  ? "Sending..."
+                  : driver.invitation_sent_at
+                    ? "Resend Invitation"
+                    : "Send Invitation"
+              }}
             </button>
 
             <button
@@ -98,6 +104,20 @@
             </button>
           </div>
         </div>
+      </div>
+
+      <div
+        v-if="invitationSuccess"
+        class="card p-4 mb-5 text-sm text-green-700 dark:text-green-300 bg-green-50/80 dark:bg-green-900/15 border-green-100 dark:border-green-900/40"
+      >
+        {{ invitationSuccess }}
+      </div>
+
+      <div
+        v-if="invitationError"
+        class="card p-4 mb-5 text-sm text-red-600 dark:text-red-300 bg-red-50/80 dark:bg-red-900/15 border-red-100 dark:border-red-900/40"
+      >
+        {{ invitationError }}
       </div>
 
       <div class="grid lg:grid-cols-2 gap-5 mb-5">
@@ -327,6 +347,8 @@ const authStore = useAuthStore();
 const showEditModal = ref(false);
 const statusUpdating = ref(false);
 const invitationSending = ref(false);
+const invitationSuccess = ref("");
+const invitationError = ref("");
 const inspectionsLoading = ref(false);
 const inspections = ref<any[]>([]);
 const driverId = computed(() => route.params.id as string);
@@ -461,9 +483,19 @@ async function sendInvitation() {
   if (!driver.value) return;
 
   invitationSending.value = true;
+  invitationSuccess.value = "";
+  invitationError.value = "";
 
   try {
-    await driverStore.sendDriverInvitation(driver.value.id);
+    const success = await driverStore.sendDriverInvitation(driver.value.id);
+
+    if (success) {
+      invitationSuccess.value =
+        driverStore.invitationMessage || "Invitation email was sent again.";
+    } else {
+      invitationError.value =
+        driverStore.error || "Invitation could not be sent.";
+    }
   } finally {
     invitationSending.value = false;
   }

@@ -16,6 +16,14 @@ type OwnerCompany = {
 }
 
 const ACTIVE_COMPANY_KEY = 'fleetcheck.activeCompanyId'
+const STALE_AUTH_KEY_PREFIXES = [
+  'sb-',
+  'supabase.auth',
+  'fleetcheck.auth',
+  'fleetcheck.profile',
+  'fleetcheck.company',
+  'pinia-auth',
+]
 
 export const useAuthStore = defineStore('auth', () => {
   const session = ref<any | null>(null)
@@ -73,7 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const redirectPath = computed(() => {
     if (role.value === 'driver') {
-      if (!passwordSetAt.value) return '/password-setup'
+      if (!passwordSetAt.value) return '/set-password'
       if (profile.value?.status === 'active') return '/driver'
       if (profile.value?.status === 'inactive') return '/inactive'
       return '/pending'
@@ -102,7 +110,9 @@ export const useAuthStore = defineStore('auth', () => {
     return true
   }
 
-  async function loadSession() {
+  async function loadSession(options: { validateAccess?: boolean } = {}) {
+    const validateAccess = options.validateAccess ?? true
+
     loading.value = true
     error.value = null
 
@@ -110,23 +120,53 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (sessionError) {
       error.value = sessionError.message
+      await forceLogout(sessionError.message)
+      loading.value = false
+      return false
+    }
+
+    if (!data.session) {
       clearAuthState()
       loading.value = false
       return false
     }
 
-    session.value = data.session
-    user.value = data.session?.user || null
+    const { data: userData, error: userError } = await supabase.auth.getUser()
 
-    if (user.value) {
-      await fetchProfile()
+    if (userError || !userData.user) {
+      await forceLogout(userError?.message || 'Session user no longer exists')
+      loading.value = false
+      return false
+    }
+
+    session.value = {
+      ...data.session,
+      user: userData.user,
+    }
+    user.value = userData.user
+
+    if (!validateAccess) {
+      loading.value = false
+      return true
+    }
+
+    const currentProfile = await fetchProfile({ validateAccess: true })
+
+    if (!currentProfile) {
+      await forceLogout('Your account profile could not be found. Please sign in again.')
+      loading.value = false
+      return false
     }
 
     loading.value = false
     return true
   }
 
-  async function fetchProfile() {
+  async function ensureAuthenticated() {
+    return loadSession({ validateAccess: true })
+  }
+
+  async function fetchProfile(options: { validateAccess?: boolean } = {}) {
     if (!user.value?.id) {
       profile.value = null
       return null
@@ -142,10 +182,10 @@ export const useAuthStore = defineStore('auth', () => {
         )
       `)
       .eq('auth_user_id', user.value.id)
-      .single()
+      .maybeSingle()
 
-    if (profileError) {
-      error.value = profileError.message
+    if (profileError || !data) {
+      error.value = profileError?.message || 'Profile could not be found'
       profile.value = null
       return null
     }
@@ -155,7 +195,13 @@ export const useAuthStore = defineStore('auth', () => {
       company_name: data.companies?.name || null,
     }
 
-    if (profile.value.role === 'owner') {
+    if (options.validateAccess) {
+      const accessReady = await validateProfileAccess()
+
+      if (!accessReady) {
+        return null
+      }
+    } else if (profile.value.role === 'owner') {
       await fetchOwnerCompanies()
     }
 
@@ -167,7 +213,7 @@ export const useAuthStore = defineStore('auth', () => {
       ownerCompanies.value = []
       return []
     }
-  
+
     const { data, error: companiesError } = await supabase
       .from('company_owners')
       .select(`
@@ -191,10 +237,13 @@ export const useAuthStore = defineStore('auth', () => {
       return []
     }
   
-    ownerCompanies.value = (data || []).map((item: any) => {
+    ownerCompanies.value = (data || [])
+      .map((item: any) => {
       const company = Array.isArray(item.companies)
         ? item.companies[0]
         : item.companies
+
+      if (!company) return null
   
       return {
         company_id: item.company_id,
@@ -207,17 +256,134 @@ export const useAuthStore = defineStore('auth', () => {
         industry: company?.industry || null,
       }
     })
+      .filter(Boolean) as OwnerCompany[]
   
     const activeExists = ownerCompanies.value.some(
       c => c.company_id === activeCompanyId.value
     )
   
-    if (!activeExists) {
+    if (activeCompanyId.value && !activeExists) {
+      activeCompanyId.value = null
+      persistActiveCompany(null)
+      return ownerCompanies.value
+    }
+
+    if (!activeCompanyId.value) {
       activeCompanyId.value = ownerCompanies.value[0]?.company_id || null
       persistActiveCompany(activeCompanyId.value)
     }
   
     return ownerCompanies.value
+  }
+
+  async function validateProfileAccess() {
+    if (!profile.value?.id) return false
+
+    if (profile.value.role === 'owner') {
+      const companies = await fetchOwnerCompanies()
+
+      if (!companies.length) {
+        error.value = 'Company access could not be found'
+        return false
+      }
+
+      const selectedCompanyId =
+        activeCompanyId.value ||
+        profile.value.company_id ||
+        companies[0]?.company_id ||
+        null
+
+      const hasSelectedCompanyAccess = companies.some(
+        (company) => company.company_id === selectedCompanyId
+      )
+
+      if (!selectedCompanyId || !hasSelectedCompanyAccess) {
+        error.value = 'Company access could not be found'
+        return false
+      }
+
+      activeCompanyId.value = selectedCompanyId
+      persistActiveCompany(selectedCompanyId)
+      return true
+    }
+
+    if (profile.value.role === 'driver') {
+      const { data: driver, error: driverError } = await supabase
+        .from('drivers')
+        .select('id, company_id, user_id')
+        .eq('user_id', profile.value.id)
+        .maybeSingle()
+
+      if (driverError || !driver?.company_id) {
+        error.value = driverError?.message || 'Driver profile could not be found'
+        return false
+      }
+
+      const { data: driverCompany, error: driverCompanyError } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('id', driver.company_id)
+        .maybeSingle()
+
+      if (driverCompanyError || !driverCompany) {
+        error.value = driverCompanyError?.message || 'Driver company could not be found'
+        return false
+      }
+
+      if (profile.value.company_id !== driver.company_id) {
+        profile.value = {
+          ...profile.value,
+          company_id: driver.company_id,
+        }
+      }
+
+      return true
+    }
+
+    error.value = 'Unsupported user role'
+    return false
+  }
+
+  async function ensureCompanyOwner(
+    companyId: string | null,
+    profileId: string | null,
+    options: { reportError?: boolean } = {}
+  ) {
+    const reportError = options.reportError ?? true
+
+    if (!companyId || !profileId) {
+      if (reportError) error.value = 'Company owner relation is missing company or profile id'
+      return false
+    }
+
+    const { data: existingRelation, error: relationLookupError } = await supabase
+      .from('company_owners')
+      .select('company_id, profile_id')
+      .eq('company_id', companyId)
+      .eq('profile_id', profileId)
+      .maybeSingle()
+
+    if (relationLookupError) {
+      if (reportError) error.value = relationLookupError.message
+      return false
+    }
+
+    if (existingRelation) return true
+
+    const { error: relationInsertError } = await supabase
+      .from('company_owners')
+      .insert({
+        company_id: companyId,
+        profile_id: profileId,
+      })
+
+    if (relationInsertError) {
+      if (relationInsertError.code === '23505') return true
+      if (reportError) error.value = relationInsertError.message
+      return false
+    }
+
+    return true
   }
 
   async function loginWithEmail(email: string, password: string) {
@@ -239,10 +405,9 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = data.session
     user.value = data.user
 
-    await fetchProfile()
-
+    const ready = await ensureAuthenticated()
     loading.value = false
-    return true
+    return ready
   }
 
   async function loginWithGoogle() {
@@ -312,6 +477,17 @@ export const useAuthStore = defineStore('auth', () => {
               password_set_at: nextPasswordSetAt,
             }
           : profile.value
+        const statusUpdated = await markDriverPasswordCompleted()
+
+        if (!statusUpdated) {
+          loading.value = false
+          return false
+        }
+
+        if (profile.value?.role === 'driver') {
+          await fetchProfile()
+        }
+
         error.value = null
         loading.value = false
         return true
@@ -327,7 +503,46 @@ export const useAuthStore = defineStore('auth', () => {
       company_name: updatedProfile.companies?.name || null,
     }
 
+    const statusUpdated = await markDriverPasswordCompleted()
+
+    if (!statusUpdated) {
+      loading.value = false
+      return false
+    }
+
+    if (profile.value?.role === 'driver') {
+      await fetchProfile()
+    }
+
     loading.value = false
+    return true
+  }
+
+  async function markDriverPasswordCompleted() {
+    if (role.value !== 'driver') return true
+
+    const token = session.value?.access_token
+
+    if (!token) {
+      error.value = 'Access token is missing'
+      return false
+    }
+
+    const response = await fetch('/api/drivers/password-completed', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    const result = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      error.value = result?.error || 'Driver account could not be activated'
+      return false
+    }
+
+    error.value = null
     return true
   }
 
@@ -443,15 +658,9 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     }
 
-    const { error: ownerError } = await supabase
-      .from('company_owners')
-      .insert({
-        company_id: companyData.id,
-        profile_id: profileData.id,
-      })
+    const ownerRelationReady = await ensureCompanyOwner(companyData.id, profileData.id)
 
-    if (ownerError) {
-      error.value = ownerError.message
+    if (!ownerRelationReady) {
       loading.value = false
       return false
     }
@@ -507,20 +716,14 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     }
 
-    const { error: ownerError } = await supabase
-      .from('company_owners')
-      .insert({
-        company_id: companyData.id,
-        profile_id: profile.value.id,
-      })
+    const ownerRelationReady = await ensureCompanyOwner(companyData.id, profile.value.id)
 
-    if (ownerError) {
+    if (!ownerRelationReady) {
       await supabase
         .from('companies')
         .delete()
         .eq('id', companyData.id)
       
-      error.value = ownerError.message
       loading.value = false
       return false
     }
@@ -536,10 +739,23 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
 
-    await supabase.auth.signOut()
+    const { error: signOutError } = await supabase.auth.signOut()
     clearAuthState()
 
+    if (signOutError) {
+      error.value = signOutError.message
+    }
+
     loading.value = false
+    return !signOutError
+  }
+
+  async function forceLogout(message?: string) {
+    await supabase.auth.signOut().catch(() => null)
+    clearAuthState()
+    if (message) error.value = message
+    loading.value = false
+    return false
   }
 
   function clearAuthState() {
@@ -549,7 +765,27 @@ export const useAuthStore = defineStore('auth', () => {
     ownerCompanies.value = []
     activeCompanyId.value = null
     error.value = null
-    localStorage.removeItem(ACTIVE_COMPANY_KEY)
+    clearPersistedAuthState()
+  }
+
+  function clearPersistedAuthState() {
+    removeAuthStorageKeys(localStorage)
+    removeAuthStorageKeys(sessionStorage)
+  }
+
+  function removeAuthStorageKeys(storage: Storage) {
+    const keys = Array.from({ length: storage.length }, (_, index) =>
+      storage.key(index)
+    ).filter(Boolean) as string[]
+
+    for (const key of keys) {
+      if (
+        key === ACTIVE_COMPANY_KEY ||
+        STALE_AUTH_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
+      ) {
+        storage.removeItem(key)
+      }
+    }
   }
 
   return {
@@ -573,8 +809,10 @@ export const useAuthStore = defineStore('auth', () => {
     redirectPath,
 
     loadSession,
+    ensureAuthenticated,
     fetchProfile,
     fetchOwnerCompanies,
+    ensureCompanyOwner,
 
     loginWithEmail,
     loginWithGoogle,
@@ -584,6 +822,7 @@ export const useAuthStore = defineStore('auth', () => {
     createCompany,
 
     logout,
+    forceLogout,
     setActiveCompany,
     clearAuthState,
   }

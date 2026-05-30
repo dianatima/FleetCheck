@@ -141,7 +141,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { Truck, Eye, EyeOff, LogIn } from "lucide-vue-next";
 
 import { useAppStore } from "../stores/app";
@@ -152,6 +152,7 @@ import ThemeToggle from "../components/shared/ThemeToggle.vue";
 const store = useAppStore();
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 
 const email = ref("");
 const password = ref("");
@@ -166,6 +167,11 @@ async function handleSubmit() {
 
   if (!success) return;
 
-  router.push(authStore.redirectPath);
+  const redirectPath =
+    typeof route.query.redirect === "string"
+      ? route.query.redirect
+      : authStore.redirectPath;
+
+  router.replace(redirectPath);
 }
 </script>

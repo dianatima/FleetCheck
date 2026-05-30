@@ -39,7 +39,7 @@
           <span class="text-red-500 dark:text-red-400">{{ failCount }} {{ store.t('issuesLabel') }}</span>
         </div>
         <button @click="markAllPass"
-          class="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border-2 transition-all"
+          class="flex min-h-[40px] items-center gap-1.5 rounded-lg border-2 px-3 py-1.5 text-xs font-medium transition-all"
           :class="allPass ? 'bg-green-500 border-green-500 text-white' : 'border-green-300 text-green-600 dark:border-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'">
           <CheckCheck :size="13" /> {{ store.t('markAllOk') }}
         </button>
@@ -54,10 +54,10 @@
         class="p-4"
         :class="validationErrors[item.id] ? 'bg-red-50/60 dark:bg-red-900/10' : ''"
       >
-        <div class="flex items-center justify-between gap-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
-            class="flex items-center gap-3 flex-1 min-w-0 text-left"
+            class="flex min-h-[44px] w-full min-w-0 flex-1 items-center gap-3 text-left"
             @click="toggleExpanded(item.id)"
           >
             <component :is="item.icon" :size="18" class="flex-shrink-0"
@@ -77,19 +77,19 @@
               </p>
             </div>
           </button>
-          <div class="flex gap-2 flex-shrink-0">
+          <div class="grid w-full flex-shrink-0 grid-cols-3 gap-2 sm:w-auto">
             <button @click.stop="setState(item, 'pass')"
-              class="w-9 h-9 rounded-lg flex items-center justify-center transition-all border-2"
+              class="flex h-11 items-center justify-center rounded-lg border-2 transition-all sm:h-9 sm:w-9"
               :class="item.state === 'pass' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-200 dark:border-gray-600 text-gray-400 hover:border-green-400 hover:text-green-500'">
               <Check :size="16" />
             </button>
             <button @click.stop="setState(item, 'fail')"
-              class="w-9 h-9 rounded-lg flex items-center justify-center transition-all border-2"
+              class="flex h-11 items-center justify-center rounded-lg border-2 transition-all sm:h-9 sm:w-9"
               :class="item.state === 'fail' ? 'bg-red-500 border-red-500 text-white' : 'border-gray-200 dark:border-gray-600 text-gray-400 hover:border-red-400 hover:text-red-500'">
               <X :size="16" />
             </button>
             <button @click.stop="setState(item, 'not_applicable')"
-              class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-semibold transition-all border-2"
+              class="flex h-11 items-center justify-center rounded-lg border-2 text-xs font-semibold transition-all sm:h-9 sm:w-9"
               :class="item.state === 'not_applicable' ? 'bg-gray-500 border-gray-500 text-white' : 'border-gray-200 dark:border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-600'">
               N/A
             </button>
@@ -97,7 +97,7 @@
         </div>
 
         <Transition name="slide">
-          <div v-if="isExpanded(item.id)" class="mt-3 ml-7 space-y-3">
+          <div v-if="isExpanded(item.id)" class="mt-3 space-y-3 sm:ml-7">
             <p v-if="item.description" class="text-sm text-gray-600 dark:text-gray-300">
               {{ item.description }}
             </p>
@@ -109,12 +109,12 @@
               class="w-full text-sm input-field resize-none"
               :class="item.state === 'fail' ? 'placeholder-red-300 dark:placeholder-red-700 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10' : ''"
             />
-            <div class="flex items-center gap-3 mt-2">
-              <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
-                <Camera :size="13" /> {{ store.t('addPhoto') }}
+            <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label class="inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 sm:w-auto">
+                <Camera :size="15" /> {{ store.t('addPhoto') }}
                 <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
               </label>
-              <div v-if="item.photos.length" class="flex gap-1.5">
+              <div v-if="item.photos.length" class="flex flex-wrap gap-2">
                 <div v-for="(url, pi) in item.photos" :key="pi" class="relative">
                   <button
                     type="button"
@@ -145,7 +145,7 @@
     <p v-if="draftMessage" class="mb-3 text-sm text-green-600 dark:text-green-400">
       {{ draftMessage }}
     </p>
-    <div class="flex gap-3 pb-4">
+    <div class="sticky bottom-[72px] z-10 -mx-4 flex flex-col gap-3 border-t border-gray-100 bg-gray-50/95 p-4 pb-5 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:static sm:mx-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0 sm:pb-4 sm:backdrop-blur-0">
       <button
         class="btn-secondary flex-1 py-3 text-sm"
         :disabled="savingDraft"
@@ -484,6 +484,6 @@ async function createIssuesForFailedResults(inspectionId: string) {
 .slide-enter-active, .slide-leave-active { transition: all 0.2s ease; }
 .slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-6px); }
 .photo-thumb {
-  @apply w-10 h-10 rounded-lg overflow-hidden border border-red-200 bg-red-50 cursor-pointer transition-all hover:ring-2 hover:ring-blue-500 hover:opacity-90 dark:border-red-800 dark:bg-red-900/10;
+  @apply h-14 w-14 cursor-pointer overflow-hidden rounded-lg border border-red-200 bg-red-50 transition-all hover:opacity-90 hover:ring-2 hover:ring-blue-500 dark:border-red-800 dark:bg-red-900/10 sm:h-10 sm:w-10;
 }
 </style>

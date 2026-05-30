@@ -8,13 +8,13 @@
     </div>
 
     <div v-if="!selectedRepair" class="flex flex-wrap items-center gap-3 mb-5">
-      <div class="relative flex-1 min-w-48">
+      <div class="relative w-full sm:flex-1 sm:min-w-48">
         <Search :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input v-model="search" class="input-field pl-9 py-2 text-sm" :placeholder="store.t('searchRepairs')" />
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex w-full items-center gap-2 sm:w-auto">
         <Filter :size="14" class="text-gray-400 flex-shrink-0" />
-        <select v-model="filterStatus" class="input-field py-2 text-sm w-auto">
+        <select v-model="filterStatus" class="input-field py-2 text-sm sm:w-auto">
           <option value="all">{{ store.t('allStatus') }}</option>
           <option value="open">{{ repairStatusLabel('open') }}</option>
           <option value="in-progress">{{ repairStatusLabel('in-progress') }}</option>
@@ -22,13 +22,13 @@
           <option value="cancelled">{{ repairStatusLabel('cancelled') }}</option>
         </select>
       </div>
-      <select v-model="filterVehicle" class="input-field py-2 text-sm w-auto">
+      <select v-model="filterVehicle" class="input-field py-2 text-sm sm:w-auto">
         <option value="all">All Vehicles</option>
         <option v-for="vehicle in vehicleOptions" :key="vehicle.id" :value="vehicle.id">
           {{ vehicle.label }}
         </option>
       </select>
-      <select v-model="filterIssue" class="input-field py-2 text-sm w-auto">
+      <select v-model="filterIssue" class="input-field py-2 text-sm sm:w-auto">
         <option value="all">All Issues</option>
         <option v-for="issue in issueOptions" :key="issue.value" :value="issue.value">
           {{ issue.label }}
@@ -73,7 +73,7 @@
             Repairs
           </h2>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full">
             <thead>
               <tr class="table-header-row">
@@ -133,6 +133,54 @@
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+          <div v-if="paginatedRepairs.length === 0" class="px-4 py-12 text-center text-sm text-gray-400">
+            {{ store.t('noRepairsFound') }}
+          </div>
+          <div
+            v-for="repair in paginatedRepairs"
+            :key="repair.id"
+            class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
+            role="button"
+            tabindex="0"
+            @click="selectedRepair = repair"
+          >
+            <div class="flex gap-3">
+              <div class="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800">
+                <img v-if="repair.vehicles?.photo_url" :src="repair.vehicles.photo_url" alt="" class="h-full w-full object-cover" />
+                <Truck v-else :size="18" class="text-gray-400" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="mobile-card-title truncate">{{ vehicleName(repair) }}</p>
+                    <p class="mobile-card-meta">{{ vehicleUnitPlate(repair) }}</p>
+                    <p class="mobile-card-meta">{{ issueTitle(repair.issues) }}</p>
+                  </div>
+                  <span :class="repairStatusBadge(repair.status)" class="flex-shrink-0">
+                    {{ repairStatusLabel(repair.status) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+                <p class="text-gray-400">Vehicle status</p>
+                <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">{{ vehicleStatusLabel(repair) }}</p>
+              </div>
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+                <p class="text-gray-400">Created</p>
+                <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">{{ formatDate(repair.created_at) }}</p>
+              </div>
+            </div>
+
+            <button class="btn-secondary mt-3 w-full text-sm" @click.stop="selectedRepair = repair">
+              <Eye :size="15" />
+              View
+            </button>
+          </div>
         </div>
         <BaseTablePagination
           :total="filteredRepairs.length"
