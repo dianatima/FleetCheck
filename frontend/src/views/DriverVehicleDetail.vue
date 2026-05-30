@@ -115,7 +115,10 @@ const details = computed(() => [
   {
     icon: Gauge,
     label: 'Odometer',
-    value: vehicle.value?.odometer != null ? `${Number(vehicle.value.odometer).toLocaleString()} mi` : '—',
+    value:
+      vehicle.value?.odometer != null
+        ? `${Number(vehicle.value.odometer).toLocaleString()} ${vehicle.value.odometer_unit || 'mi'}`
+        : '—',
   },
   {
     icon: Fuel,
@@ -129,7 +132,7 @@ async function startPreTrip() {
   starting.value = true
   const inspectionId = await vehicleStore.startPreTripInspection(vehicle.value.id)
   starting.value = false
-  if (inspectionId) router.push(`/inspect/pre?inspectionId=${inspectionId}&vehicleId=${vehicle.value.id}`)
+  if (inspectionId) router.push(`/inspect/pre?inspectionId=${inspectionId}&vehicleId=${vehicle.value.id}&modal=1`)
 }
 
 async function startPostTrip() {
@@ -137,7 +140,7 @@ async function startPostTrip() {
   starting.value = true
   const inspectionId = await vehicleStore.startPostTripInspection(vehicle.value.id)
   starting.value = false
-  if (inspectionId) router.push(`/inspect/post?inspectionId=${inspectionId}&vehicleId=${vehicle.value.id}`)
+  if (inspectionId) router.push(`/inspect/post?inspectionId=${inspectionId}&vehicleId=${vehicle.value.id}&modal=1`)
 }
 </script>
 

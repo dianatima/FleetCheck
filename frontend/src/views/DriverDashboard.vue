@@ -91,7 +91,7 @@
                 </td>
                 <td class="table-td">{{ vehicle.vehicle_types?.name || '—' }}</td>
                 <td class="table-td">{{ vehicle.plate || '—' }}</td>
-                <td class="table-td">{{ vehicle.odometer != null ? `${Number(vehicle.odometer).toLocaleString()} mi` : '—' }}</td>
+                <td class="table-td">{{ vehicle.odometer != null ? `${Number(vehicle.odometer).toLocaleString()} ${vehicle.odometer_unit || 'mi'}` : '—' }}</td>
                 <td class="px-4 py-3">
                   <span :class="availabilityBadge(vehicle)">
                     {{ availabilityLabel(vehicle) }}
@@ -532,7 +532,7 @@ async function startPreTrip(vehicle: any) {
   startingVehicleId.value = vehicle.id
   const inspectionId = await vehicleStore.startPreTripInspection(vehicle.id)
   startingVehicleId.value = ''
-  if (inspectionId) router.push(`/inspect/pre?inspectionId=${inspectionId}&vehicleId=${vehicle.id}`)
+  if (inspectionId) router.push(`/inspect/pre?inspectionId=${inspectionId}&vehicleId=${vehicle.id}&modal=1`)
 }
 
 async function startPostTrip(vehicle: any) {
@@ -540,7 +540,7 @@ async function startPostTrip(vehicle: any) {
   startingVehicleId.value = vehicle.id
   const inspectionId = await vehicleStore.startPostTripInspection(vehicle.id)
   startingVehicleId.value = ''
-  if (inspectionId) router.push(`/inspect/post?inspectionId=${inspectionId}&vehicleId=${vehicle.id}`)
+  if (inspectionId) router.push(`/inspect/post?inspectionId=${inspectionId}&vehicleId=${vehicle.id}&modal=1`)
 }
 
 function typeLabel(type: string) {

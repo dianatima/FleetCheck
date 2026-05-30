@@ -97,7 +97,7 @@
                   {{ vehicle.plate || "—" }}
                 </td>
                 <td class="table-td cursor-pointer" @click="openDetail(vehicle.id)">
-                  {{ vehicle.odometer != null ? `${Number(vehicle.odometer).toLocaleString()} mi` : "—" }}
+                  {{ vehicle.odometer != null ? `${Number(vehicle.odometer).toLocaleString()} ${vehicle.odometer_unit || 'mi'}` : "—" }}
                 </td>
                 <td class="px-4 py-3 cursor-pointer" @click="openDetail(vehicle.id)">
                   <span :class="availabilityBadge(vehicle)">
@@ -221,14 +221,14 @@ async function startPreTrip(vehicle: any) {
   startingId.value = vehicle.id
   const inspectionId = await vehicleStore.startPreTripInspection(vehicle.id)
   startingId.value = ''
-  if (inspectionId) router.push(`/inspect/pre?inspectionId=${inspectionId}&vehicleId=${vehicle.id}`)
+  if (inspectionId) router.push(`/inspect/pre?inspectionId=${inspectionId}&vehicleId=${vehicle.id}&modal=1`)
 }
 
 async function startPostTrip(vehicle: any) {
   startingId.value = vehicle.id
   const inspectionId = await vehicleStore.startPostTripInspection(vehicle.id)
   startingId.value = ''
-  if (inspectionId) router.push(`/inspect/post?inspectionId=${inspectionId}&vehicleId=${vehicle.id}`)
+  if (inspectionId) router.push(`/inspect/post?inspectionId=${inspectionId}&vehicleId=${vehicle.id}&modal=1`)
 }
 
 function hideBrokenImage(event: Event) {

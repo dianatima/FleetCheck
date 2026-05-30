@@ -49,6 +49,16 @@ create table if not exists public.inspections (
   created_at timestamptz not null default now()
 );
 
+alter table public.vehicles
+  add column if not exists odometer_unit text not null default 'mi';
+
+alter table public.vehicles
+  drop constraint if exists vehicles_odometer_unit_check;
+
+alter table public.vehicles
+  add constraint vehicles_odometer_unit_check
+  check (odometer_unit in ('km', 'mi'));
+
 create index if not exists inspections_driver_created_idx
   on public.inspections (driver_id, created_at desc);
 
@@ -152,6 +162,30 @@ using (
     from public.repairs as repair
     where repair.vehicle_id = vehicles.id
       and repair.status in ('open', 'in-progress')
+  )
+);
+
+drop policy if exists vehicles_driver_update_own_company on public.vehicles;
+create policy vehicles_driver_update_own_company
+on public.vehicles
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.drivers as driver
+    where driver.user_id = auth.uid()
+      and driver.status = 'active'
+      and driver.company_id = vehicles.company_id
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.drivers as driver
+    where driver.user_id = auth.uid()
+      and driver.status = 'active'
+      and driver.company_id = vehicles.company_id
   )
 );
 

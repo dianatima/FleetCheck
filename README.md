@@ -28,6 +28,7 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 ## Останні зміни (May 2026)
 
 - **Рукописний підпис водія при submit** — у pre-trip/post-trip додано підпис пальцем/мишею на екрані, підпис є обов'язковим для відправки звіту.
+- **Fallback для підпису (legacy БД)** — якщо у середовищі ще немає колонок `signature_data_url/signed_at/signed_by_driver_id`, підпис зберігається локально і відображається у звіті та PDF.
 - **Єдина модалка перегляду звітів** — додано спільний компонент `InspectionReportModal` для перегляду готових inspection-звітів.
 - **Перегляд звіту без переходу на окрему сторінку** — звіти відкриваються у модальному вікні в таких екранах:
 	- `Driver Reports`
@@ -37,6 +38,34 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - **Зведена фотогалерея звіту** — усі фото зі звіту показуються разом у блоці `Photos`.
 - **Zoom для фото** — клік по фото відкриває збільшений перегляд через `PhotoLightbox`.
 - **Порядок пунктів checklist збережено** — `Checklist Summary` у модалці йде за `sort_order` з inspection template.
-- **Підпис у звіті та PDF** — підпис водія тепер відображається у модальному перегляді звіту та в експортованому PDF.
-- **Потік заповнення інспекції не змінено** — під час проходження pre-trip/post-trip питання як і раніше відображаються окремо.
+- **Підпис у звіті та PDF** — підпис водія відображається у модальному перегляді звіту та в експортованому PDF.
+- **Modal flow для інспекції водія** — pre-trip/post-trip відкривається як overlay-модалка (`?modal=1`) замість повного переходу на окремий екран.
+- **Покращена валідація одометра**:
+	- Заборонено зменшення пробігу нижче за історичний максимум.
+	- Додано warning-підтвердження при великому стрибку пробігу (понад 1000 mi/km за добу/перевірку).
+	- Помилки одометра показуються безпосередньо під полем введення.
+- **Одиниці одометра (mi/km)**:
+	- Додано `odometer_unit` для транспортних засобів.
+	- Вибір одиниць у формі авто.
+	- Коректне відображення одиниць у списках, деталях, dashboard та інспекції.
+	- Додано fallback-сумісність для середовищ, де колонка ще не застосована.
+- **Inspection templates: режими**:
+	- Додано `inspection_mode` (`pre-trip` / `post-trip` / `custom`).
+	- Тепер дозволено кілька шаблонів для одного типу авто (по одному на кожен режим).
+	- Додано унікальність на рівні `(company_id, vehicle_type_id, inspection_mode)`.
+- **Developer Driver Preview mode (DEV only)**:
+	- У Settings додано toggle для швидкого входу в режим водія без консолі.
+	- Додано явний вихід з preview mode у сайдбарі (`Exit Driver Preview`).
+	- Оновлено router/navigation логіку для коректного preview-потоку.
+- **Нова backend реєстрація компанії**:
+	- Додано endpoint `POST /api/register/company`.
+	- Створення owner user + company + profile + company owner link виконується на backend через admin client.
+	- Frontend реєстрація переключена на цей API.
+
+### Нові SQL міграції
+
+- `202605290001_vehicle_odometer_unit.sql` — додає `vehicles.odometer_unit` + check constraint.
+- `202605290002_driver_vehicle_odometer_update_policy.sql` — додає policy, що дозволяє active driver оновлювати `vehicles` у своїй компанії.
+- `202605290003_repair_inspection_signature_columns.sql` — додає колонки підпису в `inspections` + reload schema notify.
+- `202605300001_inspection_template_modes.sql` — додає `inspection_mode`, backfill старих даних, замінює унікальний індекс на mode-aware.
 

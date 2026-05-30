@@ -1,6 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 
+const DEV_DRIVER_PREVIEW_KEY = 'fleetcheck.dev.driverPreview'
+
+function isDevDriverPreviewEnabled() {
+  if (!import.meta.env.DEV) return false
+  return localStorage.getItem(DEV_DRIVER_PREVIEW_KEY) === '1'
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -45,7 +52,8 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const authStore = useAuthStore()
-  const isDriver = authStore.profile?.role === 'driver' || authStore.role === 'driver'
+  const isDriverPreview = isDevDriverPreviewEnabled()
+  const isDriver = isDriverPreview || authStore.profile?.role === 'driver' || authStore.role === 'driver'
 
   if (
     isDriver &&
@@ -95,6 +103,7 @@ router.beforeEach((to) => {
   }
 
   const driverIsBlocked =
+    !isDriverPreview &&
     isDriver &&
     (!authStore.passwordSetAt || authStore.profile?.status !== 'active')
   const blockedDriverRouteName =

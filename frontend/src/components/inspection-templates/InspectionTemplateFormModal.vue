@@ -44,6 +44,18 @@
             </div>
 
             <div>
+              <label class="label">Template purpose <span class="text-red-500">*</span></label>
+              <select v-model="form.inspection_mode" class="input-field" required>
+                <option value="pre-trip">Pre-trip inspection</option>
+                <option value="post-trip">Post-trip inspection</option>
+                <option value="custom">Custom inspection</option>
+              </select>
+              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Pre-trip templates stay the default option for a vehicle type. Post-trip and custom templates are reusable variants.
+              </p>
+            </div>
+
+            <div>
               <label class="label">Vehicle type <span class="text-red-500">*</span></label>
               <select
                 v-model="form.vehicle_type_id"
@@ -111,6 +123,7 @@ const emit = defineEmits<{
     description: string | null
     vehicle_type_id: string
     is_default: boolean
+    inspection_mode: 'pre-trip' | 'post-trip' | 'custom'
   }]
 }>()
 
@@ -121,6 +134,7 @@ const form = reactive({
   description: '',
   vehicle_type_id: '',
   is_default: false,
+  inspection_mode: 'pre-trip' as 'pre-trip' | 'post-trip' | 'custom',
 })
 
 watch(
@@ -132,7 +146,8 @@ watch(
       name: props.template?.name || '',
       description: props.template?.description || '',
       vehicle_type_id: props.template?.vehicle_type_id || '',
-      is_default: true,
+      inspection_mode: props.template?.inspection_mode || 'pre-trip',
+      is_default: props.template?.inspection_mode === 'pre-trip',
     })
     validationError.value = ''
   },
@@ -153,7 +168,8 @@ function submitForm() {
     name: form.name,
     description: form.description.trim() || null,
     vehicle_type_id: form.vehicle_type_id,
-    is_default: true,
+      is_default: form.inspection_mode === 'pre-trip',
+      inspection_mode: form.inspection_mode,
   })
 }
 </script>

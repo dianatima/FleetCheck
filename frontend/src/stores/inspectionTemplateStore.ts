@@ -18,6 +18,18 @@ export type InspectionTemplatePayload = {
   description: string | null
   vehicle_type_id: string
   is_default: boolean
+  inspection_mode: InspectionTemplateMode
+}
+
+export type InspectionTemplateMode = 'pre-trip' | 'post-trip' | 'custom'
+
+function withInspectionMode(template: any) {
+  if (!template) return template
+
+  return {
+    ...template,
+    inspection_mode: template.inspection_mode || 'custom',
+  }
 }
 
 const templateSelect = `
@@ -25,6 +37,7 @@ const templateSelect = `
   company_id,
   name,
   description,
+  inspection_mode,
   vehicle_type_id,
   is_default,
   created_at,
@@ -53,7 +66,6 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
   const templates = ref<any[]>([])
   const selectedTemplate = ref<any | null>(null)
   const vehicleTypes = ref<any[]>([])
-  const templateVehicleTypeIds = ref<string[]>([])
   const itemCategories = ref<any[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -100,29 +112,6 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     return true
   }
 
-  async function fetchTemplateVehicleTypeUsage() {
-    if (!authStore.companyId) {
-      templateVehicleTypeIds.value = []
-      return false
-    }
-
-    const { data, error: usageError } = await supabase
-      .from('inspection_templates')
-      .select('vehicle_type_id')
-      .eq('company_id', authStore.companyId)
-
-    if (usageError) {
-      error.value = usageError.message
-      templateVehicleTypeIds.value = []
-      return false
-    }
-
-    templateVehicleTypeIds.value = [
-      ...new Set((data || []).map((row) => row.vehicle_type_id).filter(Boolean)),
-    ]
-    return true
-  }
-
   async function fetchTemplates() {
     loading.value = true
     error.value = null
@@ -162,10 +151,10 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       total.value = 0
     } else {
       templates.value = (data || []).map(sortTemplateItems)
+        .map(withInspectionMode)
       total.value = count || 0
     }
 
-    await fetchTemplateVehicleTypeUsage()
     loading.value = false
   }
 
@@ -190,7 +179,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       error.value = templateError.message
       selectedTemplate.value = null
     } else {
-      selectedTemplate.value = sortTemplateItems(data)
+      selectedTemplate.value = withInspectionMode(sortTemplateItems(data))
     }
 
     loading.value = false
@@ -207,7 +196,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     }
 
     const { data: existingTemplate, error: existingError } =
-      await findTemplateByVehicleType(payload.vehicle_type_id)
+      await findTemplateByVehicleType(payload.vehicle_type_id, undefined, payload.inspection_mode)
 
     if (existingError) {
       error.value = existingError.message
@@ -216,8 +205,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     }
 
     if (existingTemplate) {
-      error.value =
-        'An inspection template for this vehicle type already exists. Edit the existing template instead.'
+      error.value = 'An inspection template for this vehicle type and mode already exists. Edit the existing template instead.'
       loading.value = false
       return null
     }
@@ -240,7 +228,8 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
         name: payload.name,
         description: payload.description,
         vehicle_type_id: payload.vehicle_type_id,
-        is_default: true,
+        inspection_mode: payload.inspection_mode,
+        is_default: payload.inspection_mode === 'pre-trip',
         company_id: authStore.companyId,
       })
       .select('id')
@@ -249,7 +238,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     if (createError || !data) {
       error.value =
         createError?.code === '23505'
-          ? 'An inspection template for this vehicle type already exists. Edit the existing template instead.'
+          ? 'An inspection template for this vehicle type and mode already exists. Edit the existing template instead.'
           : createError?.message || 'Template could not be created'
       loading.value = false
       return null
@@ -290,7 +279,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     }
 
     const { data: existingTemplate, error: existingError } =
-      await findTemplateByVehicleType(payload.vehicle_type_id, id)
+      await findTemplateByVehicleType(payload.vehicle_type_id, id, payload.inspection_mode)
 
     if (existingError) {
       error.value = existingError.message
@@ -299,8 +288,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     }
 
     if (existingTemplate) {
-      error.value =
-        'An inspection template for this vehicle type already exists. Edit the existing template instead.'
+      error.value = 'An inspection template for this vehicle type and mode already exists. Edit the existing template instead.'
       loading.value = false
       return false
     }
@@ -311,7 +299,8 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
         name: payload.name,
         description: payload.description,
         vehicle_type_id: payload.vehicle_type_id,
-        is_default: true,
+        inspection_mode: payload.inspection_mode,
+        is_default: payload.inspection_mode === 'pre-trip',
       })
       .eq('id', id)
       .eq('company_id', authStore.companyId)
@@ -319,7 +308,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     if (updateError) {
       error.value =
         updateError.code === '23505'
-          ? 'An inspection template for this vehicle type already exists. Edit the existing template instead.'
+          ? 'An inspection template for this vehicle type and mode already exists. Edit the existing template instead.'
           : updateError.message
       loading.value = false
       return false
@@ -435,17 +424,32 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     error.value = null
   }
 
-  async function findTemplateByVehicleType(vehicleTypeId: string, exceptId?: string) {
+  async function findTemplateByVehicleType(
+    vehicleTypeId: string,
+    exceptId?: string,
+    inspectionMode?: InspectionTemplateMode | null
+  ) {
     let query = supabase
       .from('inspection_templates')
-      .select('id, name')
+      .select('id, name, inspection_mode, created_at')
       .eq('company_id', authStore.companyId)
       .eq('vehicle_type_id', vehicleTypeId)
-      .limit(1)
 
     if (exceptId) query = query.neq('id', exceptId)
 
-    return query.maybeSingle()
+    const { data, error } = await query.order('created_at', { ascending: false })
+
+    if (error) return { data: null, error }
+
+    const templates = Array.isArray(data) ? data : data ? [data] : []
+
+    if (!templates.length) return { data: null, error: null }
+
+    if (!inspectionMode) return { data: withInspectionMode(templates[0]), error: null }
+
+    const matchedTemplate = templates.find((template) => template.inspection_mode === inspectionMode)
+
+    return { data: matchedTemplate ? withInspectionMode(matchedTemplate) : null, error: null }
   }
 
   function sortTemplateItems(template: any) {
@@ -485,7 +489,6 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     templates,
     selectedTemplate,
     vehicleTypes,
-    templateVehicleTypeIds,
     itemCategories,
     loading,
     error,
@@ -498,7 +501,6 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     fetchTemplates,
     fetchTemplateById,
     fetchVehicleTypes,
-    fetchTemplateVehicleTypeUsage,
     fetchItemCategories,
     createTemplate,
     updateTemplate,

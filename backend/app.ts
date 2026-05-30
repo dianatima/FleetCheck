@@ -3,6 +3,7 @@ import Fastify from 'fastify'
 
 import indexRoute from './routes/index.route.js'
 import driverInvitationsRoute from './routes/driver-invitations.route.js'
+import companyRegistrationRoute from './routes/company-registration.route.js'
 import viteMiddleware from './plugins/vite.js'
 import distMiddleware from './plugins/dist.js'
 
@@ -13,6 +14,7 @@ export async function buildApp() {
     // routes
     app.register(indexRoute)
     app.register(driverInvitationsRoute)
+    app.register(companyRegistrationRoute)
 
     // Vite middleware
     app.register(isDev ? viteMiddleware : distMiddleware)

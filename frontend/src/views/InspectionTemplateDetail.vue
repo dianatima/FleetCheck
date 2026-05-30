@@ -32,6 +32,7 @@
             </p>
             <div class="flex flex-wrap gap-2 mt-3 text-xs">
               <span class="badge-gray">{{ template.vehicle_types?.name || "Unknown vehicle type" }}</span>
+              <span class="badge-gray">{{ inspectionModeLabel(template) }}</span>
               <span class="badge-gray">{{ items.length }} checklist items</span>
             </div>
           </div>
@@ -131,16 +132,7 @@ const items = ref<TemplateItemDraft[]>([])
 const showEditModal = ref(false)
 const itemError = ref('')
 const dragIndex = ref<number | null>(null)
-const usedVehicleTypeIds = computed(() => new Set(templateStore.templateVehicleTypeIds))
-const modalVehicleTypes = computed(() => {
-  const currentVehicleTypeId = template.value?.vehicle_type_id
-
-  return templateStore.vehicleTypes.filter(
-    (vehicleType) =>
-      vehicleType.id === currentVehicleTypeId ||
-      !usedVehicleTypeIds.value.has(vehicleType.id)
-  )
-})
+const modalVehicleTypes = computed(() => templateStore.vehicleTypes)
 
 watch(
   () => authStore.companyId,
@@ -148,7 +140,6 @@ watch(
     if (companyId) {
       await templateStore.fetchTemplateById(templateId.value)
       await templateStore.fetchVehicleTypes()
-      await templateStore.fetchTemplateVehicleTypeUsage()
       await templateStore.fetchItemCategories()
     }
   },
@@ -224,10 +215,15 @@ function syncSortOrder() {
   itemError.value = ''
 }
 
+function inspectionModeLabel(value: any) {
+  if (value?.inspection_mode === 'pre-trip') return 'Pre-trip'
+  if (value?.inspection_mode === 'post-trip') return 'Post-trip'
+  return 'Custom'
+}
+
 async function openEditModal() {
   templateStore.clearError()
   await templateStore.fetchVehicleTypes()
-  await templateStore.fetchTemplateVehicleTypeUsage()
   showEditModal.value = true
 }
 

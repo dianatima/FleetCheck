@@ -19,6 +19,40 @@
       </button>
     </div>
 
+    <div
+      v-if="isDevMode"
+      class="card p-4 mb-5 border border-amber-200 bg-amber-50/70 dark:border-amber-900/70 dark:bg-amber-900/10"
+    >
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Developer Preview</h2>
+          <p class="text-xs text-gray-600 dark:text-gray-300 mt-1">
+            Toggle Driver Preview mode without using browser console.
+          </p>
+          <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+            Current host: {{ currentOrigin }}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors"
+          :class="
+            devDriverPreviewEnabled
+              ? 'border-blue-500 bg-blue-600 text-white'
+              : 'border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'
+          "
+          @click="toggleDriverPreview"
+        >
+          <span
+            class="inline-block w-2.5 h-2.5 rounded-full"
+            :class="devDriverPreviewEnabled ? 'bg-white' : 'bg-gray-400'"
+          />
+          {{ devDriverPreviewEnabled ? 'Driver Preview ON' : 'Driver Preview OFF' }}
+        </button>
+      </div>
+    </div>
+
     <!-- Company Profile -->
     <div v-if="activeTab === 'company'" class="space-y-5">
       <div class="card p-6">
@@ -420,10 +454,15 @@ const authStore = useAuthStore();
 const rulesStore = useVehicleAccessRulesStore();
 const route = useRoute();
 const router = useRouter();
+const DEV_DRIVER_PREVIEW_KEY = "fleetcheck.dev.driverPreview";
 
 const activeTab = ref("company");
 const appTheme = ref<"light" | "dark">(store.theme as "light" | "dark");
 const saving = ref(false);
+const isDevMode = import.meta.env.DEV;
+const devDriverPreviewEnabled = ref(
+  isDevMode && localStorage.getItem(DEV_DRIVER_PREVIEW_KEY) === "1"
+);
 
 const showCompanyModal = ref(false);
 const editingCompany = ref<any | null>(null);
@@ -491,6 +530,8 @@ const userForm = reactive({
 const userInitial = computed(() => {
   return (userForm.first_name || userForm.email || "U").charAt(0).toUpperCase();
 });
+
+const currentOrigin = computed(() => window.location.origin);
 
 watch(
   () => authStore.profile,
@@ -647,6 +688,22 @@ async function saveCompany(payload: any) {
 function setCurrentCompany(companyId: string) {
   authStore.setActiveCompany(companyId);
   window.location.reload();
+}
+
+function toggleDriverPreview() {
+  if (!isDevMode) return;
+
+  const next = !devDriverPreviewEnabled.value;
+  devDriverPreviewEnabled.value = next;
+
+  if (next) {
+    localStorage.setItem(DEV_DRIVER_PREVIEW_KEY, "1");
+    router.replace({ path: "/driver" });
+    return;
+  }
+
+  localStorage.removeItem(DEV_DRIVER_PREVIEW_KEY);
+  router.replace(authStore.redirectPath || "/dashboard");
 }
 
 async function deleteCompany(company: any) {

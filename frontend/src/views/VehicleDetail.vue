@@ -363,7 +363,7 @@ const details = computed(() => {
       label: store.t("odometer"),
       value:
         vehicle.value.odometer != null
-          ? `${Number(vehicle.value.odometer).toLocaleString()} mi`
+          ? `${Number(vehicle.value.odometer).toLocaleString()} ${vehicle.value.odometer_unit || 'mi'}`
           : "—",
     },
     {

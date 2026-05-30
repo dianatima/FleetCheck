@@ -1,5 +1,15 @@
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
+import { readSignatureFallback } from '@/lib/signatureFallback'
+
+function isMissingSignatureColumnsError(message?: string | null) {
+  const value = String(message || '').toLowerCase()
+  return (
+    value.includes('signature_data_url') ||
+    value.includes('signed_at') ||
+    value.includes('signed_by_driver_id')
+  )
+}
 
 type ReportResult = 'Pass' | 'Fail' | 'Draft'
 type PdfImage = {
@@ -552,7 +562,7 @@ export async function downloadInspectionReportPdf(
   inspectionId: string,
   language: string
 ) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('inspections')
     .select(`
       id,
@@ -609,11 +619,73 @@ export async function downloadInspectionReportPdf(
     .eq('id', inspectionId)
     .single()
 
+  if (error && isMissingSignatureColumnsError(error.message)) {
+    const retry = await supabase
+      .from('inspections')
+      .select(`
+        id,
+        type,
+        status,
+        created_at,
+        submitted_at,
+        vehicle_id,
+        driver_id,
+        vehicles (
+          unit,
+          make,
+          model,
+          plate,
+          vin,
+          status,
+          photo_url
+        ),
+        drivers (
+          name,
+          email
+        ),
+        inspection_results (
+          id,
+          result,
+          comment,
+          photo_urls,
+          inspection_template_items (
+            title,
+            description,
+            category_id,
+            inspection_item_categories (
+              id,
+              name,
+              severity
+            ),
+            is_required,
+            requires_photo,
+            sort_order
+          )
+        ),
+        issues (
+          id,
+          title,
+          description,
+          severity,
+          status,
+          photo_urls,
+          inspection_result_id
+        )
+      `)
+      .eq('id', inspectionId)
+      .single()
+    data = retry.data as any
+    error = retry.error
+  }
+
   if (error || !data) {
     throw new Error(error?.message || 'Report could not be loaded.')
   }
 
   const inspection = data as any
+  const fallbackSignature = readSignatureFallback(inspectionId)
+  inspection.signature_data_url = inspection.signature_data_url || fallbackSignature?.dataUrl || null
+  inspection.signed_at = inspection.signed_at || fallbackSignature?.signedAt || null
   const vehicle = relation(inspection.vehicles)
   const driver = relation(inspection.drivers)
   const results = relationArray(inspection.inspection_results).sort(
@@ -644,7 +716,7 @@ export async function downloadInspectionReportPdf(
 
   const [vehiclePhoto, signatureImage, ...photoImages] = await Promise.all([
     loadImage(vehicle?.photo_url, 'ImVehicle'),
-    loadImage(inspection.signature_data_url, 'ImSignature'),
+    loadImage(inspection.signature_data_url || null, 'ImSignature'),
     ...photos.slice(0, 12).map((url: string, index: number) =>
       loadImage(url, `ImPhoto${index + 1}`)
     ),

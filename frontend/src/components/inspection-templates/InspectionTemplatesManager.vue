@@ -40,14 +40,14 @@
       <button
         class="btn-primary gap-2 text-sm disabled:opacity-45 disabled:cursor-not-allowed"
         :disabled="!canCreateTemplate"
-        :title="canCreateTemplate ? 'Create Inspection Template' : allTypesUsedMessage"
+        :title="canCreateTemplate ? 'Create Inspection Template' : noVehicleTypesMessage"
         @click="openCreateModal"
       >
         <Plus :size="16" />
         Create Inspection Template
       </button>
       <p v-if="!canCreateTemplate" class="basis-full text-xs text-gray-500 dark:text-gray-400">
-        {{ allTypesUsedMessage }}
+        {{ noVehicleTypesMessage }}
       </p>
     </div>
 
@@ -62,11 +62,7 @@
         <table class="w-full">
           <thead>
             <tr class="table-header-row">
-              <th
-                v-for="header in headers"
-                :key="header"
-                class="table-th"
-              >
+              <th v-for="header in headers" :key="header" class="table-th">
                 {{ header }}
               </th>
             </tr>
@@ -92,7 +88,12 @@
                 </p>
               </td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                {{ vehicleTypeName(template) }}
+                <div class="flex flex-col gap-1">
+                  <span>{{ vehicleTypeName(template) }}</span>
+                  <span class="inline-flex w-fit rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                    {{ inspectionModeLabel(template) }}
+                  </span>
+                </div>
               </td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                 {{ template.inspection_template_items.length }}
@@ -160,25 +161,12 @@ const headers = ['Template name', 'Vehicle type', 'Items', 'Created', '']
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const templates = computed(() => templateStore.templates)
-const usedVehicleTypeIds = computed(() => new Set(templateStore.templateVehicleTypeIds))
-const availableVehicleTypesForCreate = computed(() =>
-  templateStore.vehicleTypes.filter((vehicleType) => !usedVehicleTypeIds.value.has(vehicleType.id))
-)
-const modalVehicleTypes = computed(() => {
-  const currentVehicleTypeId = editingTemplate.value?.vehicle_type_id
-
-  return templateStore.vehicleTypes.filter(
-    (vehicleType) =>
-      vehicleType.id === currentVehicleTypeId ||
-      !usedVehicleTypeIds.value.has(vehicleType.id)
-  )
-})
-const canCreateTemplate = computed(() => availableVehicleTypesForCreate.value.length > 0)
-const allTypesUsedMessage = 'All vehicle types already have inspection templates.'
+const modalVehicleTypes = computed(() => templateStore.vehicleTypes)
+const canCreateTemplate = computed(() => templateStore.vehicleTypes.length > 0)
+const noVehicleTypesMessage = 'Add at least one vehicle type before creating inspection templates.'
 
 onMounted(async () => {
   await templateStore.fetchVehicleTypes()
-  await templateStore.fetchTemplateVehicleTypeUsage()
 })
 
 watch(
@@ -198,6 +186,12 @@ function vehicleTypeName(template: any) {
   return template.vehicle_types?.name || '—'
 }
 
+function inspectionModeLabel(template: any) {
+  if (template.inspection_mode === 'pre-trip') return 'Pre-trip'
+  if (template.inspection_mode === 'post-trip') return 'Post-trip'
+  return 'Custom'
+}
+
 function formatDate(value: string | null) {
   return formatDateOnly(value, appStore.language)
 }
@@ -210,7 +204,6 @@ async function openCreateModal() {
   if (!canCreateTemplate.value) return
   templateStore.clearError()
   await templateStore.fetchVehicleTypes()
-  await templateStore.fetchTemplateVehicleTypeUsage()
   editingTemplate.value = null
   showModal.value = true
 }
@@ -218,7 +211,6 @@ async function openCreateModal() {
 async function startEdit(template: any) {
   templateStore.clearError()
   await templateStore.fetchVehicleTypes()
-  await templateStore.fetchTemplateVehicleTypeUsage()
   editingTemplate.value = template
   showModal.value = true
 }

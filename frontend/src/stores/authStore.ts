@@ -16,6 +16,32 @@ type OwnerCompany = {
 }
 
 const ACTIVE_COMPANY_KEY = 'fleetcheck.activeCompanyId'
+const DEV_DRIVER_PREVIEW_KEY = 'fleetcheck.dev.driverPreview'
+
+function isDevDriverPreviewEnabled() {
+  if (!import.meta.env.DEV) return false
+  return localStorage.getItem(DEV_DRIVER_PREVIEW_KEY) === '1'
+}
+
+function buildDevFallbackProfile(user: any, activeCompanyId: string | null) {
+  if (!import.meta.env.DEV || !user?.id) return null
+
+  return {
+    id: user.id,
+    auth_user_id: user.id,
+    role: (user.user_metadata?.role || user.app_metadata?.role || 'owner') as UserRole,
+    status: 'active',
+    email: user.email || null,
+    first_name: user.user_metadata?.first_name || null,
+    last_name: user.user_metadata?.last_name || null,
+    phone: user.user_metadata?.phone || null,
+    avatar_url: user.user_metadata?.avatar_url || null,
+    company_id: activeCompanyId || null,
+    company_name: null,
+    password_set_at:
+      user.user_metadata?.password_set_at || user.app_metadata?.password_set_at || null,
+  }
+}
 
 export const useAuthStore = defineStore('auth', () => {
   const session = ref<any | null>(null)
@@ -72,6 +98,8 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const redirectPath = computed(() => {
+    if (isDevDriverPreviewEnabled()) return '/driver'
+
     if (role.value === 'driver') {
       if (!passwordSetAt.value) return '/password-setup'
       if (profile.value?.status === 'active') return '/driver'
@@ -132,7 +160,7 @@ export const useAuthStore = defineStore('auth', () => {
       return null
     }
 
-    const { data, error: profileError } = await supabase
+    const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select(`
         *,
@@ -142,7 +170,7 @@ export const useAuthStore = defineStore('auth', () => {
         )
       `)
       .eq('auth_user_id', user.value.id)
-      .single()
+      .limit(5)
 
     if (profileError) {
       error.value = profileError.message
@@ -150,9 +178,36 @@ export const useAuthStore = defineStore('auth', () => {
       return null
     }
 
+    const data = (profiles || [])[0]
+    if (!data) {
+      const fallbackProfile = buildDevFallbackProfile(user.value, activeCompanyId.value)
+
+      if (fallbackProfile) {
+        console.warn('[authStore] profile row missing, using dev fallback profile', {
+          authUserId: user.value.id,
+        })
+        error.value = null
+        profile.value = fallbackProfile
+        return profile.value
+      }
+
+      error.value = 'Profile was not found for this account'
+      profile.value = null
+      return null
+    }
+
+    if ((profiles || []).length > 1) {
+      console.warn('[authStore] multiple profiles found for auth user, using first row', {
+        authUserId: user.value.id,
+        count: (profiles || []).length,
+      })
+    }
+
+    const company = Array.isArray(data.companies) ? data.companies[0] : data.companies
+
     profile.value = {
       ...data,
-      company_name: data.companies?.name || null,
+      company_name: company?.name || null,
     }
 
     if (profile.value.role === 'owner') {
@@ -283,18 +338,10 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     }
 
-    const { data: updatedProfile, error: profileError } = await supabase
+    const { error: profileError } = await supabase
       .from('profiles')
       .update({ password_set_at: nextPasswordSetAt })
       .eq('auth_user_id', user.value?.id)
-      .select(`
-        *,
-        companies (
-          id,
-          name
-        )
-      `)
-      .single()
 
     user.value = authData.user
     session.value = session.value
@@ -304,7 +351,7 @@ export const useAuthStore = defineStore('auth', () => {
         }
       : session.value
 
-    if (profileError || !updatedProfile) {
+    if (profileError) {
       if (isMissingPasswordSetAtColumn(profileError)) {
         profile.value = profile.value
           ? {
@@ -322,10 +369,7 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     }
 
-    profile.value = {
-      ...updatedProfile,
-      company_name: updatedProfile.companies?.name || null,
-    }
+    await fetchProfile()
 
     loading.value = false
     return true
@@ -391,80 +435,33 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
 
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email: payload.owner.email,
-      password: payload.owner.password,
+    const response = await fetch('/api/register/company', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
     })
 
-    if (signUpError || !authData.user) {
-      error.value = signUpError?.message || 'Registration failed'
+    const result = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      error.value = result?.error || 'Registration failed'
       loading.value = false
       return false
     }
 
-    const { data: companyData, error: companyError } = await supabase
-      .from('companies')
-      .insert({
-        name: payload.company.name,
-        country: payload.company.country || null,
-        state: payload.company.state || null,
-        city: payload.company.city || null,
-        address: payload.company.address || null,
-        phone: payload.company.phone || null,
-        industry: payload.company.industry || null,
-      })
-      .select()
-      .single()
-
-    if (companyError || !companyData) {
-      error.value = companyError?.message || 'Company creation failed'
+    const loginOk = await loginWithEmail(payload.owner.email, payload.owner.password)
+    if (!loginOk) {
+      error.value = error.value || 'Company was created, but automatic sign-in failed'
       loading.value = false
       return false
     }
 
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        auth_user_id: authData.user.id,
-        company_id: companyData.id,
-        role: 'owner',
-        first_name: payload.owner.first_name,
-        last_name: payload.owner.last_name,
-        email: payload.owner.email,
-        phone: payload.owner.phone || null,
-        status: 'active',
-      })
-      .select()
-      .single()
-
-    if (profileError || !profileData) {
-      error.value = profileError?.message || 'Profile creation failed'
-      loading.value = false
-      return false
+    const companyIdFromApi = result?.company_id
+    if (companyIdFromApi) {
+      setActiveCompany(companyIdFromApi)
     }
-
-    const { error: ownerError } = await supabase
-      .from('company_owners')
-      .insert({
-        company_id: companyData.id,
-        profile_id: profileData.id,
-      })
-
-    if (ownerError) {
-      error.value = ownerError.message
-      loading.value = false
-      return false
-    }
-
-    session.value = authData.session
-    user.value = authData.user
-    profile.value = {
-      ...profileData,
-      company_name: companyData.name,
-    }
-
-    await fetchOwnerCompanies()
-    setActiveCompany(companyData.id)
 
     loading.value = false
     return true

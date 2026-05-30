@@ -205,7 +205,7 @@
                 >
                   {{
                     v.odometer != null
-                      ? Number(v.odometer).toLocaleString() + " mi"
+                      ? `${Number(v.odometer).toLocaleString()} ${v.odometer_unit || 'mi'}`
                       : "—"
                   }}
                 </td>

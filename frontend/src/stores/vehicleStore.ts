@@ -30,6 +30,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
     'in-repair': 0,
     assigned: 0,
   })
+  const hasOdometerUnitColumn = ref(true)
 
   const totalPages = computed(() => {
     return Math.max(1, Math.ceil(total.value / pageSize.value))
@@ -50,6 +51,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
     plate,
     vin,
     odometer,
+    odometer_unit,
     engine_hours,
     status,
     photo_url,
@@ -59,6 +61,71 @@ export const useVehicleStore = defineStore('vehicles', () => {
       name
     )
   `
+
+  const vehicleSelectLegacy = `
+    id,
+    company_id,
+    unit,
+    make,
+    model,
+    year,
+    plate,
+    vin,
+    odometer,
+    engine_hours,
+    status,
+    photo_url,
+    vehicle_type_id,
+    vehicle_types (
+      id,
+      name
+    )
+  `
+
+  function isMissingOdometerUnitColumnError(message?: string | null) {
+    return String(message || '').toLowerCase().includes('odometer_unit')
+  }
+
+  function withDefaultOdometerUnit<T>(data: T): T {
+    if (Array.isArray(data)) {
+      return data.map((row: any) => ({
+        ...row,
+        odometer_unit: row?.odometer_unit || 'mi',
+      })) as T
+    }
+
+    if (data && typeof data === 'object') {
+      const row = data as any
+      return {
+        ...row,
+        odometer_unit: row?.odometer_unit || 'mi',
+      } as T
+    }
+
+    return data
+  }
+
+  function getVehicleSelect() {
+    return hasOdometerUnitColumn.value ? vehicleSelect : vehicleSelectLegacy
+  }
+
+  async function runVehicleQuery<T>(
+    build: (selectClause: string) => Promise<{ data: T; error: any }>
+  ) {
+    let { data, error } = await build(getVehicleSelect())
+
+    if (error && isMissingOdometerUnitColumnError(error.message)) {
+      hasOdometerUnitColumn.value = false
+      const retry = await build(vehicleSelectLegacy)
+      data = retry.data
+      error = retry.error
+    }
+
+    return {
+      data: withDefaultOdometerUnit(data),
+      error,
+    }
+  }
 
   async function fetchVehicles() {
     loading.value = true
@@ -83,13 +150,13 @@ export const useVehicleStore = defineStore('vehicles', () => {
         return
     }
 
-    let query = supabase
-      .from('vehicles')
-      .select(vehicleSelect)
-      .eq('company_id', authStore.companyId)
-      .order('created_at', { ascending: false })
-
-    const { data, error: supabaseError } = await query
+    const { data, error: supabaseError } = await runVehicleQuery((selectClause) =>
+      supabase
+        .from('vehicles')
+        .select(selectClause)
+        .eq('company_id', authStore.companyId)
+        .order('created_at', { ascending: false })
+    )
 
     if (supabaseError) {
       error.value = supabaseError.message
@@ -333,13 +400,25 @@ export const useVehicleStore = defineStore('vehicles', () => {
       return false
     }
   
-    const { data, error: supabaseError } = await supabase
+    let { error: supabaseError } = await supabase
       .from('vehicles')
       .insert({
         ...payload,
         company_id: authStore.companyId,
       })
-      .select(vehicleSelect)
+
+    if (supabaseError && isMissingOdometerUnitColumnError(supabaseError.message)) {
+      hasOdometerUnitColumn.value = false
+      const fallbackPayload = { ...payload }
+      delete fallbackPayload.odometer_unit
+      const retry = await supabase
+        .from('vehicles')
+        .insert({
+          ...fallbackPayload,
+          company_id: authStore.companyId,
+        })
+      supabaseError = retry.error
+    }
   
     if (supabaseError) {
       error.value = supabaseError.message
@@ -362,11 +441,23 @@ export const useVehicleStore = defineStore('vehicles', () => {
       return false
     }
 
-    const { error: supabaseError } = await supabase
+    let { error: supabaseError } = await supabase
       .from('vehicles')
       .update(payload)
       .eq('id', id)
       .eq('company_id', authStore.companyId)
+
+    if (supabaseError && isMissingOdometerUnitColumnError(supabaseError.message)) {
+      hasOdometerUnitColumn.value = false
+      const fallbackPayload = { ...payload }
+      delete fallbackPayload.odometer_unit
+      const retry = await supabase
+        .from('vehicles')
+        .update(fallbackPayload)
+        .eq('id', id)
+        .eq('company_id', authStore.companyId)
+      supabaseError = retry.error
+    }
 
     if (supabaseError) {
       error.value = supabaseError.message
@@ -407,6 +498,7 @@ export const useVehicleStore = defineStore('vehicles', () => {
       'plate',
       'vin',
       'odometer',
+      'odometer_unit',
       'engine_hours',
       'status',
       'photo_url',
@@ -417,6 +509,10 @@ export const useVehicleStore = defineStore('vehicles', () => {
       if (Object.prototype.hasOwnProperty.call(vehicle || {}, field)) {
         payload[field] = vehicle[field]
       }
+    }
+
+    if (!hasOdometerUnitColumn.value) {
+      delete payload.odometer_unit
     }
 
     return payload
@@ -451,12 +547,14 @@ export const useVehicleStore = defineStore('vehicles', () => {
     loading.value = true
     error.value = null
 
-    const { data, error: supabaseError } = await supabase
-      .from('vehicles')
-      .select(vehicleSelect)
-      .eq('id', id)
-      .eq('company_id', authStore.companyId)
-      .single()
+    const { data, error: supabaseError } = await runVehicleQuery((selectClause) =>
+      supabase
+        .from('vehicles')
+        .select(selectClause)
+        .eq('id', id)
+        .eq('company_id', authStore.companyId)
+        .single()
+    )
 
     if (supabaseError) {
       error.value = supabaseError.message

@@ -156,6 +156,16 @@ import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { useAppStore } from '@/stores/app'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
+import { readSignatureFallback } from '@/lib/signatureFallback'
+
+function isMissingSignatureColumnsError(message?: string | null) {
+  const value = String(message || '').toLowerCase()
+  return (
+    value.includes('signature_data_url') ||
+    value.includes('signed_at') ||
+    value.includes('signed_by_driver_id')
+  )
+}
 
 const props = defineProps<{
   modelValue: boolean
@@ -245,7 +255,7 @@ async function fetchInspection(inspectionId: string) {
   inspection.value = null
   results.value = []
 
-  const { data, error: inspectionError } = await supabase
+  let { data, error: inspectionError } = await supabase
     .from('inspections')
     .select(`
       id,
@@ -283,13 +293,58 @@ async function fetchInspection(inspectionId: string) {
     .eq('id', inspectionId)
     .single()
 
+  if (inspectionError && isMissingSignatureColumnsError(inspectionError.message)) {
+    const retry = await supabase
+      .from('inspections')
+      .select(`
+        id,
+        type,
+        status,
+        created_at,
+        submitted_at,
+        vehicles (
+          unit,
+          make,
+          model,
+          plate
+        ),
+        drivers (
+          name,
+          email
+        ),
+        inspection_results (
+          id,
+          result,
+          comment,
+          photo_urls,
+          inspection_template_items (
+            title,
+            sort_order,
+            requires_photo,
+            inspection_item_categories (
+              name
+            )
+          )
+        )
+      `)
+      .eq('id', inspectionId)
+      .single()
+    data = retry.data as any
+    inspectionError = retry.error
+  }
+
   if (inspectionError || !data) {
     error.value = inspectionError?.message || 'Inspection details could not be loaded.'
     loading.value = false
     return
   }
 
-  inspection.value = data
+  const fallbackSignature = readSignatureFallback(inspectionId)
+  inspection.value = {
+    ...data,
+    signature_data_url: data?.signature_data_url || fallbackSignature?.dataUrl || null,
+    signed_at: data?.signed_at || fallbackSignature?.signedAt || null,
+  }
   results.value = relationArray(data.inspection_results)
     .map((row: any) => {
       const item = relation(row.inspection_template_items)

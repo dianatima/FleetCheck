@@ -177,6 +177,14 @@
               </div>
 
               <div>
+                <label class="label">Odometer unit</label>
+                <select v-model="form.odometer_unit" class="input-field">
+                  <option value="mi">Miles (mi)</option>
+                  <option value="km">Kilometers (km)</option>
+                </select>
+              </div>
+
+              <div>
                 <label class="label">{{ store.t("engineHours") }}</label>
                 <input
                   v-model.number="form.engine_hours"
@@ -250,6 +258,7 @@ type Vehicle = {
   plate: string;
   vin?: string | null;
   odometer?: number | null;
+  odometer_unit?: "km" | "mi" | null;
   engine_hours?: number | null;
   status: VehicleStatus;
   photo_url?: string | null;
@@ -289,6 +298,7 @@ const form = reactive({
   plate: "",
   vin: "",
   odometer: 0 as number | null,
+  odometer_unit: "mi" as "km" | "mi",
   engine_hours: null as number | null,
   status: "active" as VehicleStatus,
   photo_url: "",
@@ -306,6 +316,7 @@ function resetForm() {
     plate: v?.plate || "",
     vin: v?.vin || "",
     odometer: v?.odometer ?? 0,
+    odometer_unit: v?.odometer_unit || "mi",
     engine_hours: v?.engine_hours ?? null,
     status: v?.status || "active",
     photo_url: v?.photo_url || "",
@@ -371,6 +382,7 @@ async function submitForm() {
       form.odometer !== null && form.odometer !== undefined
         ? Number(form.odometer)
         : null,
+    odometer_unit: form.odometer_unit,
     engine_hours:
       form.engine_hours !== null && form.engine_hours !== undefined
         ? Number(form.engine_hours)

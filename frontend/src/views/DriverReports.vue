@@ -165,12 +165,14 @@ import BaseDateInput from '@/components/shared/BaseDateInput.vue'
 import InspectionReportModal from '@/components/shared/InspectionReportModal.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
+import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
 import { downloadInspectionReportPdf } from '@/lib/reportPdf'
 
 const store = useAppStore()
 const authStore = useAuthStore()
+const driverVehicleStore = useDriverVehicleStore()
 const router = useRouter()
 
 const filterType = ref('all')
@@ -217,15 +219,12 @@ async function fetchReports() {
   loading.value = true
   error.value = null
 
-  const { data: driver, error: driverError } = await supabase
-    .from('drivers')
-    .select('id, company_id')
-    .eq('user_id', authStore.profile.id)
-    .eq('status', 'active')
-    .maybeSingle()
+  const driver = await driverVehicleStore.fetchDriverContext()
 
-  if (driverError || !driver) {
-    error.value = driverError?.message || `Active driver row was not found for profile.id ${authStore.profile.id}.`
+  if (!driver) {
+    error.value =
+      driverVehicleStore.error ||
+      `Active driver row was not found for profile.id ${authStore.profile.id}.`
     reports.value = []
     loading.value = false
     return

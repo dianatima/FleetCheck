@@ -13,6 +13,7 @@ export async function getVehicles() {
       plate,
       vin,
       odometer,
+      odometer_unit,
       engine_hours,
       status,
       photo_url,
