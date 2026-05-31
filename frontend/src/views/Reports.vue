@@ -167,12 +167,12 @@
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
                   <FileEdit
-                    v-if="r.result === 'draft'"
+                    v-if="normalizedResult(r) === 'draft'"
                     :size="13"
                     class="text-amber-500"
                   />
                   <CheckCircle
-                    v-else-if="r.result === 'pass'"
+                    v-else-if="normalizedResult(r) === 'pass'"
                     :size="13"
                     class="text-green-500"
                   />
@@ -352,6 +352,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/dateFormat";
 import { downloadInspectionReportPdf } from "@/lib/reportPdf";
+import { analyzeAndStoreInspectionPhotos } from "@/lib/photoFraud";
 
 type ReportResult = "pass" | "fail" | "draft";
 type ReviewStatus =
@@ -492,14 +493,63 @@ async function fetchReports() {
   const fraudByInspection = new Map<string, { suspicious: boolean; maxRisk: number }>();
 
   if (inspectionIds.length) {
-    const { data: fraudRows, error: fraudError } = await supabase
+    let { data: fraudRows, error: fraudError } = await supabase
       .from("inspection_photo_verifications")
-      .select("inspection_id, risk_score, flags")
+      .select("inspection_id, risk_score, flags, details")
       .in("inspection_id", inspectionIds);
 
     if (fraudError) {
       console.warn("[Reports] fraud summary load failed", fraudError);
     } else {
+      const rows = Array.isArray(fraudRows) ? fraudRows : [];
+      const groupedByInspectionId = new Map<string, any[]>();
+
+      for (const row of rows) {
+        const key = String(row?.inspection_id || "");
+        if (!key) continue;
+        if (!groupedByInspectionId.has(key)) groupedByInspectionId.set(key, []);
+        groupedByInspectionId.get(key)!.push(row);
+      }
+
+      const recomputeTargets = inspections.filter((inspection: any) => {
+        const photos = collectInspectionPhotos(inspection);
+        if (!photos.length) return false;
+
+        const inspectionRows = groupedByInspectionId.get(String(inspection.id)) || [];
+        if (!inspectionRows.length) return true;
+
+        return inspectionRows.some((row) => hasStaleDuplicateDirection(row, inspection.created_at));
+      });
+
+      if (recomputeTargets.length) {
+        for (const inspection of recomputeTargets) {
+          const photos = collectInspectionPhotos(inspection);
+          if (!photos.length) continue;
+
+          try {
+            await analyzeAndStoreInspectionPhotos({
+              companyId: authStore.companyId,
+              inspectionId: inspection.id,
+              driverId: inspection.driver_id || null,
+              vehicleId: inspection.vehicle_id || null,
+              inspectionCreatedAt: inspection.created_at || null,
+              photos,
+            });
+          } catch (analysisError) {
+            console.warn("[Reports] fraud recompute failed", analysisError);
+          }
+        }
+
+        const reloaded = await supabase
+          .from("inspection_photo_verifications")
+          .select("inspection_id, risk_score, flags, details")
+          .in("inspection_id", inspectionIds);
+
+        if (!reloaded.error) {
+          fraudRows = reloaded.data;
+        }
+      }
+
       for (const row of Array.isArray(fraudRows) ? fraudRows : []) {
         const inspectionId = String(row?.inspection_id || "");
         if (!inspectionId) continue;
@@ -528,6 +578,35 @@ async function fetchReports() {
     toReport(inspection, fraudByInspection.get(String(inspection.id)))
   );
   loading.value = false;
+}
+
+function collectInspectionPhotos(inspection: any) {
+  const rows = normalizeRelationArray(inspection?.inspection_results);
+  return rows.flatMap((row: any) => {
+    const photos = Array.isArray(row?.photo_urls) ? row.photo_urls.filter(Boolean) : [];
+    return photos.map((url: string, photoIndex: number) => ({
+      inspectionResultId: row.id,
+      photoIndex,
+      dataUrl: url,
+      uploadedAt: inspection?.created_at || null,
+    }));
+  });
+}
+
+function toTimestamp(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function hasStaleDuplicateDirection(row: any, inspectionCreatedAt: string | null | undefined) {
+  const inspectionTs = toTimestamp(inspectionCreatedAt);
+  if (inspectionTs == null) return false;
+
+  const exactTs = toTimestamp(row?.details?.exact_duplicate?.uploaded_at);
+  const visualTs = toTimestamp(row?.details?.visual_duplicate?.uploaded_at);
+
+  return (exactTs != null && exactTs > inspectionTs) || (visualTs != null && visualTs > inspectionTs);
 }
 
 function toReport(
@@ -634,13 +713,21 @@ function typeLabel(type: string) {
 }
 
 function resultBadge(report: Report) {
-  if (report.result === "draft") return "badge-yellow";
-  return report.result === "pass" ? "badge-green" : "badge-red";
+  const normalized = normalizedResult(report);
+  if (normalized === "draft") return "badge-yellow";
+  return normalized === "pass" ? "badge-green" : "badge-red";
 }
 
 function resultLabel(report: Report) {
-  if (report.result === "draft") return store.t("statusDraft");
-  return report.result === "pass" ? store.t("pass") : store.t("fail");
+  const normalized = normalizedResult(report);
+  if (normalized === "draft") return store.t("statusDraft");
+  return normalized === "pass" ? store.t("pass") : store.t("fail");
+}
+
+function normalizedResult(report: Report): ReportResult {
+  if (report.status === "draft") return "draft";
+  if (report.fraudSuspicious) return "fail";
+  return report.result;
 }
 
 function reviewBadge(status: ReviewStatus) {
@@ -708,10 +795,10 @@ function mergeById(left: any[], right: any[]) {
 }
 
 const passCount = computed(
-  () => reports.value.filter((report) => report.result === "pass").length,
+  () => reports.value.filter((report) => normalizedResult(report) === "pass").length,
 );
 const failCount = computed(
-  () => reports.value.filter((report) => report.result === "fail").length,
+  () => reports.value.filter((report) => normalizedResult(report) === "fail").length,
 );
 const reviewCount = computed(
   () =>
@@ -772,9 +859,10 @@ const filtered = computed(() =>
       !driverFilterId.value || report.driverId === driverFilterId.value;
     const matchType =
       filterType.value === "all" || report.type === filterType.value;
+    const normalized = normalizedResult(report);
     const matchResult =
       filterResult.value === "all" ||
-      report.result === filterResult.value ||
+      normalized === filterResult.value ||
       (filterResult.value === "needs-review" &&
         report.reviewStatus === "needs-review") ||
       (filterResult.value === "fraud-flagged" && report.fraudSuspicious);

@@ -86,3 +86,126 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - `supabase/hotfix_prod_signature_fraud.sql` — production hotfix для синхронізації schema + RLS політик по підпису та anti-fraud.
 - `supabase/signature-fraud-diagnostics.sql` — діагностичний скрипт для перевірки колонок/таблиць, наявності anti-fraud даних, і стану активних policy (`PASS/FAIL` блок).
 
+## Quick Start
+
+### 1. Встановлення
+
+```bash
+npm install
+```
+
+### 2. Налаштування змінних середовища
+
+Скопіюйте приклад у `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Заповніть обов'язкові ключі:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Опційно для email-повідомлень:
+
+- `RESEND_API_KEY`
+- `APPROVAL_EMAIL_FROM`
+- `APP_URL`
+
+### 3. Запуск у DEV
+
+```bash
+npm run dev
+```
+
+Це піднімає одночасно:
+
+- frontend: `vite frontend`
+- backend: `tsx watch backend/index.ts`
+
+### 4. Production build
+
+```bash
+npm run build
+```
+
+Окремо:
+
+```bash
+npm run build:frontend
+npm run build:backend
+```
+
+## Корисні Scripts
+
+- `npm run dev` — frontend + backend в watch
+- `npm run dev:frontend` — лише frontend
+- `npm run dev:backend` — лише backend
+- `npm run build` — повний build
+- `npm run preview` — preview frontend production build
+
+## База Даних: Рекомендований Порядок
+
+Для нових середовищ або після великих оновлень застосовуйте:
+
+1. Основні schema/feature migration-и.
+2. Signature/Fraud migration-и:
+	- `202605300002_photo_fraud_verification.sql`
+	- `202605300003_inspection_signature_shared_fallback.sql`
+	- `202605300004_fraud_and_signature_policy_preview_support.sql`
+	- `202605300005_fraud_signature_policy_admin_owner_support.sql`
+	- `202605300006_ensure_inspection_signature_columns.sql`
+3. Для hotfix у проді: `supabase/hotfix_prod_signature_fraud.sql`.
+4. Для валідації стану: `supabase/signature-fraud-diagnostics.sql`.
+
+## Anti-Fraud: Поточна Логіка
+
+- Оригіналом вважається найраніший запис фото у системі (за timestamp), а не останній.
+- Новіші входження того ж фото позначаються як дублікати.
+- Якщо історичні записи були створені старою логікою, модалка звіту може автоматично перерахувати anti-fraud для поточного inspection.
+- У менеджерському списку звітів є окремий індикатор підозрілості (`Fraud Flagged`) і фільтр по ньому.
+
+## Driver Preview Mode (DEV)
+
+- Доступний тільки в DEV.
+- Вмикається в `Settings` -> `Driver Preview (DEV)`.
+- Для виходу використовуйте `Exit Driver Preview` у sidebar.
+- Якщо у компанії немає rule-ів доступу типів авто, використовується fallback на всі типи авто компанії, щоб preview не залишався пустим.
+
+## Troubleshooting
+
+### Вічний loading / помилки на driver pages
+
+1. Зробіть hard reload (`Ctrl+F5`).
+2. Перезапустіть dev server (`npm run dev`).
+3. Перевірте консоль браузера на runtime помилки.
+4. Перевірте, що у таблиці `drivers` існує запис для вашого профілю/користувача.
+
+### Підпис не видно у звіті
+
+- Переконайтесь, що застосовані migration-и `300003` і `300006`.
+- Для legacy середовищ підпис може братись з fallback таблиці `inspection_signature_fallbacks`.
+
+### Anti-fraud показує неконсистентні дублікати
+
+- Відкрийте модалку проблемного звіту, щоб запустився auto-recompute.
+- Запустіть `supabase/signature-fraud-diagnostics.sql` і перевірте policy/дані.
+
+## API (Backend)
+
+Ключовий endpoint реєстрації компанії:
+
+- `POST /api/register/company`
+
+Використовує server-side admin client для створення owner user + company + profile + company_owner link.
+
+## Stack
+
+- Frontend: Vue 3, Pinia, Vue Router, Vite, Tailwind
+- Backend: Fastify, TypeScript
+- Data/Auth/Storage: Supabase (Postgres + RLS)
+- Reporting: PDF export + manager modal reports
+
