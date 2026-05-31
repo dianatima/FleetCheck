@@ -158,6 +158,20 @@ function hammingDistanceHex(a: string, b: string) {
   return distance
 }
 
+function toTimestamp(value: string | null | undefined) {
+  if (!value) return null
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function isCandidateNotLaterThanCurrent(candidateUploadedAt: string | null | undefined, currentUploadedAt: string | null | undefined) {
+  const candidateTs = toTimestamp(candidateUploadedAt)
+  const currentTs = toTimestamp(currentUploadedAt)
+
+  if (candidateTs == null || currentTs == null) return true
+  return candidateTs <= currentTs
+}
+
 async function extractExifInfo(dataUrl: string): Promise<ExifInfo> {
   try {
     const parsed = await exifr.parse(dataUrl, {
@@ -211,7 +225,7 @@ async function fetchExactDuplicate(companyId: string, inspectionId: string, sha2
     .eq('company_id', companyId)
     .eq('sha256', sha256)
     .neq('inspection_id', inspectionId)
-    .order('uploaded_at', { ascending: false })
+    .order('uploaded_at', { ascending: true })
     .limit(1)
     .maybeSingle()
 
@@ -225,7 +239,7 @@ async function fetchVisualCandidates(companyId: string, inspectionId: string) {
     .eq('company_id', companyId)
     .neq('inspection_id', inspectionId)
     .not('d_hash', 'is', null)
-    .order('uploaded_at', { ascending: false })
+    .order('uploaded_at', { ascending: true })
     .limit(80)
 
   return (Array.isArray(data) ? data : []) as ExistingPhotoVerification[]
@@ -260,6 +274,7 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
 
   for (const photo of input.photos) {
     try {
+      const currentUploadedAt = photo.uploadedAt || input.inspectionCreatedAt || new Date().toISOString()
       const parsedData = dataUrlToBytes(photo.dataUrl)
       const bytes = parsedData?.bytes || textEncoder.encode(photo.dataUrl || '')
 
@@ -290,9 +305,11 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
       }
 
       exactDuplicate = await fetchExactDuplicate(input.companyId, input.inspectionId, sha256)
-      if (exactDuplicate) {
+      if (exactDuplicate && isCandidateNotLaterThanCurrent(exactDuplicate.uploaded_at, currentUploadedAt)) {
         flags.push('EXACT_DUPLICATE')
         score += 70
+      } else {
+        exactDuplicate = null
       }
 
       if (!exactDuplicate && dHash) {
@@ -301,6 +318,7 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
 
         for (const candidate of visualCandidates) {
           if (!candidate.d_hash) continue
+          if (!isCandidateNotLaterThanCurrent(candidate.uploaded_at, currentUploadedAt)) continue
           const distance = hammingDistanceHex(dHash, candidate.d_hash)
           if (distance < bestDistance) {
             bestDistance = distance
@@ -363,7 +381,7 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
         file_name: fileName,
         file_size_bytes: photo.fileSizeBytes ?? parsedData?.size ?? bytes.byteLength,
         mime_type: photo.mimeType || parsedData?.mimeType || 'text/plain',
-        uploaded_at: photo.uploadedAt || new Date().toISOString(),
+        uploaded_at: currentUploadedAt,
         exif: exif.raw || {},
         exif_taken_at: exif.takenAt,
         exif_device_make: exif.make,
@@ -385,6 +403,10 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
                 id: exactDuplicate.id,
                 inspection_id: exactDuplicate.inspection_id,
                 uploaded_at: exactDuplicate.uploaded_at,
+                driver_id: exactDuplicate.driver_id,
+                vehicle_id: exactDuplicate.vehicle_id,
+                file_name: exactDuplicate.file_name,
+                exif_taken_at: exactDuplicate.exif_taken_at,
               }
             : null,
           visual_duplicate: visualDuplicate
@@ -392,6 +414,10 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
                 id: visualDuplicate.id,
                 inspection_id: visualDuplicate.inspection_id,
                 uploaded_at: visualDuplicate.uploaded_at,
+                driver_id: visualDuplicate.driver_id,
+                vehicle_id: visualDuplicate.vehicle_id,
+                file_name: visualDuplicate.file_name,
+                exif_taken_at: visualDuplicate.exif_taken_at,
               }
             : null,
         },
@@ -408,7 +434,7 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
         file_name: photo.fileName?.trim() || null,
         file_size_bytes: photo.fileSizeBytes ?? null,
         mime_type: photo.mimeType || null,
-        uploaded_at: photo.uploadedAt || new Date().toISOString(),
+        uploaded_at: photo.uploadedAt || input.inspectionCreatedAt || new Date().toISOString(),
         exif: {},
         exif_taken_at: null,
         exif_device_make: null,

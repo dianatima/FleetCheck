@@ -3,16 +3,11 @@ import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { saveSignatureFallback } from '@/lib/signatureFallback'
+import { isDevDriverPreviewEnabled } from '@/lib/devDriverPreview'
 
 type InspectionType = 'pre-trip' | 'post-trip'
 type AvailabilityFilter = 'all' | 'available' | 'assigned' | 'unavailable' | 'repair'
 const unresolvedIssueStatuses = ['under-review', 'in-repair']
-const DEV_DRIVER_PREVIEW_KEY = 'fleetcheck.dev.driverPreview'
-
-function isDevDriverPreviewEnabled() {
-  if (!import.meta.env.DEV) return false
-  return localStorage.getItem(DEV_DRIVER_PREVIEW_KEY) === '1'
-}
 
 function isMissingSignatureColumnsError(message?: string | null) {
   const value = String(message || '').toLowerCase()
@@ -133,6 +128,49 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     annotatedVehicles.value.filter(isDriverVehicleInspectable)
   )
 
+  async function resolveDriverForCurrentProfile(requireActiveOnly = true) {
+    const profile = authStore.profile
+    const candidates = [...new Set([
+      profile?.id,
+      profile?.auth_user_id,
+      authStore.user?.id,
+    ].filter(Boolean))]
+
+    if (!candidates.length) {
+      error.value = 'Driver profile is not loaded yet.'
+      return null
+    }
+
+    const statusPriority = ['active', 'pending', 'new']
+    const statuses = requireActiveOnly ? ['active'] : statusPriority
+    const rows: any[] = []
+
+    for (const candidate of candidates) {
+      const { data, error: driverError } = await supabase
+        .from('drivers')
+        .select('id, company_id, license_class, status, user_id')
+        .eq('user_id', candidate)
+        .in('status', statuses)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (driverError) {
+        error.value = driverError.message
+        continue
+      }
+
+      if (Array.isArray(data) && data.length) rows.push(...data)
+    }
+
+    if (!rows.length) return null
+
+    const selected = [...rows].sort(
+      (a, b) => statusPriority.indexOf(a.status) - statusPriority.indexOf(b.status)
+    )[0]
+
+    return selected || null
+  }
+
   async function fetchDriverContext() {
     if (isDevDriverPreviewEnabled()) {
       const previewDriver = await fetchPreviewDriverContext()
@@ -156,21 +194,19 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     currentDriver.value = null
     currentDriverProfileId.value = profileId
 
-    const { data, error: driverError } = await supabase
-      .from('drivers')
-      .select('id, company_id, license_class, status, user_id')
-      .eq('user_id', profileId)
-      .eq('status', 'active')
-      .maybeSingle()
+    let data = await resolveDriverForCurrentProfile(true)
 
-    if (driverError || !data) {
-      error.value =
-        driverError?.message ||
-        `Active driver row was not found for profile.id ${profileId}. Expected drivers.user_id to match this profile.`
+    if (!data) {
+      data = await resolveDriverForCurrentProfile(false)
+    }
+
+    if (!data) {
+      error.value = `Active driver row was not found for profile.id ${profileId}.`
       currentDriver.value = null
       return null
     }
 
+    error.value = null
     currentDriver.value = data
     return data
   }
@@ -189,20 +225,14 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       return null
     }
 
-    const { data, error: driverError } = await supabase
-      .from('drivers')
-      .select('id, company_id, license_class, status, user_id')
-      .eq('user_id', profileId)
-      .eq('status', 'active')
-      .maybeSingle()
+    const data = await resolveDriverForCurrentProfile(false)
 
-    if (driverError || !data) {
-      error.value =
-        driverError?.message ||
-        `Active driver row was not found for profile.id ${profileId}. Expected drivers.user_id to match this profile.`
+    if (!data) {
+      error.value = `Driver row was not found for profile.id ${profileId}.`
       return null
     }
 
+    error.value = null
     currentDriver.value = data
     currentDriverProfileId.value = profileId
     return data
@@ -237,7 +267,12 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       return []
     }
 
-    return (data || []).map((rule) => rule.vehicle_type_id)
+    const typeIds = (data || []).map((rule) => rule.vehicle_type_id).filter(Boolean)
+
+    if (typeIds.length) return typeIds
+
+    // If rule table is empty for this company/license class, avoid hiding all vehicles.
+    return fetchAllCompanyVehicleTypeIds(driver.company_id)
   }
 
   async function fetchAllCompanyVehicleTypeIds(companyId: string) {
@@ -614,6 +649,69 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     )
   }
 
+  function getInspectionActionState(vehicle: any) {
+    const state = {
+      canStartPreTrip: false,
+      canStartPostTrip: false,
+      preTripDisabledReason: '',
+      postTripDisabledReason: '',
+    }
+
+    if (!vehicle) {
+      state.preTripDisabledReason = 'Vehicle is unavailable.'
+      state.postTripDisabledReason = 'Vehicle is unavailable.'
+      return state
+    }
+
+    if (vehicle.status !== 'active') {
+      state.preTripDisabledReason = 'Vehicle is not active.'
+      state.postTripDisabledReason = 'Vehicle is not active.'
+      return state
+    }
+
+    if (vehicle.awaiting_manager_review || vehicle.status === 'needs-attention') {
+      state.preTripDisabledReason = 'Vehicle is waiting for manager review.'
+      state.postTripDisabledReason = 'Vehicle is waiting for manager review.'
+      return state
+    }
+
+    if (vehicle.in_active_repair) {
+      state.preTripDisabledReason = 'Vehicle is currently in repair.'
+      state.postTripDisabledReason = 'Vehicle is currently in repair.'
+      return state
+    }
+
+    if (vehicle.assigned_to_other) {
+      state.preTripDisabledReason = 'Vehicle is assigned to another driver.'
+      state.postTripDisabledReason = 'Vehicle is assigned to another driver.'
+      return state
+    }
+
+    if (vehicle.locked_by_current_assignment && !vehicle.assigned_to_me) {
+      state.preTripDisabledReason =
+        'Finish post-trip for your assigned vehicle before starting another inspection.'
+      state.postTripDisabledReason =
+        'Finish post-trip for your assigned vehicle before starting another inspection.'
+      return state
+    }
+
+    if (vehicle.assigned_to_me) {
+      state.canStartPostTrip = Boolean(vehicle.post_trip_ready)
+      state.postTripDisabledReason = state.canStartPostTrip
+        ? ''
+        : 'Complete pre-trip first before starting post-trip.'
+      state.preTripDisabledReason = state.canStartPostTrip
+        ? 'Pre-trip is already completed. Start post-trip inspection.'
+        : 'Vehicle is already assigned to you.'
+      return state
+    }
+
+    state.canStartPreTrip = vehicle.available === true
+    state.preTripDisabledReason = state.canStartPreTrip ? '' : 'Vehicle is currently unavailable.'
+    state.postTripDisabledReason = 'Post-trip is available only for an assigned vehicle.'
+    return state
+  }
+
   function paginate(rows: any[]) {
     const from = (page.value - 1) * pageSize.value
     return rows.slice(from, from + pageSize.value)
@@ -982,7 +1080,11 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
 
   async function fetchVehicleForInspection(driver: any, vehicleId: string) {
     const allowedTypeIds = await fetchAllowedVehicleTypeIds(driver)
-    if (!allowedTypeIds.length) return null
+    const effectiveTypeIds = allowedTypeIds.length
+      ? allowedTypeIds
+      : await fetchAllCompanyVehicleTypeIds(driver.company_id)
+
+    if (!effectiveTypeIds.length) return null
 
     const { data, error: vehicleError } = await runVehicleQuery<any | null>((selectClause) =>
       supabase
@@ -990,7 +1092,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
         .select(selectClause)
         .eq('id', vehicleId)
         .eq('company_id', driver.company_id)
-        .in('vehicle_type_id', allowedTypeIds)
+        .in('vehicle_type_id', effectiveTypeIds)
         .maybeSingle()
     )
 
@@ -1209,5 +1311,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     setPageSize,
     isDriverVehicleAvailable,
     isDriverVehicleInspectable,
+    getInspectionActionState,
   }
 })

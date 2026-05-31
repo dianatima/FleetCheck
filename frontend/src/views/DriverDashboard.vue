@@ -343,6 +343,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
+import { isDevDriverPreviewEnabled } from '@/lib/devDriverPreview'
 
 const router = useRouter()
 const store = useAppStore()
@@ -367,29 +368,28 @@ watch(
 )
 
 async function fetchDashboard() {
-  if (!authStore.profile?.id || authStore.profile?.status !== 'active') return
+  if (!authStore.profile?.id) return
+  if (!isDevDriverPreviewEnabled() && authStore.profile?.status !== 'active') return
 
   loading.value = true
   error.value = null
 
-  const driver = await vehicleStore.fetchDriverContext()
-  if (!driver) {
-    loading.value = false
-    return
-  }
+  try {
+    const driver = await vehicleStore.fetchDriverContext()
+    if (!driver) return
 
-  currentDriver.value = driver
-  await vehicleStore.fetchDriverVehicles()
+    currentDriver.value = driver
+    await vehicleStore.fetchDriverVehicles()
 
-  const [
-    reportsResult,
-    analyticsReportsResult,
-    reportsSubmittedResult,
-    failedReportsResult,
-  ] = await Promise.all([
-    supabase
-      .from('inspections')
-      .select(`
+    const [
+      reportsResult,
+      analyticsReportsResult,
+      reportsSubmittedResult,
+      failedReportsResult,
+    ] = await Promise.all([
+      supabase
+        .from('inspections')
+        .select(`
         id,
         vehicle_id,
         type,
@@ -412,10 +412,10 @@ async function fetchDashboard() {
       .eq('company_id', driver.company_id)
       .neq('status', 'draft')
       .order('created_at', { ascending: false })
-      .limit(5),
-    supabase
-      .from('inspections')
-      .select(`
+        .limit(5),
+      supabase
+        .from('inspections')
+        .select(`
         id,
         type,
         status,
@@ -431,39 +431,42 @@ async function fetchDashboard() {
       .neq('status', 'draft')
       .gte('created_at', analyticsStartDate().toISOString())
       .order('created_at', { ascending: true })
-      .limit(1000),
-    supabase
-      .from('inspections')
-      .select('id', { count: 'exact', head: true })
-      .eq('driver_id', driver.id)
-      .eq('company_id', driver.company_id)
-      .neq('status', 'draft'),
-    supabase
-      .from('inspections')
-      .select('id, inspection_results!inner(result)', { count: 'exact', head: true })
-      .eq('driver_id', driver.id)
-      .eq('company_id', driver.company_id)
-      .neq('status', 'draft')
-      .eq('inspection_results.result', 'fail'),
-  ])
+        .limit(1000),
+      supabase
+        .from('inspections')
+        .select('id', { count: 'exact', head: true })
+        .eq('driver_id', driver.id)
+        .eq('company_id', driver.company_id)
+        .neq('status', 'draft'),
+      supabase
+        .from('inspections')
+        .select('id, inspection_results!inner(result)', { count: 'exact', head: true })
+        .eq('driver_id', driver.id)
+        .eq('company_id', driver.company_id)
+        .neq('status', 'draft')
+        .eq('inspection_results.result', 'fail'),
+    ])
 
-  const firstError =
-    reportsResult.error ||
-    analyticsReportsResult.error ||
-    reportsSubmittedResult.error ||
-    failedReportsResult.error
+    const firstError =
+      reportsResult.error ||
+      analyticsReportsResult.error ||
+      reportsSubmittedResult.error ||
+      failedReportsResult.error
 
-  if (firstError) {
-    error.value = firstError.message
+    if (firstError) {
+      error.value = firstError.message
+      return
+    }
+
+    recentReports.value = reportsResult.data || []
+    analyticsReports.value = analyticsReportsResult.data || []
+    reportsSubmittedCount.value = reportsSubmittedResult.count || 0
+    failedReportsCount.value = failedReportsResult.count || 0
+  } catch (unexpectedError: any) {
+    error.value = unexpectedError?.message || 'Dashboard could not be loaded.'
+  } finally {
     loading.value = false
-    return
   }
-
-  recentReports.value = reportsResult.data || []
-  analyticsReports.value = analyticsReportsResult.data || []
-  reportsSubmittedCount.value = reportsSubmittedResult.count || 0
-  failedReportsCount.value = failedReportsResult.count || 0
-  loading.value = false
 }
 
 const availableVehicles = computed(() => vehicleStore.inspectableVehicles)

@@ -276,6 +276,32 @@
       </div>
     </div>
 
+    <div v-else-if="activeTab === 'driver-preview'" class="card p-5">
+      <h2 class="font-bold text-gray-900 dark:text-white mb-1">Driver Preview (DEV)</h2>
+      <p class="text-gray-500 dark:text-gray-400 text-sm mb-6">
+        Test driver flows using company vehicles without switching accounts.
+      </p>
+
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-sm font-medium text-gray-900 dark:text-white">Preview mode</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {{ previewEnabled ? 'Enabled: driver pages and navigation are active.' : 'Disabled: normal manager navigation is active.' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="px-3 py-2 text-sm"
+            :class="previewEnabled ? 'btn-secondary' : 'btn-primary'"
+            @click="toggleDriverPreview"
+          >
+            {{ previewEnabled ? 'Disable' : 'Enable' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Vehicle Access Rules -->
     <div v-else-if="activeTab === 'vehicle-access'" class="card overflow-hidden">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-6 border-b border-gray-100 dark:border-gray-700">
@@ -414,6 +440,11 @@ import {
   useVehicleAccessRulesStore,
   type VehicleAccessRulePayload,
 } from "@/stores/vehicleAccessRulesStore";
+import {
+  canUseDevDriverPreview,
+  isDevDriverPreviewEnabled,
+  setDevDriverPreviewEnabled,
+} from "@/lib/devDriverPreview";
 
 const store = useAppStore();
 const authStore = useAuthStore();
@@ -432,6 +463,7 @@ const editingAccessRule = ref<any | null>(null);
 
 const avatarInput = ref<HTMLInputElement | null>(null);
 const selectedAvatarFile = ref<File | null>(null);
+const previewEnabled = ref(isDevDriverPreviewEnabled());
 
 const tabs = computed(() => {
   const baseTabs = [
@@ -443,6 +475,10 @@ const tabs = computed(() => {
     { id: "inspection-templates", icon: ClipboardList, label: store.t("inspectionTemplates") },
     { id: "inspection-item-categories", icon: Tags, label: "Inspection Item Categories" },
   ];
+
+  if (canUseDevDriverPreview() && authStore.role !== "driver") {
+    baseTabs.push({ id: "driver-preview", icon: User, label: "Driver Preview (DEV)" });
+  }
 
   if (authStore.role === "driver") {
     return baseTabs.filter((tab) => !["vehicle-access", "inspection-templates", "inspection-item-categories"].includes(tab.id));
@@ -561,6 +597,19 @@ function selectTab(tabId: string) {
   activeTab.value = tabId;
   const nextQuery = tabId === "company" ? {} : { tab: tabId };
   router.replace({ path: "/settings", query: nextQuery });
+}
+
+function toggleDriverPreview() {
+  const next = !previewEnabled.value;
+  setDevDriverPreviewEnabled(next);
+  previewEnabled.value = next;
+
+  if (next) {
+    router.replace("/driver");
+    return;
+  }
+
+  router.replace("/dashboard");
 }
 
 function formatCompanyAddress(company: any) {

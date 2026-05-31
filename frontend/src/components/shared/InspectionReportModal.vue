@@ -201,6 +201,9 @@
                         <p class="mb-2 text-[11px] font-medium text-gray-700 dark:text-gray-200">
                           {{ fraudVerdict(pair.current) }}
                         </p>
+                        <p class="mb-2 text-[11px] text-gray-600 dark:text-gray-300">
+                          {{ duplicateOriginSummary(pair.previous) }}
+                        </p>
 
                         <div class="grid gap-2 sm:grid-cols-2">
                           <button
@@ -456,6 +459,33 @@ const duplicateComparisonRows = computed(() => {
     .filter(Boolean)
 })
 
+function displayDriverName(row: any) {
+  const driver = relation(row?.drivers)
+  if (!driver) return 'Unknown driver'
+  return driver.name || driver.email || 'Unknown driver'
+}
+
+function displayVehicleLabel(row: any) {
+  const vehicle = relation(row?.vehicles)
+  if (!vehicle) return `Vehicle ${row?.vehicle_id || 'unknown'}`
+
+  const makeModel = [vehicle.make, vehicle.model].filter(Boolean).join(' ')
+  const unit = vehicle.unit ? `#${vehicle.unit}` : ''
+  const plate = vehicle.plate || ''
+
+  return [makeModel, unit, plate].filter(Boolean).join(' · ') || `Vehicle ${row?.vehicle_id || 'unknown'}`
+}
+
+function duplicateOriginSummary(row: any) {
+  if (!row) return 'Original source record is unavailable.'
+
+  const when = formatDateTime(row.uploaded_at || row.created_at || null, store.language)
+  const who = displayDriverName(row)
+  const where = displayVehicleLabel(row)
+
+  return `Original first seen: ${when} · ${who} · ${where}`
+}
+
 function close() {
   emit('update:modelValue', false)
 }
@@ -529,6 +559,22 @@ function fraudVerdict(row: any) {
 function isMissingPhotoVerificationTableError(message?: string | null) {
   const value = String(message || '').toLowerCase()
   return value.includes('inspection_photo_verifications')
+}
+
+function toTimestamp(value: string | null | undefined) {
+  if (!value) return null
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function duplicatePointsToNewerPhoto(row: any, inspectionCreatedAt: string | null | undefined) {
+  const inspectionTs = toTimestamp(inspectionCreatedAt)
+  if (inspectionTs == null) return false
+
+  const exactTs = toTimestamp(row?.details?.exact_duplicate?.uploaded_at)
+  const visualTs = toTimestamp(row?.details?.visual_duplicate?.uploaded_at)
+
+  return (exactTs != null && exactTs > inspectionTs) || (visualTs != null && visualTs > inspectionTs)
 }
 
 async function fetchInspection(inspectionId: string) {
@@ -659,10 +705,18 @@ async function fetchInspection(inspectionId: string) {
   if (canViewFraudInsights.value) {
     let { data: verificationData, error: verificationError } = await supabase
       .from('inspection_photo_verifications')
-      .select('id, inspection_id, photo_url, inspection_result_id, photo_index, risk_score, risk_level, verification_status, flags, exact_duplicate_of_id, visual_duplicate_of_id, details')
+      .select('id, inspection_id, photo_url, inspection_result_id, photo_index, risk_score, risk_level, verification_status, flags, exact_duplicate_of_id, visual_duplicate_of_id, details, uploaded_at')
       .eq('inspection_id', inspectionId)
 
-    const shouldBackfillFraud = !verificationError && Array.isArray(verificationData) && verificationData.length === 0
+    const shouldRecomputeFraud =
+      !verificationError &&
+      Array.isArray(verificationData) &&
+      verificationData.some((row: any) => duplicatePointsToNewerPhoto(row, inspection.value?.created_at))
+
+    const shouldBackfillFraud =
+      !verificationError &&
+      Array.isArray(verificationData) &&
+      (verificationData.length === 0 || shouldRecomputeFraud)
     if (shouldBackfillFraud) {
       const backfillPhotos = results.value.flatMap((row: any) =>
         (row.photoUrls || []).map((url: string, photoIndex: number) => ({
@@ -687,7 +741,7 @@ async function fetchInspection(inspectionId: string) {
 
           const reloaded = await supabase
             .from('inspection_photo_verifications')
-            .select('id, inspection_id, photo_url, inspection_result_id, photo_index, risk_score, risk_level, verification_status, flags, exact_duplicate_of_id, visual_duplicate_of_id, details')
+            .select('id, inspection_id, photo_url, inspection_result_id, photo_index, risk_score, risk_level, verification_status, flags, exact_duplicate_of_id, visual_duplicate_of_id, details, uploaded_at')
             .eq('inspection_id', inspectionId)
 
           verificationData = reloaded.data
@@ -724,7 +778,28 @@ async function fetchInspection(inspectionId: string) {
       if (uniqueReferencedIds.length) {
         const { data: referenceRows, error: referenceError } = await supabase
           .from('inspection_photo_verifications')
-          .select('id, inspection_id, photo_url, risk_score, risk_level, verification_status, uploaded_at')
+          .select(`
+            id,
+            inspection_id,
+            photo_url,
+            risk_score,
+            risk_level,
+            verification_status,
+            uploaded_at,
+            created_at,
+            driver_id,
+            vehicle_id,
+            drivers (
+              name,
+              email
+            ),
+            vehicles (
+              unit,
+              make,
+              model,
+              plate
+            )
+          `)
           .in('id', uniqueReferencedIds)
 
         if (referenceError) {

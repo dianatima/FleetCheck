@@ -230,6 +230,7 @@ import BaseTablePagination from '@/components/shared/BaseTablePagination.vue'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
+import { isDevDriverPreviewEnabled } from '@/lib/devDriverPreview'
 
 const store = useAppStore()
 const authStore = useAuthStore()
@@ -244,6 +245,11 @@ const vehicles = computed(() => vehicleStore.vehicles)
 watch(
   () => [authStore.profile?.id, authStore.profile?.status],
   async ([profileId, status]) => {
+    if (isDevDriverPreviewEnabled()) {
+      await vehicleStore.fetchDriverVehicles()
+      return
+    }
+
     if (profileId && status === 'active') await vehicleStore.fetchDriverVehicles()
   },
   { immediate: true }

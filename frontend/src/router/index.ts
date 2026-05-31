@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
+import { isDevDriverPreviewEnabled } from '@/lib/devDriverPreview'
 
 const publicRoute = (route: RouteRecordRaw): RouteRecordRaw => ({
   ...route,
@@ -135,6 +136,7 @@ router.beforeEach(async (to) => {
   }
 
   const isDriver = authStore.profile?.role === 'driver'
+  const isPreviewDriver = isDevDriverPreviewEnabled() && authStore.profile?.role !== 'driver'
 
   const driverIsBlocked =
     isDriver &&
@@ -181,7 +183,7 @@ router.beforeEach(async (to) => {
 
   const isDriverAreaRoute = to.path === '/driver' || to.path.startsWith('/driver/')
 
-  if (!isDriver && authStore.isAuthenticated && isDriverAreaRoute) {
+  if (!isDriver && !isPreviewDriver && authStore.isAuthenticated && isDriverAreaRoute) {
     return { name: 'manager-dashboard' }
   }
 

@@ -39,6 +39,7 @@
           <option value="needs-review">
             {{ store.t("statusNeedsReview") }}
           </option>
+          <option value="fraud-flagged">{{ store.t("fraudFlagged") }}</option>
         </select>
         <select
           v-model="filterType"
@@ -133,7 +134,7 @@
               :key="r.id"
               class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
               :class="
-                r.reviewStatus === 'needs-review'
+                r.reviewStatus === 'needs-review' || r.fraudSuspicious
                   ? 'bg-yellow-50/40 dark:bg-yellow-900/5'
                   : ''
               "
@@ -202,6 +203,17 @@
                 <span v-else class="text-gray-400 text-xs">-</span>
               </td>
               <td class="px-4 py-3">
+                <span
+                  :class="r.fraudSuspicious ? 'badge-red' : 'badge-green'"
+                  class="text-xs"
+                >
+                  {{ r.fraudSuspicious ? store.t("fraudFlagged") : store.t("clean") }}
+                </span>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                  {{ store.t("antiFraudRisk") }} {{ r.fraudMaxRisk }}/100
+                </p>
+              </td>
+              <td class="px-4 py-3">
                 <div class="flex gap-1">
                   <button
                     v-if="r.reviewStatus === 'needs-review' && r.reviewIssueId"
@@ -239,7 +251,7 @@
           v-for="r in paginatedReports"
           :key="r.id"
           class="p-4 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/45"
-          :class="r.reviewStatus === 'needs-review' ? 'bg-yellow-50/40 dark:bg-yellow-900/5' : ''"
+          :class="(r.reviewStatus === 'needs-review' || r.fraudSuspicious) ? 'bg-yellow-50/40 dark:bg-yellow-900/5' : ''"
           role="button"
           tabindex="0"
           @click="viewReport(r)"
@@ -266,6 +278,12 @@
               <p class="text-gray-400">Issues / photos</p>
               <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">
                 {{ r.issues }} issues · {{ r.photos }} photos
+              </p>
+            </div>
+            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
+              <p class="text-gray-400">Fraud</p>
+              <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">
+                {{ r.fraudSuspicious ? store.t("fraudFlagged") : store.t("clean") }} · {{ store.t("antiFraudRisk") }} {{ r.fraudMaxRisk }}/100
               </p>
             </div>
           </div>
@@ -357,6 +375,8 @@ interface Report {
   reviewIssueId: string | null;
   issues: number;
   photos: number;
+  fraudSuspicious: boolean;
+  fraudMaxRisk: number;
   status: "draft" | "submitted" | "approved" | "needs-review" | "rejected";
 }
 
@@ -467,11 +487,53 @@ async function fetchReports() {
     return;
   }
 
-  reports.value = normalizeInspectionRows(data || []).map(toReport);
+  const inspections = normalizeInspectionRows(data || []);
+  const inspectionIds = inspections.map((inspection: any) => inspection.id).filter(Boolean);
+  const fraudByInspection = new Map<string, { suspicious: boolean; maxRisk: number }>();
+
+  if (inspectionIds.length) {
+    const { data: fraudRows, error: fraudError } = await supabase
+      .from("inspection_photo_verifications")
+      .select("inspection_id, risk_score, flags")
+      .in("inspection_id", inspectionIds);
+
+    if (fraudError) {
+      console.warn("[Reports] fraud summary load failed", fraudError);
+    } else {
+      for (const row of Array.isArray(fraudRows) ? fraudRows : []) {
+        const inspectionId = String(row?.inspection_id || "");
+        if (!inspectionId) continue;
+
+        const risk = Number(row?.risk_score || 0);
+        const flags = Array.isArray(row?.flags) ? row.flags : [];
+        const suspicious =
+          risk > 20 ||
+          flags.includes("EXACT_DUPLICATE") ||
+          flags.includes("VISUAL_DUPLICATE");
+
+        const current = fraudByInspection.get(inspectionId) || {
+          suspicious: false,
+          maxRisk: 0,
+        };
+
+        if (risk > current.maxRisk) current.maxRisk = risk;
+        if (suspicious) current.suspicious = true;
+
+        fraudByInspection.set(inspectionId, current);
+      }
+    }
+  }
+
+  reports.value = inspections.map((inspection: any) =>
+    toReport(inspection, fraudByInspection.get(String(inspection.id)))
+  );
   loading.value = false;
 }
 
-function toReport(inspection: any): Report {
+function toReport(
+  inspection: any,
+  fraudSummary?: { suspicious: boolean; maxRisk: number },
+): Report {
   const vehicle = firstRelation(inspection.vehicles);
   const driver = firstRelation(inspection.drivers);
   const results = normalizeRelationArray(inspection.inspection_results);
@@ -508,6 +570,8 @@ function toReport(inspection: any): Report {
       null,
     issues: issues.length,
     photos,
+    fraudSuspicious: Boolean(fraudSummary?.suspicious),
+    fraudMaxRisk: Number(fraudSummary?.maxRisk || 0),
   };
 }
 
@@ -654,6 +718,9 @@ const reviewCount = computed(
     reports.value.filter((report) => report.reviewStatus === "needs-review")
       .length,
 );
+const fraudCount = computed(
+  () => reports.value.filter((report) => report.fraudSuspicious).length,
+);
 
 const summaryStats = computed(() => [
   {
@@ -677,11 +744,9 @@ const summaryStats = computed(() => [
     color: "text-yellow-600 dark:text-yellow-400",
   },
   {
-    label: "Pass Rate",
-    value: reports.value.length
-      ? `${Math.round((passCount.value / reports.value.length) * 100)}%`
-      : "0%",
-    color: "text-blue-600 dark:text-blue-400",
+    label: store.t("fraudFlagged"),
+    value: fraudCount.value,
+    color: "text-red-600 dark:text-red-400",
   },
 ]);
 
@@ -694,6 +759,7 @@ const reportHeaders = computed(() => [
   store.t("reviewStatus"),
   store.t("issues"),
   store.t("photos"),
+  store.t("fraudFlagged"),
   store.t("actions"),
 ]);
 
@@ -710,7 +776,8 @@ const filtered = computed(() =>
       filterResult.value === "all" ||
       report.result === filterResult.value ||
       (filterResult.value === "needs-review" &&
-        report.reviewStatus === "needs-review");
+        report.reviewStatus === "needs-review") ||
+      (filterResult.value === "fraud-flagged" && report.fraudSuspicious);
     const time = new Date(report.createdAt).getTime();
     const afterStart =
       !startDate.value ||

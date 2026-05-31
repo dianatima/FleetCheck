@@ -234,12 +234,14 @@ import BaseDateInput from '@/components/shared/BaseDateInput.vue'
 import InspectionReportModal from '@/components/shared/InspectionReportModal.vue'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
+import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
 import { downloadInspectionReportPdf } from '@/lib/reportPdf'
 
 const store = useAppStore()
 const authStore = useAuthStore()
+const driverVehicleStore = useDriverVehicleStore()
 const router = useRouter()
 
 const filterType = ref('all')
@@ -286,23 +288,18 @@ async function fetchReports() {
   loading.value = true
   error.value = null
 
-  const { data: driver, error: driverError } = await supabase
-    .from('drivers')
-    .select('id, company_id')
-    .eq('user_id', authStore.profile.id)
-    .eq('status', 'active')
-    .maybeSingle()
+  try {
+    const driver = await driverVehicleStore.fetchDriverContext()
 
-  if (driverError || !driver) {
-    error.value = driverError?.message || `Active driver row was not found for profile.id ${authStore.profile.id}.`
-    reports.value = []
-    loading.value = false
-    return
-  }
+    if (!driver) {
+      error.value = driverVehicleStore.error || `Active driver row was not found for profile.id ${authStore.profile.id}.`
+      reports.value = []
+      return
+    }
 
-  const { data: inspections, error: inspectionsError } = await supabase
-    .from('inspections')
-    .select(`
+    const { data: inspections, error: inspectionsError } = await supabase
+      .from('inspections')
+      .select(`
       id,
       vehicle_id,
       type,
@@ -327,46 +324,49 @@ async function fetchReports() {
         id,
         status
       )
-    `)
-    .eq('driver_id', driver.id)
-    .eq('company_id', driver.company_id)
-    .order('created_at', { ascending: false })
+      `)
+      .eq('driver_id', driver.id)
+      .eq('company_id', driver.company_id)
+      .order('created_at', { ascending: false })
 
-  if (inspectionsError) {
-    error.value = inspectionsError.message
-    reports.value = []
-    loading.value = false
-    return
-  }
-
-  reports.value = normalizeInspectionRows(inspections || []).map((inspection: any) => {
-    const vehicle = Array.isArray(inspection.vehicles) ? inspection.vehicles[0] : inspection.vehicles
-    const results = normalizeRelationArray(inspection.inspection_results)
-    const issues = normalizeRelationArray(inspection.issues)
-    const failed = results.some((row: any) => row.result === 'fail')
-    const photos = results.reduce((count: number, row: any) => count + (row.photo_urls?.length || 0), 0)
-    const name = `${vehicle?.make || ''} ${vehicle?.model || ''}`.trim()
-    const driverName = [
-      authStore.profile?.first_name,
-      authStore.profile?.last_name,
-    ].filter(Boolean).join(' ') || authStore.profile?.email || ''
-
-    return {
-      id: inspection.id,
-      vehicleId: inspection.vehicle_id,
-      createdAt: inspection.submitted_at || inspection.created_at,
-      date: formatDate(inspection.submitted_at || inspection.created_at),
-      vehicle: [name, vehicle?.unit ? `#${vehicle.unit}` : '', vehicle?.plate || ''].filter(Boolean).join(' · ') || '—',
-      driver: driverName,
-      type: inspection.type === 'post-trip' ? 'post-trip' : 'pre-trip',
-      status: inspection.status,
-      result: inspection.status === 'draft' ? 'draft' : failed ? 'fail' : 'pass',
-      issues: issues.length,
-      photos,
+    if (inspectionsError) {
+      error.value = inspectionsError.message
+      reports.value = []
+      return
     }
-  })
 
-  loading.value = false
+    reports.value = normalizeInspectionRows(inspections || []).map((inspection: any) => {
+      const vehicle = Array.isArray(inspection.vehicles) ? inspection.vehicles[0] : inspection.vehicles
+      const results = normalizeRelationArray(inspection.inspection_results)
+      const issues = normalizeRelationArray(inspection.issues)
+      const failed = results.some((row: any) => row.result === 'fail')
+      const photos = results.reduce((count: number, row: any) => count + (row.photo_urls?.length || 0), 0)
+      const name = `${vehicle?.make || ''} ${vehicle?.model || ''}`.trim()
+      const driverName = [
+        authStore.profile?.first_name,
+        authStore.profile?.last_name,
+      ].filter(Boolean).join(' ') || authStore.profile?.email || ''
+
+      return {
+        id: inspection.id,
+        vehicleId: inspection.vehicle_id,
+        createdAt: inspection.submitted_at || inspection.created_at,
+        date: formatDate(inspection.submitted_at || inspection.created_at),
+        vehicle: [name, vehicle?.unit ? `#${vehicle.unit}` : '', vehicle?.plate || ''].filter(Boolean).join(' · ') || '—',
+        driver: driverName,
+        type: inspection.type === 'post-trip' ? 'post-trip' : 'pre-trip',
+        status: inspection.status,
+        result: inspection.status === 'draft' ? 'draft' : failed ? 'fail' : 'pass',
+        issues: issues.length,
+        photos,
+      }
+    })
+  } catch (unexpectedError: any) {
+    error.value = unexpectedError?.message || 'Reports could not be loaded.'
+    reports.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 function formatDate(value: string | null) {

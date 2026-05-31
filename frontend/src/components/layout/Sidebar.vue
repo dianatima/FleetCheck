@@ -14,7 +14,7 @@
     <!-- Nav -->
     <nav class="flex-1 px-3 py-4 overflow-y-auto">
       <!-- Manager section -->
-      <div v-if="authStore.role !== 'driver'" class="space-y-0.5 mb-4">
+      <div v-if="showManagerNav" class="space-y-0.5 mb-4">
         <RouterLink
           v-for="item in managerItems"
           :key="item.to"
@@ -30,7 +30,7 @@
         </RouterLink>
       </div>
 
-      <div v-if="authStore.role === 'driver'" class="space-y-0.5">
+      <div v-if="showDriverNav" class="space-y-0.5">
         <RouterLink
           v-for="item in driverItems"
           :key="item.to"
@@ -50,6 +50,15 @@
     <!-- Bottom -->
     <div class="p-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
       <button
+        v-if="isPreviewMode"
+        type="button"
+        class="flex items-center gap-2 w-full px-2 py-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-sm font-medium"
+        @click="exitDriverPreview"
+      >
+        <User :size="15" />
+        <span>Exit Driver Preview</span>
+      </button>
+      <button
         type="button"
         class="flex items-center gap-2 w-full px-2 py-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm font-medium"
         @click="handleLogout"
@@ -66,11 +75,21 @@ import { LayoutDashboard, Truck, Users, FileText, Wrench, Settings, ChevronRight
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '../../stores/app'
 import { useAuthStore } from '@/stores/authStore'
+import { computed } from 'vue'
+import { isDevDriverPreviewEnabled, setDevDriverPreviewEnabled } from '@/lib/devDriverPreview'
 
 const store = useAppStore()
 const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+
+const isPreviewMode = computed(() => {
+  // Route dependency keeps this reactive when toggling preview and navigating.
+  void route.fullPath
+  return isDevDriverPreviewEnabled()
+})
+const showDriverNav = computed(() => authStore.role === 'driver' || isPreviewMode.value)
+const showManagerNav = computed(() => authStore.role !== 'driver' && !isPreviewMode.value)
 
 const managerItems = [
   { icon: LayoutDashboard, label: 'dashboard', to: '/dashboard' },
@@ -98,5 +117,10 @@ function isNavActive(path: string, routerIsActive: boolean) {
 async function handleLogout() {
   await authStore.logout()
   router.replace('/login')
+}
+
+function exitDriverPreview() {
+  setDevDriverPreviewEnabled(false)
+  router.replace('/dashboard')
 }
 </script>
