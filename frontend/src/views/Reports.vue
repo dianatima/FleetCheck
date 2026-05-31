@@ -439,7 +439,7 @@ async function fetchReports() {
         model,
         plate
       ),
-      drivers (
+      drivers!inspections_driver_id_fkey (
         id,
         name
       ),

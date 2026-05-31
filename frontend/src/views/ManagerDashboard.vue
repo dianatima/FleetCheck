@@ -439,7 +439,7 @@ async function fetchDashboard() {
           plate,
           photo_url
         ),
-        drivers (
+        drivers!inspections_driver_id_fkey (
           name
         ),
         inspection_results (
@@ -462,7 +462,7 @@ async function fetchDashboard() {
         status,
         created_at,
         submitted_at,
-        drivers (
+        drivers!inspections_driver_id_fkey (
           id,
           name
         ),

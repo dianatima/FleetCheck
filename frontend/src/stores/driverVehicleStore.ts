@@ -2,12 +2,54 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
+import { saveSignatureFallback } from '@/lib/signatureFallback'
 
 type InspectionType = 'pre-trip' | 'post-trip'
 type AvailabilityFilter = 'all' | 'available' | 'assigned' | 'unavailable' | 'repair'
 const unresolvedIssueStatuses = ['under-review', 'in-repair']
+const DEV_DRIVER_PREVIEW_KEY = 'fleetcheck.dev.driverPreview'
+
+function isDevDriverPreviewEnabled() {
+  if (!import.meta.env.DEV) return false
+  return localStorage.getItem(DEV_DRIVER_PREVIEW_KEY) === '1'
+}
+
+function isMissingSignatureColumnsError(message?: string | null) {
+  const value = String(message || '').toLowerCase()
+  return (
+    value.includes('signature_data_url') ||
+    value.includes('signed_at') ||
+    value.includes('signed_by_driver_id')
+  )
+}
+
+function isMissingOnConflictConstraintError(message?: string | null) {
+  const value = String(message || '').toLowerCase()
+  return value.includes('on conflict') && value.includes('no unique')
+}
 
 const visibleVehicleSelect = `
+  id,
+  company_id,
+  unit,
+  make,
+  model,
+  year,
+  plate,
+  vin,
+  odometer,
+  odometer_unit,
+  engine_hours,
+  status,
+  photo_url,
+  vehicle_type_id,
+  vehicle_types (
+    id,
+    name
+  )
+`
+
+const visibleVehicleSelectLegacy = `
   id,
   company_id,
   unit,
@@ -26,6 +68,47 @@ const visibleVehicleSelect = `
     name
   )
 `
+
+function isMissingOdometerUnitColumnError(message?: string | null) {
+  const value = String(message || '').toLowerCase()
+  return value.includes('odometer_unit')
+}
+
+function withDefaultOdometerUnit<T>(data: T): T {
+  if (Array.isArray(data)) {
+    return data.map((row: any) => ({
+      ...row,
+      odometer_unit: row?.odometer_unit || 'mi',
+    })) as T
+  }
+
+  if (data && typeof data === 'object') {
+    const row = data as any
+    return {
+      ...row,
+      odometer_unit: row?.odometer_unit || 'mi',
+    } as T
+  }
+
+  return data
+}
+
+async function runVehicleQuery<T>(
+  build: (selectClause: string) => Promise<{ data: T; error: any }>
+) {
+  let { data, error } = await build(visibleVehicleSelect)
+
+  if (error && isMissingOdometerUnitColumnError(error.message)) {
+    const retry = await build(visibleVehicleSelectLegacy)
+    data = retry.data
+    error = retry.error
+  }
+
+  return {
+    data: withDefaultOdometerUnit(data),
+    error,
+  }
+}
 
 export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   const authStore = useAuthStore()
@@ -51,6 +134,12 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   )
 
   async function fetchDriverContext() {
+    if (isDevDriverPreviewEnabled()) {
+      const previewDriver = await fetchPreviewDriverContext()
+      if (previewDriver) return previewDriver
+      return null
+    }
+
     const profileId = authStore.profile?.id
 
     if (!profileId) {
@@ -87,6 +176,12 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   }
 
   async function fetchActiveDriverForInspection() {
+    if (isDevDriverPreviewEnabled()) {
+      const previewDriver = await fetchPreviewDriverContext()
+      if (previewDriver) return previewDriver
+      return null
+    }
+
     const profileId = authStore.profile?.id
 
     if (!profileId) {
@@ -114,6 +209,21 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   }
 
   async function fetchAllowedVehicleTypeIds(driver: any) {
+    if (isDevDriverPreviewEnabled()) {
+      const { data, error: typesError } = await supabase
+        .from('vehicles')
+        .select('vehicle_type_id')
+        .eq('company_id', driver.company_id)
+        .not('vehicle_type_id', 'is', null)
+
+      if (typesError) {
+        error.value = typesError.message
+        return []
+      }
+
+      return [...new Set((data || []).map((row: any) => row.vehicle_type_id).filter(Boolean))]
+    }
+
     if (!driver.license_class) return []
 
     const { data, error: ruleError } = await supabase
@@ -130,13 +240,33 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     return (data || []).map((rule) => rule.vehicle_type_id)
   }
 
+  async function fetchAllCompanyVehicleTypeIds(companyId: string) {
+    const { data, error: typesError } = await supabase
+      .from('vehicles')
+      .select('vehicle_type_id')
+      .eq('company_id', companyId)
+      .not('vehicle_type_id', 'is', null)
+
+    if (typesError) {
+      error.value = typesError.message
+      return []
+    }
+
+    return [...new Set((data || []).map((row: any) => row.vehicle_type_id).filter(Boolean))]
+  }
+
   async function fetchDriverVehicles() {
     loading.value = true
     error.value = null
     const driver = await fetchDriverContext()
     const allowedTypeIds = driver ? await fetchAllowedVehicleTypeIds(driver) : []
+    const fallbackTypeIds =
+      !allowedTypeIds.length && driver && isDevDriverPreviewEnabled()
+        ? await fetchAllCompanyVehicleTypeIds(driver.company_id)
+        : []
+    const effectiveTypeIds = allowedTypeIds.length ? allowedTypeIds : fallbackTypeIds
 
-    if (!driver || !allowedTypeIds.length) {
+    if (!driver || !effectiveTypeIds.length) {
       vehicles.value = []
       annotatedVehicles.value = []
       filteredVehicles.value = []
@@ -145,13 +275,15 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       return
     }
 
-    const { data, error: vehicleError } = await supabase
-      .from('vehicles')
-      .select(visibleVehicleSelect)
-      .eq('company_id', driver.company_id)
-      .in('vehicle_type_id', allowedTypeIds)
-      .not('status', 'in', '(blocked,inactive,in-repair)')
-      .order('created_at', { ascending: false })
+    const { data, error: vehicleError } = await runVehicleQuery<any[]>((selectClause) =>
+      supabase
+        .from('vehicles')
+        .select(selectClause)
+        .eq('company_id', driver.company_id)
+        .in('vehicle_type_id', effectiveTypeIds)
+        .not('status', 'in', '(blocked,inactive,in-repair)')
+        .order('created_at', { ascending: false })
+    )
 
     if (vehicleError) {
       error.value = vehicleError.message
@@ -186,21 +318,28 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     error.value = null
     const driver = await fetchDriverContext()
     const allowedTypeIds = driver ? await fetchAllowedVehicleTypeIds(driver) : []
+    const fallbackTypeIds =
+      !allowedTypeIds.length && driver && isDevDriverPreviewEnabled()
+        ? await fetchAllCompanyVehicleTypeIds(driver.company_id)
+        : []
+    const effectiveTypeIds = allowedTypeIds.length ? allowedTypeIds : fallbackTypeIds
 
-    if (!driver || !allowedTypeIds.length) {
+    if (!driver || !effectiveTypeIds.length) {
       selectedVehicle.value = null
       loading.value = false
       return
     }
 
-    const { data, error: vehicleError } = await supabase
-      .from('vehicles')
-      .select(visibleVehicleSelect)
-      .eq('id', id)
-      .eq('company_id', driver.company_id)
-      .in('vehicle_type_id', allowedTypeIds)
-      .not('status', 'in', '(blocked,inactive,in-repair)')
-      .maybeSingle()
+    const { data, error: vehicleError } = await runVehicleQuery<any | null>((selectClause) =>
+      supabase
+        .from('vehicles')
+        .select(selectClause)
+        .eq('id', id)
+        .eq('company_id', driver.company_id)
+        .in('vehicle_type_id', effectiveTypeIds)
+        .not('status', 'in', '(blocked,inactive,in-repair)')
+        .maybeSingle()
+    )
 
     if (vehicleError || !data) {
       error.value = vehicleError?.message || 'Vehicle is not available to this driver'
@@ -417,7 +556,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
         !unavailableStatus &&
         !lockedByCurrentAssignment
 
-      const annotatedVehicle = {
+      return {
         ...vehicle,
         active_assignment: activeAssignment || null,
         assigned_to_me: assignedToMe,
@@ -438,11 +577,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
           : available
           ? 'available'
           : 'unavailable',
-      }
-
-      return {
-        ...annotatedVehicle,
-        inspection_action_state: getInspectionActionState(annotatedVehicle),
       }
     })
   }
@@ -471,101 +605,13 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   }
 
   function isDriverVehicleInspectable(vehicle: any) {
-    const actionState = getInspectionActionState(vehicle)
-    return actionState.canStartPreTrip || actionState.canStartPostTrip
-  }
-
-  function getInspectionActionState(vehicle: any) {
-    const managerReviewReason = 'Vehicle is waiting for manager review.'
-    const unavailableReason = 'Vehicle is not available.'
-
-    if (!vehicle) {
-      return {
-        canStartPreTrip: false,
-        canStartPostTrip: false,
-        preTripDisabledReason: unavailableReason,
-        postTripDisabledReason: unavailableReason,
-      }
-    }
-
-    if (vehicle.status === 'needs-attention' || vehicle.awaiting_manager_review) {
-      return {
-        canStartPreTrip: false,
-        canStartPostTrip: false,
-        preTripDisabledReason: managerReviewReason,
-        postTripDisabledReason: managerReviewReason,
-      }
-    }
-
-    if (vehicle.status !== 'active') {
-      const reason = vehicle.status === 'in-repair' || vehicle.in_active_repair
-        ? 'Vehicle is not available while repair is in progress.'
-        : unavailableReason
-
-      return {
-        canStartPreTrip: false,
-        canStartPostTrip: false,
-        preTripDisabledReason: reason,
-        postTripDisabledReason: reason,
-      }
-    }
-
-    if (vehicle.in_active_repair) {
-      return {
-        canStartPreTrip: false,
-        canStartPostTrip: false,
-        preTripDisabledReason: 'Vehicle is not available while repair is in progress.',
-        postTripDisabledReason: 'Vehicle is not available while repair is in progress.',
-      }
-    }
-
-    if (vehicle.assigned_to_other) {
-      return {
-        canStartPreTrip: false,
-        canStartPostTrip: false,
-        preTripDisabledReason: 'Vehicle is assigned to another driver.',
-        postTripDisabledReason: 'Vehicle is assigned to another driver.',
-      }
-    }
-
-    if (vehicle.locked_by_current_assignment) {
-      return {
-        canStartPreTrip: false,
-        canStartPostTrip: false,
-        preTripDisabledReason: 'Complete post-trip inspection for your assigned vehicle first.',
-        postTripDisabledReason: 'Post-trip is only available for your assigned vehicle.',
-      }
-    }
-
-    if (vehicle.assigned_to_me) {
-      const preTripReason = 'Pre-trip already completed. Complete post-trip to release this vehicle.'
-      const postTripReason = vehicle.post_trip_ready
-        ? ''
-        : 'Submit a successful pre-trip inspection before post-trip.'
-
-      return {
-        canStartPreTrip: false,
-        canStartPostTrip: Boolean(vehicle.post_trip_ready),
-        preTripDisabledReason: preTripReason,
-        postTripDisabledReason: postTripReason,
-      }
-    }
-
-    if (vehicle.available) {
-      return {
-        canStartPreTrip: true,
-        canStartPostTrip: false,
-        preTripDisabledReason: '',
-        postTripDisabledReason: 'Post-trip is available after a successful pre-trip.',
-      }
-    }
-
-    return {
-      canStartPreTrip: false,
-      canStartPostTrip: false,
-      preTripDisabledReason: unavailableReason,
-      postTripDisabledReason: unavailableReason,
-    }
+    return (
+      vehicle.status === 'active' &&
+      !vehicle.in_active_repair &&
+      !vehicle.awaiting_manager_review &&
+      !vehicle.assigned_to_other &&
+      (vehicle.available === true || vehicle.assigned_to_me === true)
+    )
   }
 
   function paginate(rows: any[]) {
@@ -696,8 +742,8 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
 
         error.value =
           driverAssignment.vehicle_id === vehicleId
-            ? 'Pre-trip already completed. Complete post-trip to release this vehicle.'
-            : 'Complete post-trip inspection for your assigned vehicle first.'
+            ? 'This vehicle is already assigned to you. Complete the post-trip inspection to release it.'
+            : 'Submit the post-trip inspection for your assigned vehicle before choosing another vehicle.'
         return null
       }
 
@@ -760,12 +806,19 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     const existingDraftId = await findExistingDraftInspection(driver.id, vehicleId, type)
     if (existingDraftId) return existingDraftId
 
-    const template = await findTemplateForVehicleType(driver.company_id, vehicle.vehicle_type_id)
+    const template = await findTemplateForVehicleType(
+      driver.company_id,
+      vehicle.vehicle_type_id,
+      type
+    )
 
     if (!template) {
-      error.value = 'No inspection template found for this vehicle type'
+      error.value = 'No inspection template found for this vehicle type and inspection mode'
       return null
     }
+
+    const latestCommittedOdometer = await fetchLatestCommittedInspectionOdometer(vehicleId)
+    const odometerFloor = await fetchVehicleOdometerFloor(vehicleId)
 
     const inspectionPayload = {
       company_id: driver.company_id,
@@ -774,7 +827,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       template_id: template.id,
       type,
       status: 'draft',
-      odometer: vehicle.odometer ?? null,
+      odometer: odometerFloor ?? latestCommittedOdometer ?? vehicle.odometer ?? null,
       engine_hours: vehicle.engine_hours ?? null,
     }
 
@@ -813,6 +866,96 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     return inspection.id as string
   }
 
+  async function fetchLatestCommittedInspectionOdometer(vehicleId: string) {
+    const { data, error: odometerError } = await supabase
+      .from('inspections')
+      .select('odometer, submitted_at, created_at')
+      .eq('vehicle_id', vehicleId)
+      .in('status', ['submitted', 'approved', 'needs-review', 'rejected'])
+      .not('odometer', 'is', null)
+      .order('submitted_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (odometerError) {
+      error.value = odometerError.message
+      return null
+    }
+
+    return data?.odometer != null ? Number(data.odometer) : null
+  }
+
+  async function fetchVehicleOdometerFloor(vehicleId: string, exceptInspectionId?: string) {
+    let maxInspectionQuery = supabase
+      .from('inspections')
+      .select('odometer')
+      .eq('vehicle_id', vehicleId)
+      .not('odometer', 'is', null)
+      .order('odometer', { ascending: false })
+      .limit(1)
+
+    if (exceptInspectionId) {
+      maxInspectionQuery = maxInspectionQuery.neq('id', exceptInspectionId)
+    }
+
+    const [maxInspectionResult, vehicleResult] = await Promise.all([
+      maxInspectionQuery.maybeSingle(),
+      supabase.from('vehicles').select('odometer').eq('id', vehicleId).maybeSingle(),
+    ])
+
+    if (maxInspectionResult.error) {
+      error.value = maxInspectionResult.error.message
+      return null
+    }
+
+    if (vehicleResult.error) {
+      error.value = vehicleResult.error.message
+      return null
+    }
+
+    const candidates = [
+      maxInspectionResult.data?.odometer != null ? Number(maxInspectionResult.data.odometer) : null,
+      vehicleResult.data?.odometer != null ? Number(vehicleResult.data.odometer) : null,
+    ].filter((value): value is number => Number.isFinite(value))
+
+    return candidates.length ? Math.max(...candidates) : null
+  }
+
+  async function fetchPreviewDriverContext() {
+    const companyId = authStore.companyId
+
+    if (!companyId) {
+      error.value = 'Driver preview mode requires an active company in your account.'
+      return null
+    }
+
+    const { data, error: previewError } = await supabase
+      .from('drivers')
+      .select('id, company_id, license_class, status, user_id')
+      .eq('company_id', companyId)
+      .in('status', ['active', 'pending', 'new'])
+      .order('created_at', { ascending: true })
+      .limit(50)
+
+    if (previewError || !data?.length) {
+      error.value = previewError?.message || 'Driver preview mode: no driver found for this company.'
+      currentDriver.value = null
+      return null
+    }
+
+    const rank = (status: string) =>
+      status === 'active' ? 0 : status === 'pending' ? 1 : 2
+
+    const selected = [...data].sort(
+      (a: any, b: any) => rank(a.status) - rank(b.status)
+    )[0]
+
+    currentDriver.value = selected
+    currentDriverProfileId.value = authStore.profile?.id || null
+    return selected
+  }
+
   async function findExistingDraftInspection(driverId: string, vehicleId: string, type: InspectionType) {
     const { data, error: draftError } = await supabase
       .from('inspections')
@@ -841,13 +984,15 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     const allowedTypeIds = await fetchAllowedVehicleTypeIds(driver)
     if (!allowedTypeIds.length) return null
 
-    const { data, error: vehicleError } = await supabase
-      .from('vehicles')
-      .select(visibleVehicleSelect)
-      .eq('id', vehicleId)
-      .eq('company_id', driver.company_id)
-      .in('vehicle_type_id', allowedTypeIds)
-      .maybeSingle()
+    const { data, error: vehicleError } = await runVehicleQuery<any | null>((selectClause) =>
+      supabase
+        .from('vehicles')
+        .select(selectClause)
+        .eq('id', vehicleId)
+        .eq('company_id', driver.company_id)
+        .in('vehicle_type_id', allowedTypeIds)
+        .maybeSingle()
+    )
 
     if (vehicleError || !data) {
       error.value = vehicleError?.message || 'Vehicle is not available to this driver'
@@ -857,11 +1002,16 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     return data
   }
 
-  async function findTemplateForVehicleType(companyId: string, vehicleTypeId: string) {
+  async function findTemplateForVehicleType(
+    companyId: string,
+    vehicleTypeId: string,
+    inspectionMode?: InspectionType
+  ) {
     const { data, error: templateError } = await supabase
       .from('inspection_templates')
       .select(`
         id,
+        inspection_mode,
         inspection_template_items (
           id,
           sort_order
@@ -870,84 +1020,137 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       .eq('company_id', companyId)
       .eq('vehicle_type_id', vehicleTypeId)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
 
     if (templateError) {
       error.value = templateError.message
       return null
     }
 
-    return data
+    const templates = Array.isArray(data) ? data : data ? [data] : []
+
+    if (!templates.length) return null
+
+    if (!inspectionMode) return templates[0]
+
+    const matchedTemplate = templates.find((template: any) => template.inspection_mode === inspectionMode)
+
+    return matchedTemplate || templates[0]
   }
 
   async function completeInspection(
     inspectionId: string,
     vehicleId: string,
     type: InspectionType,
-    hasFailedItems = false
+    hasFailedItems = false,
+    signatureDataUrl: string | null = null,
+    odometerReading: number | null = null
   ) {
-    const { error: inspectionError } = await supabase
+    const driver = await fetchDriverContext()
+    if (!driver) return false
+
+    if (typeof odometerReading === 'number') {
+      const odometerFloor = await fetchVehicleOdometerFloor(vehicleId, inspectionId)
+      if (odometerFloor != null && odometerReading < odometerFloor) {
+        error.value = `Odometer cannot be lower than ${odometerFloor}.`
+        return false
+      }
+    }
+
+    const baseUpdate = {
+      status: 'submitted',
+      submitted_at: new Date().toISOString(),
+      odometer: odometerReading,
+    }
+
+    const signatureUpdate = {
+      ...baseUpdate,
+      signature_data_url: signatureDataUrl,
+      signed_at: signatureDataUrl ? new Date().toISOString() : null,
+      signed_by_driver_id: signatureDataUrl ? driver.id : null,
+    }
+
+    const signatureTimestamp = new Date().toISOString()
+
+    if (signatureDataUrl) {
+      const fallbackPayload = {
+        company_id: driver.company_id,
+        inspection_id: inspectionId,
+        driver_id: driver.id,
+        signature_data_url: signatureDataUrl,
+        signed_at: signatureTimestamp,
+      }
+
+      const { error: fallbackUpsertError } = await supabase
+        .from('inspection_signature_fallbacks')
+        .upsert(
+          fallbackPayload,
+          { onConflict: 'inspection_id' }
+        )
+
+      if (fallbackUpsertError) {
+        console.warn('[driverVehicleStore] shared signature fallback upsert failed', fallbackUpsertError)
+
+        if (isMissingOnConflictConstraintError(fallbackUpsertError.message)) {
+          const { error: fallbackInsertError } = await supabase
+            .from('inspection_signature_fallbacks')
+            .insert(fallbackPayload)
+
+          if (fallbackInsertError) {
+            console.warn('[driverVehicleStore] shared signature fallback insert failed', fallbackInsertError)
+          }
+        }
+      }
+    }
+
+    let { error: inspectionError } = await supabase
       .from('inspections')
-      .update({
-        status: 'submitted',
-        submitted_at: new Date().toISOString(),
-      })
+      .update(signatureUpdate)
       .eq('id', inspectionId)
+
+    if (inspectionError && isMissingSignatureColumnsError(inspectionError.message)) {
+      if (signatureDataUrl) {
+        saveSignatureFallback(inspectionId, signatureDataUrl, signatureTimestamp, driver.id)
+      }
+      const retry = await supabase
+        .from('inspections')
+        .update(baseUpdate)
+        .eq('id', inspectionId)
+      inspectionError = retry.error
+    }
+
+    if (!inspectionError && signatureDataUrl) {
+      saveSignatureFallback(inspectionId, signatureDataUrl, signatureTimestamp, driver.id)
+    }
 
     if (inspectionError) {
       error.value = inspectionError.message
       return false
     }
 
-    if (type === 'post-trip') {
-      if (hasFailedItems) {
-        await markVehicleNeedsAttention(vehicleId, inspectionId)
-      }
+    if (typeof odometerReading === 'number') {
+      const { error: vehicleUpdateError } = await supabase
+        .from('vehicles')
+        .update({ odometer: odometerReading })
+        .eq('id', vehicleId)
 
-      return closeVehicleAssignment(vehicleId)
+      if (vehicleUpdateError) {
+        // Some environments keep vehicles update restricted for drivers.
+        // The inspection odometer is already saved above and is the source of truth.
+        console.warn('[driverVehicleStore] vehicle odometer update skipped', vehicleUpdateError)
+      }
     }
 
-    const driver = await fetchDriverContext()
-    if (!driver) return false
+    if (type === 'post-trip') return closeVehicleAssignment(vehicleId)
 
     const hasUnresolvedIssues = hasFailedItems || await hasUnresolvedPreTripIssues(driver.id, vehicleId)
 
     if (hasUnresolvedIssues) {
-      await markVehicleNeedsAttention(vehicleId, inspectionId)
       const assignment = await fetchActiveDriverAssignment(driver.id)
       if (assignment?.vehicle_id === vehicleId) await cancelVehicleAssignment(assignment.id)
       return true
     }
 
     return createVehicleAssignmentIfNeeded(vehicleId)
-  }
-
-  async function markVehicleNeedsAttention(vehicleId: string, inspectionId: string) {
-    const token = authStore.session?.access_token
-
-    if (!token) {
-      error.value = 'Access token is missing'
-      return false
-    }
-
-    const response = await fetch(`/api/driver/vehicles/${vehicleId}/needs-attention`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ inspectionId }),
-    })
-
-    const result = await response.json().catch(() => null)
-
-    if (!response.ok) {
-      error.value = result?.error || 'Vehicle could not be marked as needing attention'
-      return false
-    }
-
-    return true
   }
 
   async function setSearch(value: string) {
@@ -999,12 +1202,12 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     createVehicleAssignmentIfNeeded,
     closeVehicleAssignment,
     completeInspection,
+    fetchVehicleOdometerFloor,
     setSearch,
     setAvailabilityFilter,
     setPage,
     setPageSize,
     isDriverVehicleAvailable,
     isDriverVehicleInspectable,
-    getInspectionActionState,
   }
 })

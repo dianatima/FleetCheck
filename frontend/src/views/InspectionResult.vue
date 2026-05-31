@@ -261,7 +261,7 @@ async function loadInspectionResult() {
         status,
         photo_url
       ),
-      drivers (
+      drivers!inspections_driver_id_fkey (
         name
       )
     `)
