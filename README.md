@@ -39,6 +39,13 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - **Zoom для фото** — клік по фото відкриває збільшений перегляд через `PhotoLightbox`.
 - **Порядок пунктів checklist збережено** — `Checklist Summary` у модалці йде за `sort_order` з inspection template.
 - **Підпис у звіті та PDF** — підпис водія відображається у модальному перегляді звіту та в експортованому PDF.
+- **Сумісність звітів після додавання signed_by_driver_id** — у запитах до Supabase додано явний embed через `drivers!inspections_driver_id_fkey`, щоб уникнути помилки "more than one relationship was found for inspections and drivers".
+- **Антифрод-підсумок у менеджерському звіті**:
+	- Розрахунок ризику по фото (`risk_score`, `risk_level`, `flags`).
+	- Відображення топ причин ризику та найбільш підозрілих фото.
+	- Порівняння `Previous vs Current` для exact/visual duplicate.
+- **Backfill anti-fraud у модалці звіту** — якщо для inspection ще немає anti-fraud записів, модалка може автоматично дорахувати та зберегти аналіз на основі вже прикріплених фото.
+- **Shared DB fallback для підпису** — додано таблицю `inspection_signature_fallbacks`, щоб підпис був доступний менеджеру між різними сесіями/ролями, навіть якщо локальний fallback недоступний.
 - **Modal flow для інспекції водія** — pre-trip/post-trip відкривається як overlay-модалка (`?modal=1`) замість повного переходу на окремий екран.
 - **Покращена валідація одометра**:
 	- Заборонено зменшення пробігу нижче за історичний максимум.
@@ -68,4 +75,14 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - `202605290002_driver_vehicle_odometer_update_policy.sql` — додає policy, що дозволяє active driver оновлювати `vehicles` у своїй компанії.
 - `202605290003_repair_inspection_signature_columns.sql` — додає колонки підпису в `inspections` + reload schema notify.
 - `202605300001_inspection_template_modes.sql` — додає `inspection_mode`, backfill старих даних, замінює унікальний індекс на mode-aware.
+- `202605300002_photo_fraud_verification.sql` — створює `inspection_photo_verifications`, індекси та RLS policy для anti-fraud по фото.
+- `202605300003_inspection_signature_shared_fallback.sql` — створює `inspection_signature_fallbacks` для спільного fallback-підпису між ролями.
+- `202605300004_fraud_and_signature_policy_preview_support.sql` — розширює policy під DEV Driver Preview сценарій.
+- `202605300005_fraud_signature_policy_admin_owner_support.sql` — додає підтримку `owner/manager/admin` та `company_owners` у policy для anti-fraud/signature fallback.
+- `202605300006_ensure_inspection_signature_columns.sql` — гарантує наявність signature-колонок у `inspections` у середовищах з частково застосованими міграціями.
+
+### Операційні SQL-скрипти (debug/hotfix)
+
+- `supabase/hotfix_prod_signature_fraud.sql` — production hotfix для синхронізації schema + RLS політик по підпису та anti-fraud.
+- `supabase/signature-fraud-diagnostics.sql` — діагностичний скрипт для перевірки колонок/таблиць, наявності anti-fraud даних, і стану активних policy (`PASS/FAIL` блок).
 

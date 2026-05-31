@@ -91,7 +91,7 @@
               <div v-if="item.photos.length" class="flex gap-1.5">
                 <div v-for="(url, pi) in item.photos" :key="pi" class="relative">
                   <button type="button" class="photo-thumb" @click="openPhotoLightbox(item.photos, pi)"><img :src="url" alt="" class="w-full h-full object-cover" /></button>
-                  <button type="button" @click.stop="item.photos.splice(pi, 1)" class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white"><X :size="7" /></button>
+                  <button type="button" @click.stop="removePhoto(item, pi)" class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white"><X :size="7" /></button>
                 </div>
               </div>
             </div>
@@ -291,7 +291,7 @@
                   </button>
                   <button
                     type="button"
-                    @click.stop="item.photos.splice(pi, 1)"
+                    @click.stop="removePhoto(item, pi)"
                     class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white"
                   >
                     <X :size="7" />
@@ -376,7 +376,8 @@ import { supabase } from '@/lib/supabase'
 import AppLayout from '../components/layout/AppLayout.vue'
 import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { formatDateTime } from '@/lib/dateFormat'
-import { readSignatureFallback } from '@/lib/signatureFallback'
+import { readSignatureFallback, readSignatureFallbackFromDb } from '@/lib/signatureFallback'
+import { analyzeAndStoreInspectionPhotos } from '@/lib/photoFraud'
 
 function isMissingSignatureColumnsError(message?: string | null) {
   const value = String(message || '').toLowerCase()
@@ -409,6 +410,14 @@ interface Item {
   photos: string[]
 }
 
+interface UploadedPhotoMeta {
+  dataUrl: string
+  fileName: string | null
+  fileSizeBytes: number | null
+  mimeType: string | null
+  uploadedAt: string
+}
+
 const inspection = ref<any | null>(null)
 const items = reactive<Item[]>([])
 const expandedIds = ref<Set<string>>(new Set())
@@ -418,6 +427,7 @@ const draftMessage = ref('')
 const photoLightboxOpen = ref(false)
 const lightboxPhotos = ref<string[]>([])
 const lightboxStartIndex = ref(0)
+const photoMetaByItemId = ref<Record<string, UploadedPhotoMeta[]>>({})
 const signatureCanvas = ref<HTMLCanvasElement | null>(null)
 const signatureDataUrl = ref('')
 const signatureError = ref('')
@@ -468,10 +478,28 @@ function isExpanded(itemId: string) {
 async function addPhotos(item: Item, event: Event) {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files || [])
+  const uploadedAt = new Date().toISOString()
   const urls = await Promise.all(files.map(readFileAsDataUrl))
+  const nextMeta = files.map((file, index) => ({
+    dataUrl: urls[index],
+    fileName: file.name || null,
+    fileSizeBytes: Number.isFinite(file.size) ? file.size : null,
+    mimeType: file.type || null,
+    uploadedAt,
+  }))
+
   item.photos.push(...urls)
+  const existingMeta = photoMetaByItemId.value[item.id] || []
+  photoMetaByItemId.value[item.id] = [...existingMeta, ...nextMeta]
   delete validationErrors.value[item.id]
   input.value = ''
+}
+
+function removePhoto(item: Item, index: number) {
+  item.photos.splice(index, 1)
+  const metadata = photoMetaByItemId.value[item.id] || []
+  metadata.splice(index, 1)
+  photoMetaByItemId.value[item.id] = metadata
 }
 
 function readFileAsDataUrl(file: File) {
@@ -638,7 +666,7 @@ async function loadInspectionItems() {
         odometer,
         odometer_unit
       ),
-      drivers (
+      drivers!inspections_driver_id_fkey (
         name
       )
     `)
@@ -664,7 +692,7 @@ async function loadInspectionItems() {
           odometer,
           odometer_unit
         ),
-        drivers (
+        drivers!inspections_driver_id_fkey (
           name
         )
       `)
@@ -680,7 +708,9 @@ async function loadInspectionItems() {
       inspectionData?.odometer != null && Number.isFinite(Number(inspectionData.odometer))
         ? Number(inspectionData.odometer)
         : null
-    const fallbackSignature = readSignatureFallback(inspectionId)
+    const localFallbackSignature = readSignatureFallback(inspectionId)
+    const fallbackSignature =
+      localFallbackSignature || (await readSignatureFallbackFromDb(inspectionId))
     signatureDataUrl.value = inspectionData?.signature_data_url || fallbackSignature?.dataUrl || ''
     odometerInput.value =
       inspectionData?.odometer != null ? String(Math.trunc(Number(inspectionData.odometer))) : ''
@@ -740,10 +770,22 @@ async function loadInspectionItems() {
 
   if (error || !data?.length) return
 
-  items.splice(
-    0,
-    items.length,
-    ...data.map((result: any) => ({
+  const fallbackUploadedAt = inspectionData?.created_at || new Date().toISOString()
+  const metadataSeed: Record<string, UploadedPhotoMeta[]> = {}
+  const mappedItems = data.map((result: any) => {
+    const loadedPhotos = Array.isArray(result.photo_urls)
+      ? result.photo_urls.filter((value: unknown) => typeof value === 'string' && value)
+      : []
+
+    metadataSeed[result.id] = loadedPhotos.map((dataUrl: string) => ({
+      dataUrl,
+      fileName: null,
+      fileSizeBytes: null,
+      mimeType: null,
+      uploadedAt: fallbackUploadedAt,
+    }))
+
+    return {
       id: result.id,
       title: result.inspection_template_items?.title || 'Checklist item',
       description: result.inspection_template_items?.description || null,
@@ -756,9 +798,12 @@ async function loadInspectionItems() {
       icon: FileText,
       state: ['pass', 'fail', 'not_applicable'].includes(result.result) ? result.result : null,
       comment: result.comment || '',
-      photos: result.photo_urls || [],
-    })).sort((a: Item, b: Item) => a.sortOrder - b.sortOrder)
-  )
+      photos: loadedPhotos,
+    }
+  })
+
+  items.splice(0, items.length, ...mappedItems.sort((a: Item, b: Item) => a.sortOrder - b.sortOrder))
+  photoMetaByItemId.value = metadataSeed
 }
 
 const allPass  = computed(() => items.every(i => i.state === 'pass'))
@@ -899,6 +944,40 @@ async function validateOdometerJumpOnSubmit(vehicleId: string, inspectionId: str
   return true
 }
 
+async function runPhotoFraudAnalysis(inspectionId: string) {
+  const companyId = inspection.value?.company_id
+  if (!companyId) return
+
+  const photos = items.flatMap((item) => {
+    const metadata = photoMetaByItemId.value[item.id] || []
+    return item.photos
+      .filter(Boolean)
+      .map((dataUrl, photoIndex) => {
+        const meta = metadata[photoIndex]
+        return {
+          inspectionResultId: item.id,
+          photoIndex,
+          dataUrl,
+          fileName: meta?.fileName || null,
+          fileSizeBytes: meta?.fileSizeBytes ?? null,
+          mimeType: meta?.mimeType || null,
+          uploadedAt: meta?.uploadedAt || new Date().toISOString(),
+        }
+      })
+  })
+
+  if (!photos.length) return
+
+  await analyzeAndStoreInspectionPhotos({
+    companyId,
+    inspectionId,
+    driverId: inspection.value?.driver_id || null,
+    vehicleId: inspection.value?.vehicle_id || null,
+    inspectionCreatedAt: inspection.value?.created_at || null,
+    photos,
+  })
+}
+
 function closeInspectionView() {
   if (isModalInspection.value) {
     if (window.history.length > 1) {
@@ -927,6 +1006,7 @@ async function handleSubmit() {
     const odometerReading = parseOdometerInput()
     await saveInspectionResults()
     await createIssuesForFailedResults(inspectionId)
+
     const completed = await vehicleStore.completeInspection(
       inspectionId,
       vehicleId,
@@ -947,6 +1027,13 @@ async function handleSubmit() {
         submitError.value = errMsg
       }
       return
+    }
+
+    try {
+      await runPhotoFraudAnalysis(inspectionId)
+    } catch (fraudError) {
+      // Anti-fraud must not block report submission, but the error is logged for diagnostics.
+      console.warn('[PreTripInspection] photo fraud analysis failed', fraudError)
     }
   }
 
