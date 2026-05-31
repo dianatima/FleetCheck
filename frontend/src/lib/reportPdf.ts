@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
-import { readSignatureFallback } from '@/lib/signatureFallback'
+import { readSignatureFallback, readSignatureFallbackFromDb } from '@/lib/signatureFallback'
 
 function isMissingSignatureColumnsError(message?: string | null) {
   const value = String(message || '').toLowerCase()
@@ -583,7 +583,7 @@ export async function downloadInspectionReportPdf(
         status,
         photo_url
       ),
-      drivers (
+      drivers!inspections_driver_id_fkey (
         name,
         email
       ),
@@ -639,7 +639,7 @@ export async function downloadInspectionReportPdf(
           status,
           photo_url
         ),
-        drivers (
+        drivers!inspections_driver_id_fkey (
           name,
           email
         ),
@@ -683,7 +683,9 @@ export async function downloadInspectionReportPdf(
   }
 
   const inspection = data as any
-  const fallbackSignature = readSignatureFallback(inspectionId)
+  const localFallbackSignature = readSignatureFallback(inspectionId)
+  const fallbackSignature =
+    localFallbackSignature || (await readSignatureFallbackFromDb(inspectionId))
   inspection.signature_data_url = inspection.signature_data_url || fallbackSignature?.dataUrl || null
   inspection.signed_at = inspection.signed_at || fallbackSignature?.signedAt || null
   const vehicle = relation(inspection.vehicles)

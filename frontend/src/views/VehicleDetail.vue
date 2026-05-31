@@ -448,7 +448,7 @@ async function fetchVehicleHistory() {
         status,
         created_at,
         submitted_at,
-        drivers (
+        drivers!inspections_driver_id_fkey (
           id,
           name
         ),

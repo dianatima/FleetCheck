@@ -23,6 +23,11 @@ function isMissingSignatureColumnsError(message?: string | null) {
   )
 }
 
+function isMissingOnConflictConstraintError(message?: string | null) {
+  const value = String(message || '').toLowerCase()
+  return value.includes('on conflict') && value.includes('no unique')
+}
+
 const visibleVehicleSelect = `
   id,
   company_id,
@@ -1065,6 +1070,37 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     }
 
     const signatureTimestamp = new Date().toISOString()
+
+    if (signatureDataUrl) {
+      const fallbackPayload = {
+        company_id: driver.company_id,
+        inspection_id: inspectionId,
+        driver_id: driver.id,
+        signature_data_url: signatureDataUrl,
+        signed_at: signatureTimestamp,
+      }
+
+      const { error: fallbackUpsertError } = await supabase
+        .from('inspection_signature_fallbacks')
+        .upsert(
+          fallbackPayload,
+          { onConflict: 'inspection_id' }
+        )
+
+      if (fallbackUpsertError) {
+        console.warn('[driverVehicleStore] shared signature fallback upsert failed', fallbackUpsertError)
+
+        if (isMissingOnConflictConstraintError(fallbackUpsertError.message)) {
+          const { error: fallbackInsertError } = await supabase
+            .from('inspection_signature_fallbacks')
+            .insert(fallbackPayload)
+
+          if (fallbackInsertError) {
+            console.warn('[driverVehicleStore] shared signature fallback insert failed', fallbackInsertError)
+          }
+        }
+      }
+    }
 
     let { error: inspectionError } = await supabase
       .from('inspections')
