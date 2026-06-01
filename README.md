@@ -142,6 +142,22 @@ npm run dev
 - frontend: `vite frontend`
 - backend: `tsx watch backend/index.ts`
 
+Запуск тепер керується одним wrapper-скриптом, тому `Ctrl+C` у цьому терміналі зупиняє frontend і backend разом. Frontend зафіксовано на порту `5173`, backend на `3000`.
+
+Якщо після аварійного завершення залишились "сирітські" процеси dev-сервера, використовуйте:
+
+```bash
+npm run devstop
+```
+
+Або найкоротше:
+
+```bash
+npm run stop
+```
+
+Ці команди примусово звільняють порти `5173` (frontend) і `3000` (backend).
+
 ### 4. Production build
 
 ```bash
@@ -158,6 +174,9 @@ npm run build:backend
 ## Корисні Scripts
 
 - `npm run dev` — frontend + backend в watch
+- `npm run dev:stop` — примусово зупиняє dev-процеси на портах `5173` та `3000`
+- `npm run devstop` — те саме, але без двокрапки
+- `npm run stop` — найкоротший alias для зупинки dev-процесів
 - `npm run dev:frontend` — лише frontend
 - `npm run dev:backend` — лише backend
 - `npm run build` — повний build
