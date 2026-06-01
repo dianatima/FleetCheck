@@ -18,6 +18,7 @@ export type InspectionTemplatePayload = {
   description: string | null
   vehicle_type_id: string
   is_default: boolean
+  engine_hours_required: boolean
 }
 
 const templateSelect = `
@@ -27,6 +28,7 @@ const templateSelect = `
   description,
   vehicle_type_id,
   is_default,
+  engine_hours_required,
   created_at,
   vehicle_types (
     id,
@@ -241,6 +243,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
         description: payload.description,
         vehicle_type_id: payload.vehicle_type_id,
         is_default: true,
+        engine_hours_required: !!payload.engine_hours_required,
         company_id: authStore.companyId,
       })
       .select('id')
@@ -312,6 +315,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
         description: payload.description,
         vehicle_type_id: payload.vehicle_type_id,
         is_default: true,
+        engine_hours_required: !!payload.engine_hours_required,
       })
       .eq('id', id)
       .eq('company_id', authStore.companyId)

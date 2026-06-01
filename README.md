@@ -69,6 +69,22 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 	- Створення owner user + company + profile + company owner link виконується на backend через admin client.
 	- Frontend реєстрація переключена на цей API.
 
+## Останні зміни (June 2026)
+
+- **Захищене видалення інспекцій (single + bulk)**:
+	- Додано backend endpoint `POST /api/admin/delete-inspections`.
+	- Підтвердження видалення через email + password адміністратора.
+	- Видалення підтримує як одиночний звіт (з модалки), так і масове видалення зі сторінки `Reports`.
+- **Bulk delete у Reports**:
+	- Працює за вибраними чекбоксами або за фільтрами (дата, водій, тип, fraud-only).
+	- Додано захист від повторного submit під час виконання запиту.
+- **Покращена обробка помилок видалення**:
+	- Явні повідомлення для `502/503` (backend недоступний).
+	- Явні повідомлення для `403/500` (помилка прав або серверна помилка).
+- **Перевірка ролі при видаленні**:
+	- Роль читається з auth metadata з fallback на `profiles.role`.
+	- Доступ до видалення дозволено `owner/admin/manager`.
+
 ### Нові SQL міграції
 
 - `202605290001_vehicle_odometer_unit.sql` — додає `vehicles.odometer_unit` + check constraint.
@@ -193,6 +209,17 @@ npm run build:backend
 
 - Відкрийте модалку проблемного звіту, щоб запустився auto-recompute.
 - Запустіть `supabase/signature-fraud-diagnostics.sql` і перевірте policy/дані.
+
+### Помилка видалення звітів (`502 Bad Gateway`)
+
+1. Переконайтесь, що backend запущений: `npm run dev:backend`.
+2. Якщо працюєте через один скрипт, запустіть `npm run dev` і перевірте, що backend слухає `http://localhost:3000`.
+3. У dev-mode frontend проксить `/api` на `127.0.0.1:3000`, тому 502 зазвичай означає недоступний backend.
+
+### Помилка видалення звітів (`403 Forbidden`)
+
+- Перевірте, що введено email/password користувача з роллю `owner/admin/manager`.
+- Перевірте, що для цього користувача роль присутня в `auth metadata` або у `profiles.role`.
 
 ## API (Backend)
 

@@ -1,0 +1,15 @@
+stateDiagram-v2
+  [*] --> Draft: inspection created
+  Draft --> InProgress: checklist started
+  InProgress --> Draft: save draft
+  InProgress --> Submitted: submit with signature
+  Submitted --> NeedsReview: suspicious signals found
+  Submitted --> Approved: manager confirms
+  NeedsReview --> Approved: validated manually
+  NeedsReview --> Rejected: invalid report
+  Approved --> IssueCreated: fail items detected
+  IssueCreated --> RepairInProgress: repair assigned
+  RepairInProgress --> RepairDone: work completed
+  RepairDone --> Closed: verification done
+  Rejected --> [*]
+  Closed --> [*]

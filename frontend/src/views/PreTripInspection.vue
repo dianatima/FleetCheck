@@ -28,7 +28,7 @@
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Odometer reading</h3>
         <p class="text-xs text-gray-500 dark:text-gray-400">Last odometer: {{ lastOdometerLabel }}</p>
       </div>
-      <div class="relative">
+      <div class="relative mb-4">
         <input :value="odometerInput" type="text" inputmode="numeric" autocomplete="off" class="input-field pr-16" placeholder="Enter current odometer" @input="onOdometerInput" @blur="validateOdometer(false)" />
         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 dark:text-gray-400 uppercase">{{ odometerUnit }}</span>
       </div>
@@ -38,7 +38,22 @@
         <p class="text-xs font-medium text-yellow-800 dark:text-yellow-300">⚠️ {{ odometerWarning }}</p>
         <button type="button" class="mt-2 text-xs font-semibold text-yellow-700 dark:text-yellow-400 underline underline-offset-2" @click="odometerConfirmed = true">Yes, the value is correct — confirm</button>
       </div>
+
+      <!-- Engine hours input (only if required by template) -->
+      <div v-if="engineHoursRequired" class="mt-6">
+        <label class="block text-xs mb-1 font-semibold">Engine hours (for heavy/industrial vehicles)</label>
+        <input v-model="engineHoursInput" type="number" min="0" step="1" class="input-field w-full" placeholder="Enter engine hours" />
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">If not applicable, leave blank.</p>
+      </div>
     </div>
+    // Додаємо реактивну змінну для engine_hours
+    const engineHoursInput = ref("")
+    const engineHoursRequired = computed(() => {
+      // inspection.value?.template_id → треба отримати engine_hours_required з шаблону
+      // Якщо inspection.value вже містить inspection_templates, беремо звідти
+      const t = inspection.value?.inspection_templates || inspection.value?.template
+      return Boolean(t?.engine_hours_required)
+    })
     <div class="card p-4 mb-4">
       <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
         <span>{{ doneCount }} / {{ items.length }} {{ store.t('checked') }}</span>

@@ -19,255 +19,63 @@
             <X :size="16" />
           </button>
         </div>
-
         <div class="space-y-4 p-4 sm:p-5">
           <div v-if="loading" class="text-sm text-gray-500">Loading inspection report...</div>
           <div v-else-if="error" class="text-sm text-red-500">{{ error }}</div>
-          <template v-else-if="inspection">
-            <div class="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-              <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
-                <p class="text-gray-400">Vehicle</p>
-                <p class="font-semibold text-gray-800 dark:text-gray-100">{{ vehicleLabel }}</p>
-              </div>
-              <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
-                <p class="text-gray-400">Type</p>
-                <p class="font-semibold text-gray-800 dark:text-gray-100">{{ typeLabel }}</p>
-              </div>
-              <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
-                <p class="text-gray-400">Result</p>
-                <p>
-                  <span :class="overallResultClass" class="text-xs">{{ overallResultLabel }}</span>
-                </p>
-              </div>
-              <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
-                <p class="text-gray-400">Submitted</p>
-                <p class="font-semibold text-gray-800 dark:text-gray-100">{{ submittedLabel }}</p>
-              </div>
+          <div v-else-if="inspection">
+            <div v-if="canViewFraudInsights" class="flex justify-end mb-2">
+              <button
+                class="btn-danger px-4 py-2 rounded-lg text-sm font-semibold"
+                @click="showDeleteModal = true"
+              >
+                {{ store.t('delete') }} {{ store.t('inspectionLabel') }}
+              </button>
             </div>
-
-            <section class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
-              <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-                <div>
-                  <h4 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Driver Signature</h4>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">Captured when the driver submitted the inspection.</p>
+            <Teleport to="body">
+              <div v-if="showDeleteModal" class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+                <div class="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl border border-gray-200 dark:border-gray-700">
+                  <h3 class="text-lg font-semibold mb-2">{{ store.t('delete') }} {{ store.t('inspectionLabel') }}</h3>
+                  <p class="text-sm mb-4">Для підтвердження видалення введіть свій email та пароль адміністратора.</p>
+                  <form @submit.prevent="handleDelete">
+                    <div class="mb-3">
+                      <label class="block text-xs mb-1">Email</label>
+                      <input v-model="deleteEmail" type="email" class="input-field w-full" required />
+                    </div>
+                    <div class="mb-3">
+                      <label class="block text-xs mb-1">{{ store.t('password') }}</label>
+                      <input v-model="deletePassword" type="password" class="input-field w-full" required />
+                    </div>
+                    <div v-if="deleteError" class="text-xs text-red-500 mb-2">{{ deleteError }}</div>
+                    <div class="flex gap-2 justify-end">
+                      <button type="button" class="btn-secondary" @click="showDeleteModal = false">{{ store.t('cancel') }}</button>
+                      <button type="submit" class="btn-danger">{{ store.t('delete') }}</button>
+                    </div>
+                  </form>
                 </div>
               </div>
-
-              <div class="p-4">
-                <div
-                  v-if="inspection.signature_data_url"
-                  class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/40"
-                >
-                  <img
-                    :src="inspection.signature_data_url"
-                    alt="Driver signature"
-                    class="h-32 w-full rounded-lg border border-gray-100 object-contain bg-white dark:border-gray-800"
-                  />
-                  <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Signed by {{ signerLabel }} at {{ signedAtLabel }}
-                  </p>
-                </div>
-                <div v-else class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                  No driver signature was attached to this report.
-                </div>
-              </div>
-            </section>
-
-            <section class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
-              <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-                <div>
-                  <h4 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Photos</h4>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">All report photos are collected here. Click any photo to enlarge it.</p>
-                </div>
-                <span class="badge-gray text-xs">{{ galleryPhotos.length }} photos</span>
-              </div>
-
-              <div v-if="galleryPhotos.length === 0" class="p-4 text-sm text-gray-500">No photos were attached to this report.</div>
-              <div v-else class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-                <button
-                  v-for="(photo, index) in galleryPhotos"
-                  :key="`${photo.rowId}-${index}`"
-                  type="button"
-                  class="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-gray-600 dark:hover:bg-gray-800"
-                  @click="openPhotoLightbox(index)"
-                >
-                  <img :src="photo.url" alt="" class="h-44 w-full object-cover" />
-                  <div class="space-y-1 p-3">
-                    <div class="flex items-start justify-between gap-2">
-                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ photo.title }}</p>
-                      <span :class="resultPillClass(photo.result)" class="text-[11px] whitespace-nowrap">{{ resultValueLabel(photo.result) }}</span>
-                    </div>
-                    <div v-if="photo.verification" class="flex items-center justify-between gap-2">
-                      <span :class="fraudLevelClass(photo.verification.risk_level || photo.verification.verification_status)" class="text-[11px] whitespace-nowrap">
-                        {{ fraudLevelLabel(photo.verification.risk_level || photo.verification.verification_status) }}
-                      </span>
-                      <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ store.t('antiFraudRisk') }} {{ photo.verification.risk_score || 0 }}/100</span>
-                    </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Item {{ photo.sortOrder }}</p>
-                    <p v-if="photo.comment" class="line-clamp-2 text-xs text-gray-600 dark:text-gray-300">{{ photo.comment }}</p>
-                  </div>
-                </button>
-              </div>
-            </section>
-
-            <section v-if="canViewFraudInsights" class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
-              <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-                <div>
-                  <h4 class="text-sm font-semibold text-gray-800 dark:text-gray-100">{{ store.t('antiFraudSummaryTitle') }}</h4>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('antiFraudSummaryHint') }}</p>
-                </div>
-                <span class="badge-gray text-xs">{{ fraudSummary.total }} {{ store.t('antiFraudAnalyzed') }}</span>
-              </div>
-
-              <div class="space-y-4 p-4">
-                <div v-if="fraudLoadError" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/40 dark:bg-amber-900/30 dark:text-amber-200">
-                  {{ fraudLoadError }}
-                </div>
-                <div v-else-if="fraudSummary.total === 0" class="text-sm text-gray-500 dark:text-gray-400">{{ store.t('antiFraudNoRecords') }}</div>
-
-                <template v-else>
-                  <div class="grid grid-cols-2 gap-3 text-xs sm:grid-cols-5">
-                    <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
-                      <p class="text-gray-400">{{ store.t('antiFraudMaxRisk') }}</p>
-                      <p class="font-semibold text-gray-800 dark:text-gray-100">{{ fraudSummary.maxRisk }}/100</p>
-                    </div>
-                    <div class="rounded-xl bg-red-50 p-3 dark:bg-red-900/20">
-                      <p class="text-red-400">{{ store.t('antiFraudHighRisk') }}</p>
-                      <p class="font-semibold text-red-700 dark:text-red-300">{{ fraudSummary.highRisk }}</p>
-                    </div>
-                    <div class="rounded-xl bg-orange-50 p-3 dark:bg-orange-900/20">
-                      <p class="text-orange-400">{{ store.t('antiFraudSuspicious') }}</p>
-                      <p class="font-semibold text-orange-700 dark:text-orange-300">{{ fraudSummary.suspicious }}</p>
-                    </div>
-                    <div class="rounded-xl bg-yellow-50 p-3 dark:bg-yellow-900/20">
-                      <p class="text-yellow-500">{{ store.t('antiFraudNeedsReview') }}</p>
-                      <p class="font-semibold text-yellow-700 dark:text-yellow-300">{{ fraudSummary.needsReview }}</p>
-                    </div>
-                    <div class="rounded-xl bg-green-50 p-3 dark:bg-green-900/20">
-                      <p class="text-green-500">{{ store.t('antiFraudOk') }}</p>
-                      <p class="font-semibold text-green-700 dark:text-green-300">{{ fraudSummary.ok }}</p>
-                    </div>
-                  </div>
-
-                  <div v-if="fraudSummary.topFlags.length" class="space-y-2">
-                    <p class="text-xs font-semibold text-gray-700 dark:text-gray-200">{{ store.t('antiFraudTopReasons') }}</p>
-                    <div class="flex flex-wrap gap-1.5">
-                      <span v-for="flag in fraudSummary.topFlags" :key="flag" class="badge-gray text-[11px]">
-                        {{ fraudFlagLabel(flag) }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div v-if="suspiciousPhotos.length" class="space-y-2">
-                    <p class="text-xs font-semibold text-gray-700 dark:text-gray-200">{{ store.t('antiFraudMostSuspiciousPhotos') }}</p>
-                    <div class="space-y-2">
-                      <div
-                        v-for="row in suspiciousPhotos"
-                        :key="row.id"
-                        class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs dark:border-gray-700 dark:bg-gray-800/60"
-                      >
-                        <div class="flex items-center justify-between gap-2">
-                          <span class="font-medium text-gray-800 dark:text-gray-100">Item {{ row.photo_index + 1 }} · {{ store.t('antiFraudRisk') }} {{ row.risk_score || 0 }}/100</span>
-                          <span :class="fraudLevelClass(row.risk_level || row.verification_status)" class="text-[11px] whitespace-nowrap">
-                            {{ fraudLevelLabel(row.risk_level || row.verification_status) }}
-                          </span>
-                        </div>
-                        <p class="mt-1 text-[11px] font-medium text-gray-700 dark:text-gray-200">
-                          {{ fraudVerdict(row) }}
-                        </p>
-                        <ul class="mt-1 space-y-1 text-gray-600 dark:text-gray-300">
-                          <li v-for="flag in (row.flags || [])" :key="`${row.id}-${flag}`">• {{ fraudFlagLabel(flag) }}</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-if="duplicateComparisonRows.length" class="space-y-2">
-                    <p class="text-xs font-semibold text-gray-700 dark:text-gray-200">{{ store.t('antiFraudPreviousVsCurrent') }}</p>
-                    <div class="space-y-3">
-                      <div
-                        v-for="(pair, pairIndex) in duplicateComparisonRows"
-                        :key="`${pair.current.id}-${pairIndex}`"
-                        class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/60"
-                      >
-                        <div class="mb-2 flex items-center justify-between gap-2 text-xs">
-                          <span class="font-medium text-gray-800 dark:text-gray-100">
-                            {{ pair.duplicateType === 'exact' ? store.t('antiFraudExactDuplicate') : store.t('antiFraudVisualDuplicate') }} · {{ store.t('antiFraudRisk') }} {{ pair.current.risk_score || 0 }}/100
-                          </span>
-                          <span :class="fraudLevelClass(pair.current.risk_level || pair.current.verification_status)" class="text-[11px] whitespace-nowrap">
-                            {{ fraudLevelLabel(pair.current.risk_level || pair.current.verification_status) }}
-                          </span>
-                        </div>
-                        <p class="mb-2 text-[11px] font-medium text-gray-700 dark:text-gray-200">
-                          {{ fraudVerdict(pair.current) }}
-                        </p>
-                        <p class="mb-2 text-[11px] text-gray-600 dark:text-gray-300">
-                          {{ duplicateOriginSummary(pair.previous) }}
-                        </p>
-
-                        <div class="grid gap-2 sm:grid-cols-2">
-                          <button
-                            type="button"
-                            class="overflow-hidden rounded-lg border border-gray-200 bg-white text-left dark:border-gray-700 dark:bg-gray-900"
-                            @click="openPairPhotoLightbox(pair, 'previous')"
-                          >
-                            <img :src="pair.previous.photo_url" alt="Previous report photo" class="h-36 w-full object-cover" />
-                            <p class="px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400">{{ store.t('antiFraudPreviousPhoto') }}</p>
-                          </button>
-
-                          <button
-                            type="button"
-                            class="overflow-hidden rounded-lg border border-gray-200 bg-white text-left dark:border-gray-700 dark:bg-gray-900"
-                            @click="openPairPhotoLightbox(pair, 'current')"
-                          >
-                            <img :src="pair.current.photo_url" alt="Current report photo" class="h-36 w-full object-cover" />
-                            <p class="px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400">{{ store.t('antiFraudCurrentPhoto') }}</p>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </section>
-
-            <section class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
-              <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-                <div>
-                  <h4 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Checklist Summary</h4>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">Items stay in template order, but the report is shown as one combined view.</p>
-                </div>
-                <span class="badge-gray text-xs">{{ results.length }} items</span>
-              </div>
-
-              <div v-if="results.length === 0" class="p-4 text-sm text-gray-500">No inspection items found.</div>
-              <div v-else class="divide-y divide-gray-100 dark:divide-gray-800">
-                <div v-for="row in results" :key="row.id" class="grid gap-3 px-4 py-3 sm:grid-cols-[auto,1fr,auto] sm:items-start">
-                  <div class="flex items-center gap-2">
-                    <span class="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-gray-100 px-2 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                      {{ row.sortOrder }}
-                    </span>
-                  </div>
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-1.5">
-                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ row.title }}</p>
-                      <span v-if="row.category" class="badge-gray text-[11px]">{{ row.category }}</span>
-                      <span v-if="row.requiresPhoto" class="badge-orange text-[11px]">Photo</span>
-                    </div>
-                    <p v-if="row.comment" class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ row.comment }}</p>
-                    <p v-if="row.photoCount" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ row.photoCount }} photo{{ row.photoCount === 1 ? '' : 's' }}</p>
-                  </div>
-                  <div class="sm:text-right">
-                    <span :class="resultPillClass(row.result)" class="text-xs whitespace-nowrap">{{ resultValueLabel(row.result) }}</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </template>
+            </Teleport>
+            <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
+              <p class="text-gray-400">Vehicle</p>
+              <p class="font-semibold text-gray-800 dark:text-gray-100">{{ vehicleLabel }}</p>
+            </div>
+            <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
+              <p class="text-gray-400">Type</p>
+              <p class="font-semibold text-gray-800 dark:text-gray-100">{{ typeLabel }}</p>
+            </div>
+            <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
+              <p class="text-gray-400">Result</p>
+              <p>
+                <span :class="overallResultClass" class="text-xs">{{ overallResultLabel }}</span>
+              </p>
+            </div>
+            <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
+              <p class="text-gray-400">Submitted</p>
+              <p class="font-semibold text-gray-800 dark:text-gray-100">{{ submittedLabel }}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
     <PhotoLightbox
       v-model="photoLightboxOpen"
       :photos="lightboxPhotos"
@@ -317,6 +125,10 @@ const fraudLoadError = ref<string | null>(null)
 const photoLightboxOpen = ref(false)
 const lightboxPhotos = ref<string[]>([])
 const lightboxStartIndex = ref(0)
+const showDeleteModal = ref(false)
+const deleteEmail = ref('')
+const deletePassword = ref('')
+const deleteError = ref('')
 
 const canViewFraudInsights = computed(() => authStore.role !== 'driver')
 
@@ -361,6 +173,7 @@ const signerLabel = computed(() => {
 
 const overallResult = computed(() => {
   if (inspection.value?.status === 'draft') return 'draft'
+  // Тільки реальний результат чекліста, fraud не враховується
   return results.value.some((row) => row.result === 'fail') ? 'fail' : 'pass'
 })
 
@@ -488,6 +301,53 @@ function duplicateOriginSummary(row: any) {
 
 function close() {
   emit('update:modelValue', false)
+}
+
+async function handleDelete() {
+  deleteError.value = ''
+
+  if (!inspection.value?.id) {
+    deleteError.value = 'Inspection id is missing.'
+    return
+  }
+
+  if (!deleteEmail.value || !deletePassword.value) {
+    deleteError.value = 'Email and password are required.'
+    return
+  }
+
+  try {
+    const response = await fetch('/api/admin/delete-inspections', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inspectionIds: [inspection.value.id],
+        adminEmail: deleteEmail.value,
+        adminPassword: deletePassword.value,
+      }),
+    })
+
+    const payload = await response.json().catch(() => ({} as any))
+
+    if (!response.ok) {
+      if (response.status === 502 || response.status === 503) {
+        deleteError.value = 'Deletion backend is unavailable (502/503). Restart backend: npm run dev:backend.'
+      } else {
+        deleteError.value = payload?.error || `Delete failed (HTTP ${response.status})`
+      }
+      return
+    }
+
+    showDeleteModal.value = false
+    deleteEmail.value = ''
+    deletePassword.value = ''
+    deleteError.value = ''
+    close()
+  } catch (requestError: any) {
+    deleteError.value = requestError?.message || 'Delete failed'
+  }
 }
 
 function findPhotoVerification(inspectionResultId: string, photoIndex: number) {

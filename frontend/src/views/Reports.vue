@@ -14,6 +14,71 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-2 mb-5">
+      <button
+        v-if="store.role === 'admin' || authStore.role === 'owner'"
+        class="btn-danger px-4 py-2 rounded-lg text-sm font-semibold mb-2"
+        @click="showBulkDeleteModal = true"
+      >
+        {{ store.t('delete') }} {{ store.t('reports') }}
+	  </button>
+
+      <template v-if="showBulkDeleteModal">
+        <Teleport to="body">
+          <div class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+            <div class="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl border border-gray-200 dark:border-gray-700">
+              <h3 class="text-lg font-semibold mb-2">{{ store.t('delete') }} {{ store.t('reports') }}</h3>
+              <p class="text-sm mb-4">Виберіть діапазон дат для видалення звітів. Для підтвердження введіть email і пароль адміністратора.</p>
+              <form @submit.prevent="handleBulkDelete">
+                <div class="mb-3">
+                  <label class="block text-xs mb-1">{{ store.t('from') }}</label>
+                  <input v-model="bulkDeleteStart" type="date" class="input-field w-full" />
+                </div>
+                <div class="mb-3">
+                  <label class="block text-xs mb-1">{{ store.t('to') }}</label>
+                  <input v-model="bulkDeleteEnd" type="date" class="input-field w-full" />
+                </div>
+                <div class="mb-3">
+                  <label class="block text-xs mb-1">{{ store.t('driver') }}</label>
+                  <select v-model="bulkDeleteDriver" class="input-field w-full">
+                    <option value="">{{ store.t('allDrivers') || 'All drivers' }}</option>
+                    <option v-for="d in uniqueDrivers" :key="d.id" :value="d.id">{{ d.name }}</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="block text-xs mb-1">{{ store.t('type') }}</label>
+                  <select v-model="bulkDeleteType" class="input-field w-full">
+                    <option value="">{{ store.t('allTypes') }}</option>
+                    <option value="pre-trip">{{ store.t('preTrip') }}</option>
+                    <option value="post-trip">{{ store.t('postTrip') }}</option>
+                  </select>
+                </div>
+                <div class="mb-3 flex items-center gap-2">
+                  <input id="fraudOnly" v-model="bulkDeleteFraud" type="checkbox" class="form-checkbox" />
+                  <label for="fraudOnly" class="text-xs">{{ store.t('fraudFlagged') }}</label>
+                </div>
+                <div class="mb-3">
+                  <label class="block text-xs mb-1">Email</label>
+                  <input v-model="bulkDeleteEmail" type="email" class="input-field w-full" required />
+                </div>
+                <div class="mb-3">
+                  <label class="block text-xs mb-1;">{{ store.t('password') }}</label>
+                  <input v-model="bulkDeletePassword" type="password" class="input-field w-full" required />
+                </div>
+                <div class="mb-2 text-xs text-gray-500">{{ store.t('delete') }}: <b>{{ bulkDeleteCount }}</b> {{ store.t('reports') }}</div>
+                <div v-if="bulkDeleteError" class="text-xs text-red-500 mb-2">{{ bulkDeleteError }}</div>
+                <div class="flex gap-2 justify-end">
+                  <button type="button" class="btn-secondary" @click="showBulkDeleteModal = false">{{ store.t('cancel') }}</button>
+                  <button type="submit" class="btn-danger" :disabled="bulkDeleteLoading">
+                    {{ bulkDeleteLoading ? 'Deleting...' : store.t('delete') }}
+                  </button>
+                </div>
+              </form>
+            <!-- JS-логіка переміщена у <script setup> -->
+            </div>
+          </div>
+        </Teleport>
+      </template>
+      <!-- JS-логіка переміщена у <script setup> -->
       <div class="relative w-full sm:flex-1 sm:min-w-[220px]">
         <Search
           :size="15"
@@ -108,14 +173,11 @@
       <div class="hidden md:block overflow-x-auto">
         <table class="w-full">
           <thead>
-            <tr
-              class="table-header-row"
-            >
-              <th
-                v-for="h in reportHeaders"
-                :key="h"
-                class="table-th"
-              >
+            <tr class="table-header-row">
+              <th class="table-th w-8">
+                <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+              </th>
+              <th v-for="h in reportHeaders" :key="h" class="table-th">
                 {{ h }}
               </th>
             </tr>
@@ -132,17 +194,16 @@
             <tr
               v-for="r in paginatedReports"
               :key="r.id"
-              class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
-              :class="
-                r.reviewStatus === 'needs-review' || r.fraudSuspicious
-                  ? 'bg-yellow-50/40 dark:bg-yellow-900/5'
-                  : ''
-              "
-              @click="viewReport(r)"
+              class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+              :class="[
+                (r.reviewStatus === 'needs-review' || r.fraudSuspicious) ? 'bg-yellow-50/40 dark:bg-yellow-900/5' : '',
+                selectedReportIds.includes(r.id) ? 'ring-2 ring-blue-400/40 dark:ring-blue-600/40' : ''
+              ]"
             >
-              <td
-                class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
-              >
+              <td class="px-2 py-3 text-center">
+                <input type="checkbox" :checked="selectedReportIds.includes(r.id)" @change="toggleSelectReport(r.id)" @click.stop />
+              </td>
+              <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                 {{ r.date }}
               </td>
               <td class="px-4 py-3">
@@ -418,11 +479,22 @@ const driverFilterLabel = computed(() => {
 
 onMounted(fetchReports);
 
+
 watch(
   () => authStore.companyId,
   async (companyId) => {
     if (companyId) await fetchReports();
   },
+);
+
+// Якщо модалка закрилась — оновити список звітів для синхронізації статусу
+watch(
+  inspectionModalOpen,
+  async (open) => {
+    if (!open) {
+      await fetchReports();
+    }
+  }
 );
 
 watch(vehicleFilterId, () => {
@@ -725,8 +797,8 @@ function resultLabel(report: Report) {
 }
 
 function normalizedResult(report: Report): ReportResult {
+  // Тільки реальний результат чекліста, fraudSuspicious не враховується
   if (report.status === "draft") return "draft";
-  if (report.fraudSuspicious) return "fail";
   return report.result;
 }
 
@@ -911,6 +983,132 @@ watch([search, filterType, filterResult, startDate, endDate, pageSize], () => {
 function setPageSize(size: number) {
   pageSize.value = size;
   page.value = 1;
+}
+
+// --- МАСОВЕ ВИДАЛЕННЯ ТА ЧЕКБОКСИ ---
+// Унікальні водії для фільтра
+const uniqueDrivers = computed(() => {
+  const map = new Map<string, { id: string; name: string }>();
+  reports.value.forEach(r => {
+    if (r.driverId && r.driver) {
+      map.set(r.driverId, { id: r.driverId, name: r.driver });
+    }
+  });
+  return Array.from(map.values());
+});
+
+const selectedReportIds = ref<string[]>([]);
+const allSelected = computed(() =>
+  paginatedReports.value.length > 0 && paginatedReports.value.every(r => selectedReportIds.value.includes(r.id))
+);
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedReportIds.value = [];
+  } else {
+    selectedReportIds.value = paginatedReports.value.map(r => r.id);
+  }
+}
+function toggleSelectReport(id: string) {
+  const idx = selectedReportIds.value.indexOf(id);
+  if (idx === -1) {
+    selectedReportIds.value.push(id);
+  } else {
+    selectedReportIds.value.splice(idx, 1);
+  }
+}
+function clearSelectedReports() {
+  selectedReportIds.value = [];
+}
+
+// --- МАСОВЕ ВИДАЛЕННЯ ---
+const showBulkDeleteModal = ref(false);
+const bulkDeleteStart = ref("");
+const bulkDeleteEnd = ref("");
+const bulkDeleteDriver = ref("");
+const bulkDeleteType = ref("");
+const bulkDeleteFraud = ref(false);
+const bulkDeleteEmail = ref("");
+const bulkDeletePassword = ref("");
+const bulkDeleteError = ref("");
+const bulkDeleteLoading = ref(false);
+
+const bulkDeleteFilteredIds = computed(() => {
+  const startTs = bulkDeleteStart.value
+    ? new Date(`${bulkDeleteStart.value}T00:00:00`).getTime()
+    : null;
+  const endTs = bulkDeleteEnd.value
+    ? new Date(`${bulkDeleteEnd.value}T23:59:59`).getTime()
+    : null;
+
+  return reports.value
+    .filter((report) => {
+      const createdTs = new Date(report.createdAt).getTime();
+      if (startTs != null && createdTs < startTs) return false;
+      if (endTs != null && createdTs > endTs) return false;
+      if (bulkDeleteDriver.value && report.driverId !== bulkDeleteDriver.value) return false;
+      if (bulkDeleteType.value && report.type !== bulkDeleteType.value) return false;
+      if (bulkDeleteFraud.value && !report.fraudSuspicious) return false;
+      return true;
+    })
+    .map((report) => report.id);
+});
+
+const effectiveBulkDeleteIds = computed(() =>
+  selectedReportIds.value.length > 0
+    ? selectedReportIds.value
+    : bulkDeleteFilteredIds.value
+);
+
+const bulkDeleteCount = computed(() => effectiveBulkDeleteIds.value.length);
+
+async function handleBulkDelete() {
+  bulkDeleteError.value = "";
+  if (!bulkDeleteEmail.value || !bulkDeletePassword.value) {
+    bulkDeleteError.value = "Email і пароль обов'язкові.";
+    return;
+  }
+  if (!effectiveBulkDeleteIds.value.length) {
+    bulkDeleteError.value = "Немає звітів для видалення за вибраними умовами.";
+    return;
+  }
+
+  bulkDeleteLoading.value = true;
+
+  try {
+    const response = await fetch("/api/admin/delete-inspections", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inspectionIds: effectiveBulkDeleteIds.value,
+        adminEmail: bulkDeleteEmail.value,
+        adminPassword: bulkDeletePassword.value,
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({} as any));
+
+    if (!response.ok) {
+      if (response.status === 502 || response.status === 503) {
+        bulkDeleteError.value = "Сервер видалення недоступний (502/503). Перезапустіть backend (npm run dev:backend).";
+      } else {
+        bulkDeleteError.value = payload?.error || `Помилка видалення (HTTP ${response.status}).`;
+      }
+      return;
+    }
+
+    showBulkDeleteModal.value = false;
+    clearSelectedReports();
+    bulkDeleteEmail.value = "";
+    bulkDeletePassword.value = "";
+    bulkDeleteError.value = "";
+    await fetchReports();
+  } catch (e: any) {
+    bulkDeleteError.value = e?.message || "Помилка видалення.";
+  } finally {
+    bulkDeleteLoading.value = false;
+  }
 }
 </script>
 

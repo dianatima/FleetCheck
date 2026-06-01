@@ -1,0 +1,30 @@
+flowchart LR
+  classDef tenantA fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#111827;
+  classDef tenantB fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#111827;
+  classDef core fill:#fff7ed,stroke:#f59e0b,stroke-width:1.5px,color:#111827;
+
+  subgraph A[Company A Context]
+    A1[Users A]:::tenantA
+    A2[Vehicles A]:::tenantA
+    A3[Inspections A]:::tenantA
+  end
+
+  subgraph B[Company B Context]
+    B1[Users B]:::tenantB
+    B2[Vehicles B]:::tenantB
+    B3[Inspections B]:::tenantB
+  end
+
+  APP[Single SaaS Application]:::core
+  RLS[RLS Policies\ncompany scope + role scope]:::core
+  DB[(Shared PostgreSQL)]:::core
+
+  A1 --> APP
+  B1 --> APP
+  APP --> RLS --> DB
+  DB --> A2
+  DB --> A3
+  DB --> B2
+  DB --> B3
+
+  A3 -. denied cross-tenant access .- B3

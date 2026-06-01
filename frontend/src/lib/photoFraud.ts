@@ -240,7 +240,7 @@ async function fetchVisualCandidates(companyId: string, inspectionId: string) {
     .neq('inspection_id', inspectionId)
     .not('d_hash', 'is', null)
     .order('uploaded_at', { ascending: true })
-    .limit(80)
+    .limit(1000)
 
   return (Array.isArray(data) ? data : []) as ExistingPhotoVerification[]
 }
@@ -407,6 +407,7 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
                 vehicle_id: exactDuplicate.vehicle_id,
                 file_name: exactDuplicate.file_name,
                 exif_taken_at: exactDuplicate.exif_taken_at,
+                // no photo_index here intentionally
               }
             : null,
           visual_duplicate: visualDuplicate
@@ -418,6 +419,7 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
                 vehicle_id: visualDuplicate.vehicle_id,
                 file_name: visualDuplicate.file_name,
                 exif_taken_at: visualDuplicate.exif_taken_at,
+                // no photo_index here intentionally
               }
             : null,
         },

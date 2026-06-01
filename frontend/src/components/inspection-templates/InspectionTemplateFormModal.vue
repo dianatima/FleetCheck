@@ -68,6 +68,11 @@
               </p>
             </div>
 
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="engineHoursRequired" v-model="form.engine_hours_required" class="form-checkbox" />
+              <label for="engineHoursRequired" class="text-sm">Require engine hours (for heavy/industrial vehicles)</label>
+            </div>
+
             <p v-if="formError" class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-500 dark:bg-red-900/20 dark:text-red-400">
               {{ formError }}
             </p>
@@ -121,6 +126,7 @@ const form = reactive({
   description: '',
   vehicle_type_id: '',
   is_default: false,
+  engine_hours_required: false,
 })
 
 watch(
@@ -133,6 +139,7 @@ watch(
       description: props.template?.description || '',
       vehicle_type_id: props.template?.vehicle_type_id || '',
       is_default: true,
+      engine_hours_required: Boolean(props.template?.engine_hours_required),
     })
     validationError.value = ''
   },
@@ -154,6 +161,7 @@ function submitForm() {
     description: form.description.trim() || null,
     vehicle_type_id: form.vehicle_type_id,
     is_default: true,
+    engine_hours_required: !!form.engine_hours_required,
   })
 }
 </script>
