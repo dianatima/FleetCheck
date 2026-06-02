@@ -17,12 +17,24 @@ const viteMiddleware: FastifyPluginAsync = async (app) => {
         // Manual Content-Type mapping
         const ext = path.extname(filePath);
         const contentType = {
-            '.html': 'text/html',
-            '.js': 'text/javascript',
-            '.css': 'text/css',
+            '.html': 'text/html; charset=utf-8',
+            '.js': 'text/javascript; charset=utf-8',
+            '.mjs': 'text/javascript; charset=utf-8',
+            '.css': 'text/css; charset=utf-8',
+            '.json': 'application/json; charset=utf-8',
+            '.txt': 'text/plain; charset=utf-8',
             '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
             '.svg': 'image/svg+xml',
-        }[ext] || 'text/plain';
+            '.ico': 'image/x-icon',
+            '.woff': 'font/woff',
+            '.woff2': 'font/woff2',
+            '.ttf': 'font/ttf',
+            '.map': 'application/json; charset=utf-8',
+        }[ext] || 'application/octet-stream';
 
         return reply.type(contentType).send(content);
     });

@@ -182,6 +182,24 @@ npm run build:backend
 - `npm run build` — повний build
 - `npm run preview` — preview frontend production build
 
+## Deploy (Render)
+
+Для поточної архітектури (Fastify + зібраний Vite frontend) найпростіший варіант деплою — один Web Service на Render.
+
+У репозиторії вже додано `render.yaml`, тому достатньо:
+
+1. Підключити GitHub репозиторій у Render.
+2. Обрати Blueprint deploy (Render прочитає `render.yaml`).
+3. Заповнити env vars:
+	- `SUPABASE_URL`
+	- `SUPABASE_SERVICE_ROLE_KEY`
+	- `VITE_SUPABASE_URL`
+	- `VITE_SUPABASE_ANON_KEY`
+	- (опційно) `RESEND_API_KEY`, `APPROVAL_EMAIL_FROM`, `APP_URL`
+4. Запустити deploy.
+
+Після успішного деплою backend API і frontend будуть працювати з одного домену Render, що зручно для тестування з телефона.
+
 ## База Даних: Рекомендований Порядок
 
 Для нових середовищ або після великих оновлень застосовуйте:
