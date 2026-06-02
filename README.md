@@ -71,6 +71,39 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 
 ## Останні зміни (June 2026)
 
+- **Legacy-сумісність фото у звітах (mobile/desktop)**:
+	- Додано нормалізацію `photo_urls` для старих записів, де фото могли зберігатись як path-only значення.
+	- Прев'ю фото у `InspectionResult`, `DriverReportDetail`, `InspectionReportModal`, `PreTripInspection` тепер стабільно працює для нових і старих звітів.
+- **Reference photo для checklist item у Inspection Templates**:
+	- Для кожного пункту шаблону можна завантажити еталонне фото (`reference_photo_url`).
+	- Еталонне фото відображається у driver inspection flow як візуальна підказка.
+- **Thumbnail/Avatar у списках звітів**:
+	- У `Reports` та `DriverReports` додано мініатюру звіту (фото ТЗ або fallback на перше фото інспекції).
+- **Повна локалізація нових UX-текстів (en/uk/es/fr)**:
+	- Додано переклади для `Reference photo`, `Upload reference photo`, `Open/Hide details`, валідаційного повідомлення про обов'язкове фото та помилки завантаження еталонного фото.
+
+- **Покращена генерація PDF-звітів**:
+	- Перехід з кастомного PDF-генератора на pdfmake для надійної Unicode-обробки в multilingual звітах.
+	- Preview по кліку відкривається через `iframe` замість `location.href`, що гарантує безпечне завантаження blob.
+	- Share copy gracefully fallback на download при недоступності Web Share API.
+	- Валідація non-empty blob перед preview/download/share запобігає білим екранам та пустим файлам.
+	- Нормалізація photo URL в PDF-генераторі гарантує коректне завантаження legacy path-only фото.
+
+- **Захист від повторного submit інспекції**:
+	- Додано `submittingInspection` state для кнопки "Submit Inspection".
+	- Під час відправки кнопка дизейблиться і показує `Submitting...` (локалізовано en/uk/es/fr).
+	- Ранній return у `handleSubmit` блокує дублювання запитів при мультикліку.
+
+- **Backward-compatible запити для `inspection_templates` в medio schema**:
+	- Якщо у БД відсутня колонка `engine_hours_required`, frontend автоматично ретраїться з простішим запитом.
+	- Insert/Update шаблонів пропускає `engine_hours_required` при fallback, а вбудована нормалізація ставить значення за замовчуванням `false`.
+	- Сумісність з середовищами, де міграція `202605310001` ще не застосована.
+
+- **Стабільність списку Inspection Templates**:
+	- При зміні активної компанії список скидає старі фільтри (search, vehicle type filter, пагінація).
+	- Індикатор поточної компанії в шапці блоку шаблонів уникає плутанини при multi-company сценаріях.
+	- Fallback-запит активується автоматично, якщо список порожній через застарілий пошук/фільтр, гарантуючи, що шаблон не видається "зниклим".
+
 - **Захищене видалення інспекцій (single + bulk)**:
 	- Додано backend endpoint `POST /api/admin/delete-inspections`.
 	- Підтвердження видалення через email + password адміністратора.
@@ -96,6 +129,8 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - `202605300004_fraud_and_signature_policy_preview_support.sql` — розширює policy під DEV Driver Preview сценарій.
 - `202605300005_fraud_signature_policy_admin_owner_support.sql` — додає підтримку `owner/manager/admin` та `company_owners` у policy для anti-fraud/signature fallback.
 - `202605300006_ensure_inspection_signature_columns.sql` — гарантує наявність signature-колонок у `inspections` у середовищах з частково застосованими міграціями.
+- `202605310001_add_engine_hours_required_to_templates.sql` — додає `inspection_templates.engine_hours_required` boolean колонку (backend запит для inspection/engine-hours override режиму).
+- `202606020001_template_item_reference_photo.sql` — додає `inspection_template_items.reference_photo_url` для еталонних фото пунктів шаблону.
 
 ### Операційні SQL-скрипти (debug/hotfix)
 

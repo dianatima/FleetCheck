@@ -14,21 +14,21 @@
 
       <div class="grid sm:grid-cols-2 gap-3 flex-1 min-w-0">
         <div>
-          <label class="label">Item title <span class="text-red-500">*</span></label>
+          <label class="label">{{ store.t('itemTitle') }} <span class="text-red-500">*</span></label>
           <input
             :value="item.title"
             class="input-field"
-            placeholder="Check service brakes"
+            :placeholder="store.t('checklistItemPlaceholder')"
             @input="patch({ title: inputValue($event) })"
           />
         </div>
         <div>
-          <label class="label">Category <span class="text-red-500">*</span></label>
+          <label class="label">{{ store.t('category') }} <span class="text-red-500">*</span></label>
           <input
             v-if="!categories.length"
             value=""
             class="input-field"
-            placeholder="Create categories in Settings first"
+            :placeholder="store.t('createTemplateCategoriesFirst')"
             disabled
           />
           <select
@@ -38,7 +38,7 @@
             required
             @change="patch({ category_id: inputValue($event) })"
           >
-            <option value="" disabled>Select category</option>
+            <option value="" disabled>{{ store.t('selectCategory') }}</option>
             <option
               v-for="category in categories"
               :key="category.id"
@@ -59,7 +59,7 @@
         <button
           type="button"
           class="icon-btn"
-          title="Move up"
+          :title="store.t('moveUp')"
           :disabled="index === 0"
           @click="emit('move', index, index - 1)"
         >
@@ -68,7 +68,7 @@
         <button
           type="button"
           class="icon-btn"
-          title="Move down"
+          :title="store.t('moveDown')"
           :disabled="index === count - 1"
           @click="emit('move', index, index + 1)"
         >
@@ -77,7 +77,7 @@
         <button
           type="button"
           class="icon-btn hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
-          title="Remove item"
+          :title="store.t('removeItem')"
           @click="emit('remove', index)"
         >
           <Trash2 :size="15" />
@@ -87,14 +87,41 @@
 
     <div class="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
       <div>
-        <label class="label">Description</label>
+        <label class="label">{{ store.t('description') }}</label>
         <textarea
           :value="item.description || ''"
           class="input-field resize-none"
           rows="2"
-          placeholder="Driver instructions for this check."
+          :placeholder="store.t('driverInstructionsPlaceholder')"
           @input="patch({ description: inputValue($event) || null })"
         />
+
+        <div class="mt-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="option-row cursor-pointer">
+              <input
+                type="file"
+                accept="image/*"
+                class="hidden"
+                :disabled="uploadingReference"
+                @change="uploadReferencePhoto"
+              />
+              <span>{{ uploadingReference ? store.t('uploading') : store.t('uploadReferencePhoto') }}</span>
+            </label>
+            <button
+              v-if="item.reference_photo_url"
+              type="button"
+              class="text-xs text-red-600 hover:underline"
+              @click="patch({ reference_photo_url: null })"
+            >
+              {{ store.t('removePhoto') }}
+            </button>
+          </div>
+          <p v-if="uploadError" class="mt-1 text-xs text-red-500">{{ uploadError }}</p>
+          <div v-if="item.reference_photo_url" class="mt-2">
+            <img :src="item.reference_photo_url" :alt="store.t('referencePhoto')" class="h-24 w-24 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
+          </div>
+        </div>
       </div>
 
       <div class="grid sm:grid-cols-2 lg:grid-cols-1 gap-2 self-start min-w-44">
@@ -105,7 +132,7 @@
             class="h-4 w-4 accent-blue-600"
             @change="patch({ is_required: checkedValue($event) })"
           />
-          Required
+          {{ store.t('requiredLabel') }}
         </label>
         <label class="option-row">
           <input
@@ -114,7 +141,7 @@
             class="h-4 w-4 accent-blue-600"
             @change="patch({ requires_photo: checkedValue($event) })"
           />
-          Requires photo
+          {{ store.t('requiresPhotoLabel') }}
         </label>
       </div>
     </div>
@@ -122,9 +149,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ArrowDown, ArrowUp, GripVertical, Trash2 } from 'lucide-vue-next'
 import type { TemplateItemDraft } from '@/stores/inspectionTemplateStore'
+import { uploadTemplateReferencePhoto } from '@/api/storage'
+import { useAppStore } from '@/stores/app'
 
 const props = defineProps<{
   item: TemplateItemDraft
@@ -141,6 +170,10 @@ const emit = defineEmits<{
   'drop-on': [index: number]
 }>()
 
+const uploadingReference = ref(false)
+const uploadError = ref('')
+const store = useAppStore()
+
 function patch(update: Partial<TemplateItemDraft>) {
   emit('update', props.index, update)
 }
@@ -153,16 +186,35 @@ function checkedValue(event: Event) {
   return (event.target as HTMLInputElement).checked
 }
 
+async function uploadReferencePhoto(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  uploadError.value = ''
+  uploadingReference.value = true
+
+  try {
+    const url = await uploadTemplateReferencePhoto(file)
+    patch({ reference_photo_url: url })
+  } catch (error: any) {
+    uploadError.value = error?.message || store.t('referencePhotoUploadFailed')
+  } finally {
+    uploadingReference.value = false
+    input.value = ''
+  }
+}
+
 const selectedCategory = computed(() =>
   props.categories.find((category) => category.id === props.item.category_id)
 )
 
 function severityLabel(severity: string) {
   return {
-    low: 'Low',
-    medium: 'Medium',
-    high: 'High',
-  }[severity] || 'Medium'
+    low: store.t('priorityLow'),
+    medium: store.t('priorityMedium'),
+    high: store.t('priorityHigh'),
+  }[severity] || store.t('priorityMedium')
 }
 
 function severityBadge(severity: string) {

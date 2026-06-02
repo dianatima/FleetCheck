@@ -46,14 +46,6 @@
         <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">If not applicable, leave blank.</p>
       </div>
     </div>
-    // Додаємо реактивну змінну для engine_hours
-    const engineHoursInput = ref("")
-    const engineHoursRequired = computed(() => {
-      // inspection.value?.template_id → треба отримати engine_hours_required з шаблону
-      // Якщо inspection.value вже містить inspection_templates, беремо звідти
-      const t = inspection.value?.inspection_templates || inspection.value?.template
-      return Boolean(t?.engine_hours_required)
-    })
     <div class="card p-4 mb-4">
       <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
         <span>{{ doneCount }} / {{ items.length }} {{ store.t('checked') }}</span>
@@ -85,7 +77,7 @@
                 <span v-if="item.requiresPhoto" class="badge-orange">Photo</span>
               </div>
               <p v-if="validationErrors[item.id]" class="text-xs text-red-500 dark:text-red-400 mt-1">{{ validationErrors[item.id] }}</p>
-              <p v-else class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ isExpanded(item.id) ? 'Hide details' : 'Open details' }}</p>
+              <p v-else class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ isExpanded(item.id) ? store.t('hideDetails') : store.t('openDetails') }}</p>
             </div>
           </button>
           <div class="flex gap-2 flex-shrink-0">
@@ -97,6 +89,12 @@
         <Transition name="slide">
           <div v-if="isExpanded(item.id)" class="mt-3 ml-7 space-y-3">
             <p v-if="item.description" class="text-sm text-gray-600 dark:text-gray-300">{{ item.description }}</p>
+            <div v-if="item.referencePhotoUrl" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-2">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">{{ store.t('referencePhoto') }}</p>
+              <button type="button" class="h-24 w-24 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700" @click="openPhotoLightbox([item.referencePhotoUrl], 0)">
+                <img :src="item.referencePhotoUrl" alt="Reference" class="h-full w-full object-cover" />
+              </button>
+            </div>
             <textarea v-model="item.comment" :placeholder="item.state === 'fail' ? store.t('describeIssue') : 'Add a comment'" rows="3" class="w-full text-sm input-field resize-none" :class="item.state === 'fail' ? 'placeholder-red-300 dark:placeholder-red-700 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10' : ''" />
             <div class="flex items-center gap-3 mt-2">
               <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
@@ -110,7 +108,7 @@
                 </div>
               </div>
             </div>
-            <p v-if="item.requiresPhoto" class="text-xs text-gray-500 dark:text-gray-400">This item requires at least one photo before submit.</p>
+            <p v-if="item.requiresPhoto" class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('requiresPhotoBeforeSubmit') }}</p>
           </div>
         </Transition>
       </div>
@@ -132,8 +130,8 @@
     <p v-if="draftMessage" class="mb-3 text-sm text-green-600 dark:text-green-400">{{ draftMessage }}</p>
     <p v-if="submitError" class="mb-3 text-sm text-red-500 dark:text-red-400">{{ submitError }}</p>
     <div class="flex gap-3 pb-4">
-      <button class="btn-secondary flex-1 py-3 text-sm" :disabled="savingDraft" @click="handleSaveDraft">{{ savingDraft ? 'Saving...' : store.t('saveDraft') }}</button>
-      <button @click="handleSubmit" class="btn-primary flex-1 py-3 text-sm">{{ store.t('submitInspection') }}</button>
+      <button class="btn-secondary flex-1 py-3 text-sm" :disabled="savingDraft || submittingInspection" @click="handleSaveDraft">{{ savingDraft ? 'Saving...' : store.t('saveDraft') }}</button>
+      <button @click="handleSubmit" class="btn-primary flex-1 py-3 text-sm" :disabled="submittingInspection || savingDraft">{{ submittingInspection ? store.t('submittingInspection') : store.t('submitInspection') }}</button>
     </div>
     <PhotoLightbox v-model="photoLightboxOpen" :photos="lightboxPhotos" :start-index="lightboxStartIndex" />
   </AppLayout>
@@ -254,7 +252,7 @@
                 {{ validationErrors[item.id] }}
               </p>
               <p v-else class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {{ isExpanded(item.id) ? 'Hide details' : 'Open details' }}
+                {{ isExpanded(item.id) ? store.t('hideDetails') : store.t('openDetails') }}
               </p>
             </div>
           </button>
@@ -282,6 +280,12 @@
             <p v-if="item.description" class="text-sm text-gray-600 dark:text-gray-300">
               {{ item.description }}
             </p>
+            <div v-if="item.referencePhotoUrl" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-2">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">{{ store.t('referencePhoto') }}</p>
+              <button type="button" class="h-24 w-24 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700" @click="openPhotoLightbox([item.referencePhotoUrl], 0)">
+                <img :src="item.referencePhotoUrl" alt="Reference" class="h-full w-full object-cover" />
+              </button>
+            </div>
 
             <textarea
               v-model="item.comment"
@@ -315,7 +319,7 @@
               </div>
             </div>
             <p v-if="item.requiresPhoto" class="text-xs text-gray-500 dark:text-gray-400">
-              This item requires at least one photo before submit.
+              {{ store.t('requiresPhotoBeforeSubmit') }}
             </p>
           </div>
         </Transition>
@@ -362,12 +366,12 @@
     <div class="flex gap-3 pb-4">
       <button
         class="btn-secondary flex-1 py-3 text-sm"
-        :disabled="savingDraft"
+        :disabled="savingDraft || submittingInspection"
         @click="handleSaveDraft"
       >
         {{ savingDraft ? 'Saving...' : store.t('saveDraft') }}
       </button>
-      <button @click="handleSubmit" class="btn-primary flex-1 py-3 text-sm">{{ store.t('submitInspection') }}</button>
+      <button @click="handleSubmit" class="btn-primary flex-1 py-3 text-sm" :disabled="submittingInspection || savingDraft">{{ submittingInspection ? store.t('submittingInspection') : store.t('submitInspection') }}</button>
     </div>
 
         <PhotoLightbox
@@ -393,6 +397,7 @@ import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { formatDateTime } from '@/lib/dateFormat'
 import { readSignatureFallback, readSignatureFallbackFromDb } from '@/lib/signatureFallback'
 import { analyzeAndStoreInspectionPhotos } from '@/lib/photoFraud'
+import { normalizePhotoUrls } from '@/lib/photoUrls'
 
 function isMissingSignatureColumnsError(message?: string | null) {
   const value = String(message || '').toLowerCase()
@@ -414,6 +419,7 @@ interface Item {
   id: string
   title: string
   description: string | null
+  referencePhotoUrl: string | null
   category: string | null
   categorySeverity: 'low' | 'medium' | 'high'
   isRequired: boolean
@@ -438,6 +444,7 @@ const items = reactive<Item[]>([])
 const expandedIds = ref<Set<string>>(new Set())
 const validationErrors = ref<Record<string, string>>({})
 const savingDraft = ref(false)
+const submittingInspection = ref(false)
 const draftMessage = ref('')
 const photoLightboxOpen = ref(false)
 const lightboxPhotos = ref<string[]>([])
@@ -456,6 +463,8 @@ const initialInspectionOdometer = ref<number | null>(null)
 const submitError = ref('')
 const isSignatureDrawing = ref(false)
 const signatureLastPoint = ref<{ x: number; y: number } | null>(null)
+const engineHoursInput = ref('')
+const engineHoursRequired = ref(false)
 
 const isModalInspection = computed(() => String(route.query.modal || '') === '1')
 
@@ -770,6 +779,7 @@ async function loadInspectionItems() {
       inspection_template_items (
         title,
         description,
+        reference_photo_url,
         category_id,
         inspection_item_categories (
           id,
@@ -788,9 +798,7 @@ async function loadInspectionItems() {
   const fallbackUploadedAt = inspectionData?.created_at || new Date().toISOString()
   const metadataSeed: Record<string, UploadedPhotoMeta[]> = {}
   const mappedItems = data.map((result: any) => {
-    const loadedPhotos = Array.isArray(result.photo_urls)
-      ? result.photo_urls.filter((value: unknown) => typeof value === 'string' && value)
-      : []
+    const loadedPhotos = normalizePhotoUrls(result.photo_urls)
 
     metadataSeed[result.id] = loadedPhotos.map((dataUrl: string) => ({
       dataUrl,
@@ -804,6 +812,7 @@ async function loadInspectionItems() {
       id: result.id,
       title: result.inspection_template_items?.title || 'Checklist item',
       description: result.inspection_template_items?.description || null,
+      referencePhotoUrl: result.inspection_template_items?.reference_photo_url || null,
       category: result.inspection_template_items?.inspection_item_categories?.name || null,
       categorySeverity:
         result.inspection_template_items?.inspection_item_categories?.severity || 'medium',
@@ -1006,54 +1015,61 @@ function closeInspectionView() {
 }
 
 async function handleSubmit() {
+  if (submittingInspection.value) return
+
   const inspectionId = String(route.query.inspectionId || '')
   const vehicleId = String(route.query.vehicleId || '')
   submitError.value = ''
+  submittingInspection.value = true
 
-  if (inspectionId && vehicleId) {
-    if (!signatureDataUrl.value) {
-      signatureError.value = 'Driver signature is required before submit.'
-      return
-    }
-    if (!validateOdometer(true)) return
-    if (!await validateOdometerJumpOnSubmit(vehicleId, inspectionId)) return
-    if (!validateInspection()) return
-    const odometerReading = parseOdometerInput()
-    await saveInspectionResults()
-    await createIssuesForFailedResults(inspectionId)
-
-    const completed = await vehicleStore.completeInspection(
-      inspectionId,
-      vehicleId,
-      inspectionType.value,
-      failCount.value > 0,
-      signatureDataUrl.value,
-      odometerReading
-    )
-
-    if (!completed) {
-      const errMsg = vehicleStore.error || 'Inspection could not be completed. Please try again.'
-      if (errMsg.toLowerCase().includes('odometer')) {
-        odometerError.value = errMsg
-        nextTick(() => {
-          document.querySelector<HTMLElement>('.input-field')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        })
-      } else {
-        submitError.value = errMsg
+  try {
+    if (inspectionId && vehicleId) {
+      if (!signatureDataUrl.value) {
+        signatureError.value = 'Driver signature is required before submit.'
+        return
       }
-      return
+      if (!validateOdometer(true)) return
+      if (!await validateOdometerJumpOnSubmit(vehicleId, inspectionId)) return
+      if (!validateInspection()) return
+      const odometerReading = parseOdometerInput()
+      await saveInspectionResults()
+      await createIssuesForFailedResults(inspectionId)
+
+      const completed = await vehicleStore.completeInspection(
+        inspectionId,
+        vehicleId,
+        inspectionType.value,
+        failCount.value > 0,
+        signatureDataUrl.value,
+        odometerReading
+      )
+
+      if (!completed) {
+        const errMsg = vehicleStore.error || 'Inspection could not be completed. Please try again.'
+        if (errMsg.toLowerCase().includes('odometer')) {
+          odometerError.value = errMsg
+          nextTick(() => {
+            document.querySelector<HTMLElement>('.input-field')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          })
+        } else {
+          submitError.value = errMsg
+        }
+        return
+      }
+
+      try {
+        await runPhotoFraudAnalysis(inspectionId)
+      } catch (fraudError) {
+        // Anti-fraud must not block report submission, but the error is logged for diagnostics.
+        console.warn('[PreTripInspection] photo fraud analysis failed', fraudError)
+      }
     }
 
-    try {
-      await runPhotoFraudAnalysis(inspectionId)
-    } catch (fraudError) {
-      // Anti-fraud must not block report submission, but the error is logged for diagnostics.
-      console.warn('[PreTripInspection] photo fraud analysis failed', fraudError)
-    }
+    store.setInspectionResult(failCount.value > 0 ? 'fail' : 'pass')
+    router.push(inspectionId ? `/inspect/result?inspectionId=${inspectionId}` : '/inspect/result')
+  } finally {
+    submittingInspection.value = false
   }
-
-  store.setInspectionResult(failCount.value > 0 ? 'fail' : 'pass')
-  router.push(inspectionId ? `/inspect/result?inspectionId=${inspectionId}` : '/inspect/result')
 }
 
 async function handleSaveDraft() {

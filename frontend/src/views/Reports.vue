@@ -208,7 +208,16 @@
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
-                  <Truck :size="13" class="text-gray-400 flex-shrink-0" />
+                  <div class="h-9 w-9 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+                    <img
+                      v-if="r.thumbnailUrl"
+                      :src="r.thumbnailUrl"
+                      alt=""
+                      class="h-full w-full object-cover"
+                      @error="hideBrokenThumb"
+                    />
+                    <Truck v-else :size="13" class="text-gray-400" />
+                  </div>
                   <span
                     class="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap"
                     >{{ r.vehicle }}</span
@@ -323,6 +332,16 @@
               <p class="mobile-card-meta">{{ r.driver }} · {{ typeLabel(r.type) }}</p>
               <p class="mobile-card-meta">{{ r.date }}</p>
             </div>
+            <div class="h-12 w-12 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+              <img
+                v-if="r.thumbnailUrl"
+                :src="r.thumbnailUrl"
+                alt=""
+                class="h-full w-full object-cover"
+                @error="hideBrokenThumb"
+              />
+              <Truck v-else :size="15" class="text-gray-400" />
+            </div>
             <span :class="resultBadge(r)" class="flex-shrink-0 text-xs">
               {{ resultLabel(r) }}
             </span>
@@ -414,6 +433,7 @@ import { supabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/dateFormat";
 import { downloadInspectionReportPdf } from "@/lib/reportPdf";
 import { analyzeAndStoreInspectionPhotos } from "@/lib/photoFraud";
+import { firstUsablePhotoUrl, normalizePhotoUrls } from "@/lib/photoUrls";
 
 type ReportResult = "pass" | "fail" | "draft";
 type ReviewStatus =
@@ -431,6 +451,7 @@ interface Report {
   date: string;
   vehicle: string;
   driver: string;
+  thumbnailUrl: string | null;
   type: "pre-trip" | "post-trip";
   result: ReportResult;
   reviewStatus: ReviewStatus;
@@ -530,7 +551,8 @@ async function fetchReports() {
         unit,
         make,
         model,
-        plate
+        plate,
+        photo_url
       ),
       drivers!inspections_driver_id_fkey (
         id,
@@ -655,7 +677,7 @@ async function fetchReports() {
 function collectInspectionPhotos(inspection: any) {
   const rows = normalizeRelationArray(inspection?.inspection_results);
   return rows.flatMap((row: any) => {
-    const photos = Array.isArray(row?.photo_urls) ? row.photo_urls.filter(Boolean) : [];
+    const photos = normalizePhotoUrls(row?.photo_urls);
     return photos.map((url: string, photoIndex: number) => ({
       inspectionResultId: row.id,
       photoIndex,
@@ -691,8 +713,12 @@ function toReport(
   const issues = normalizeRelationArray(inspection.issues);
   const failed = results.some((row: any) => row.result === "fail");
   const photos = results.reduce(
-    (count: number, row: any) => count + (row.photo_urls?.length || 0),
+    (count: number, row: any) => count + normalizePhotoUrls(row.photo_urls).length,
     0,
+  );
+  const thumbnailUrl = firstUsablePhotoUrl(
+    vehicle?.photo_url,
+    ...results.map((row: any) => row.photo_urls),
   );
   const vehicleName = `${vehicle?.make || ""} ${vehicle?.model || ""}`.trim();
 
@@ -711,6 +737,7 @@ function toReport(
         .filter(Boolean)
         .join(" · ") || "-",
     driver: driver?.name || "-",
+    thumbnailUrl,
     type: inspection.type === "post-trip" ? "post-trip" : "pre-trip",
     status: inspection.status,
     result: inspection.status === "draft" ? "draft" : failed ? "fail" : "pass",
@@ -749,6 +776,10 @@ function viewReport(report: Report) {
 
 function reviewIssue(report: Report) {
   if (report.reviewIssueId) router.push(`/issues/${report.reviewIssueId}`);
+}
+
+function hideBrokenThumb(event: Event) {
+  (event.target as HTMLImageElement).style.display = "none";
 }
 
 function clearVehicleFilter() {

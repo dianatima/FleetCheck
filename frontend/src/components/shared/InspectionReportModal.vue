@@ -31,6 +31,35 @@
                 {{ store.t('delete') }} {{ store.t('inspectionLabel') }}
               </button>
             </div>
+            <div class="flex flex-wrap justify-end gap-2 mb-3">
+              <button
+                type="button"
+                class="btn-secondary px-3 py-2 rounded-lg text-sm font-semibold"
+                :disabled="pdfAction === 'preview'"
+                @click="runPdfAction('preview')"
+              >
+                <Eye :size="14" /> {{ pdfAction === 'preview' ? 'Opening...' : 'Preview PDF' }}
+              </button>
+              <button
+                type="button"
+                class="btn-secondary px-3 py-2 rounded-lg text-sm font-semibold"
+                :disabled="pdfAction === 'share'"
+                @click="runPdfAction('share')"
+              >
+                <Share2 :size="14" /> {{ pdfAction === 'share' ? 'Sharing...' : 'Share copy' }}
+              </button>
+              <button
+                type="button"
+                class="btn-secondary px-3 py-2 rounded-lg text-sm font-semibold"
+                :disabled="pdfAction === 'download'"
+                @click="runPdfAction('download')"
+              >
+                <Download :size="14" /> {{ pdfAction === 'download' ? 'Preparing PDF...' : 'Download PDF' }}
+              </button>
+            </div>
+            <div v-if="pdfError" class="mb-3 text-xs text-red-500">
+              {{ pdfError }}
+            </div>
             <Teleport to="body">
               <div v-if="showDeleteModal" class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
                 <div class="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl border border-gray-200 dark:border-gray-700">
@@ -86,7 +115,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { X } from 'lucide-vue-next'
+import { Download, Eye, Share2, X } from 'lucide-vue-next'
 import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/authStore'
@@ -94,6 +123,8 @@ import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
 import { readSignatureFallback, readSignatureFallbackFromDb } from '@/lib/signatureFallback'
 import { analyzeAndStoreInspectionPhotos } from '@/lib/photoFraud'
+import { downloadInspectionReportPdf, previewInspectionReportPdf, shareInspectionReportPdf } from '@/lib/reportPdf'
+import { normalizePhotoUrls } from '@/lib/photoUrls'
 
 function isMissingSignatureColumnsError(message?: string | null) {
   const value = String(message || '').toLowerCase()
@@ -129,6 +160,8 @@ const showDeleteModal = ref(false)
 const deleteEmail = ref('')
 const deletePassword = ref('')
 const deleteError = ref('')
+const pdfAction = ref<'download' | 'preview' | 'share' | null>(null)
+const pdfError = ref('')
 
 const canViewFraudInsights = computed(() => authStore.role !== 'driver')
 
@@ -350,6 +383,31 @@ async function handleDelete() {
   }
 }
 
+async function runPdfAction(action: 'download' | 'preview' | 'share') {
+  if (!inspection.value?.id) return
+
+  pdfAction.value = action
+  pdfError.value = ''
+
+  try {
+    if (action === 'preview') {
+      const previewWindow = window.open('', '_blank', 'noopener,noreferrer')
+      if (!previewWindow) {
+        throw new Error('Popup blocked. Allow popups to preview the PDF.')
+      }
+      await previewInspectionReportPdf(inspection.value.id, store.language, previewWindow)
+    } else if (action === 'share') {
+      await shareInspectionReportPdf(inspection.value.id, store.language)
+    } else {
+      await downloadInspectionReportPdf(inspection.value.id, store.language)
+    }
+  } catch (actionError: any) {
+    pdfError.value = actionError?.message || 'Report PDF action failed.'
+  } finally {
+    pdfAction.value = null
+  }
+}
+
 function findPhotoVerification(inspectionResultId: string, photoIndex: number) {
   return photoVerifications.value.find(
     (row) => row.inspection_result_id === inspectionResultId && Number(row.photo_index) === photoIndex
@@ -547,7 +605,7 @@ async function fetchInspection(inspectionId: string) {
   results.value = relationArray(data.inspection_results)
     .map((row: any) => {
       const item = relation(row.inspection_template_items)
-      const photoUrls = (row.photo_urls || []).filter(Boolean)
+      const photoUrls = normalizePhotoUrls(row.photo_urls)
       return {
         id: row.id,
         title: item?.title || 'Checklist item',

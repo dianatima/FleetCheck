@@ -125,19 +125,55 @@
       </div>
     </div>
 
+    <div v-if="allPhotos.length" class="card mb-5">
+      <div class="flex items-center gap-2 p-4 border-b border-gray-100 dark:border-gray-700">
+        <FileText :size="16" class="text-blue-500" />
+        <h3 class="font-semibold text-gray-900 dark:text-white text-sm">{{ store.t('photos') }}</h3>
+      </div>
+      <div class="p-4 flex flex-wrap gap-2">
+        <button
+          v-for="(photo, index) in allPhotos"
+          :key="`all-photo-${index}`"
+          type="button"
+          class="photo-thumb photo-thumb-neutral"
+          @click="openPhotoLightbox(allPhotos, index)"
+        >
+          <img :src="photo" alt="" class="w-full h-full object-cover" />
+        </button>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="space-y-3 pb-4">
       <div v-if="pdfError" class="card p-3 text-sm text-red-500">
         {{ pdfError }}
       </div>
-      <button
-        type="button"
-        class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex"
-        :disabled="downloading"
-        @click="downloadPdf"
-      >
-        <Download :size="16" /> {{ downloading ? 'Preparing PDF...' : 'Download PDF' }}
-      </button>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <button
+          type="button"
+          class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex"
+          :disabled="pdfAction === 'preview'"
+          @click="runPdfAction('preview')"
+        >
+          <Eye :size="16" /> {{ pdfAction === 'preview' ? 'Opening...' : 'Preview PDF' }}
+        </button>
+        <button
+          type="button"
+          class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex"
+          :disabled="pdfAction === 'share'"
+          @click="runPdfAction('share')"
+        >
+          <Share2 :size="16" /> {{ pdfAction === 'share' ? 'Sharing...' : 'Share copy' }}
+        </button>
+        <button
+          type="button"
+          class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex"
+          :disabled="pdfAction === 'download'"
+          @click="runPdfAction('download')"
+        >
+          <Download :size="16" /> {{ pdfAction === 'download' ? 'Preparing PDF...' : 'Download PDF' }}
+        </button>
+      </div>
       <RouterLink :to="reportLink" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
         <FileText :size="16" /> {{ store.t('viewFullReport') }}
       </RouterLink>
@@ -160,21 +196,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { CheckCircle, AlertTriangle, Download, FileText, RotateCcw, Truck, ExternalLink } from 'lucide-vue-next'
+import { CheckCircle, AlertTriangle, Download, Eye, FileText, RotateCcw, Share2, Truck, ExternalLink } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '../components/layout/AppLayout.vue'
 import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { formatDateTime } from '@/lib/dateFormat'
-import { downloadInspectionReportPdf } from '@/lib/reportPdf'
+import { downloadInspectionReportPdf, previewInspectionReportPdf, shareInspectionReportPdf } from '@/lib/reportPdf'
+import { normalizePhotoUrls } from '@/lib/photoUrls'
 
 const store = useAppStore()
 const authStore = useAuthStore()
 const route = useRoute()
 const inspection = ref<any | null>(null)
 const results = ref<any[]>([])
-const downloading = ref(false)
+const pdfAction = ref<'download' | 'preview' | 'share' | null>(null)
 const pdfError = ref<string | null>(null)
 const photoLightboxOpen = ref(false)
 const lightboxPhotos = ref<string[]>([])
@@ -190,13 +227,22 @@ const failedItems = computed(() =>
       item: row.inspection_template_items?.title || 'Checklist item',
       requiresPhoto: Boolean(row.inspection_template_items?.requires_photo),
       comment: row.comment || '',
-      photos: row.photo_urls || [],
+      photos: normalizePhotoUrls(row.photo_urls),
     }))
 )
+const allPhotos = computed(() => {
+  const unique = new Set<string>()
+  for (const row of results.value) {
+    for (const photo of normalizePhotoUrls(row.photo_urls)) {
+      unique.add(photo)
+    }
+  }
+  return [...unique]
+})
 const passed = computed(() => results.value.length ? failedItems.value.length === 0 : store.inspectionResult !== 'fail')
 const passCount = computed(() => results.value.filter((row) => row.result === 'pass').length)
 const naCount = computed(() => results.value.filter((row) => row.result === 'not_applicable').length)
-const photoCount = computed(() => results.value.reduce((count, row) => count + (row.photo_urls?.length || 0), 0))
+const photoCount = computed(() => allPhotos.value.length)
 const vehicle = computed(() => {
   return Array.isArray(inspection.value?.vehicles) ? inspection.value.vehicles[0] : inspection.value?.vehicles
 })
@@ -291,17 +337,27 @@ async function loadInspectionResult() {
   results.value = data || []
 }
 
-async function downloadPdf() {
+async function runPdfAction(action: 'download' | 'preview' | 'share') {
   if (!inspection.value?.id) return
-  downloading.value = true
+  pdfAction.value = action
   pdfError.value = null
 
   try {
-    await downloadInspectionReportPdf(inspection.value.id, store.language)
+    if (action === 'preview') {
+      const previewWindow = window.open('', '_blank', 'noopener,noreferrer')
+      if (!previewWindow) {
+        throw new Error('Popup blocked. Allow popups to preview the PDF.')
+      }
+      await previewInspectionReportPdf(inspection.value.id, store.language, previewWindow)
+    } else if (action === 'share') {
+      await shareInspectionReportPdf(inspection.value.id, store.language)
+    } else {
+      await downloadInspectionReportPdf(inspection.value.id, store.language)
+    }
   } catch (downloadError: any) {
-    pdfError.value = downloadError?.message || 'Report PDF could not be downloaded.'
+    pdfError.value = downloadError?.message || 'Report PDF action failed.'
   } finally {
-    downloading.value = false
+    pdfAction.value = null
   }
 }
 
@@ -345,5 +401,9 @@ function openPhotoLightbox(photos: string[] | null | undefined, index = 0) {
 
 .photo-thumb {
   @apply w-20 h-20 rounded-lg overflow-hidden border border-red-100 bg-red-50 cursor-pointer transition-all hover:ring-2 hover:ring-blue-500 hover:opacity-90 dark:border-red-900/40 dark:bg-red-900/10;
+}
+
+.photo-thumb-neutral {
+  @apply border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800;
 }
 </style>

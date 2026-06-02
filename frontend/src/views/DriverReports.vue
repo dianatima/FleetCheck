@@ -75,7 +75,16 @@
               <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ r.date }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
-                  <Truck :size="13" class="text-gray-400 flex-shrink-0" />
+                  <div class="h-9 w-9 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+                    <img
+                      v-if="r.thumbnailUrl"
+                      :src="r.thumbnailUrl"
+                      alt=""
+                      class="h-full w-full object-cover"
+                      @error="hideBrokenThumb"
+                    />
+                    <Truck v-else :size="13" class="text-gray-400" />
+                  </div>
                   <span class="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ r.vehicle }}</span>
                 </div>
               </td>
@@ -155,6 +164,16 @@
             <div class="min-w-0">
               <p class="mobile-card-title truncate">{{ r.vehicle }}</p>
               <p class="mobile-card-meta">{{ typeLabel(r.type) }} · {{ r.date }}</p>
+            </div>
+            <div class="h-12 w-12 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+              <img
+                v-if="r.thumbnailUrl"
+                :src="r.thumbnailUrl"
+                alt=""
+                class="h-full w-full object-cover"
+                @error="hideBrokenThumb"
+              />
+              <Truck v-else :size="15" class="text-gray-400" />
             </div>
             <span :class="resultBadge(r)" class="flex-shrink-0 text-xs">
               {{ resultLabel(r) }}
@@ -238,6 +257,7 @@ import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
 import { downloadInspectionReportPdf } from '@/lib/reportPdf'
+import { firstUsablePhotoUrl, normalizePhotoUrls } from '@/lib/photoUrls'
 
 const store = useAppStore()
 const authStore = useAuthStore()
@@ -264,6 +284,7 @@ interface Report {
   createdAt: string
   vehicle: string
   driver: string
+  thumbnailUrl: string | null
   type: 'pre-trip' | 'post-trip'
   result: 'pass' | 'fail' | 'draft'
   issues: number
@@ -310,7 +331,8 @@ async function fetchReports() {
         unit,
         make,
         model,
-        plate
+        plate,
+        photo_url
       ),
       inspection_results (
         id,
@@ -340,8 +362,12 @@ async function fetchReports() {
       const results = normalizeRelationArray(inspection.inspection_results)
       const issues = normalizeRelationArray(inspection.issues)
       const failed = results.some((row: any) => row.result === 'fail')
-      const photos = results.reduce((count: number, row: any) => count + (row.photo_urls?.length || 0), 0)
+      const photos = results.reduce((count: number, row: any) => count + normalizePhotoUrls(row.photo_urls).length, 0)
       const name = `${vehicle?.make || ''} ${vehicle?.model || ''}`.trim()
+      const thumbnailUrl = firstUsablePhotoUrl(
+        vehicle?.photo_url,
+        ...results.map((row: any) => row.photo_urls)
+      )
       const driverName = [
         authStore.profile?.first_name,
         authStore.profile?.last_name,
@@ -354,6 +380,7 @@ async function fetchReports() {
         date: formatDate(inspection.submitted_at || inspection.created_at),
         vehicle: [name, vehicle?.unit ? `#${vehicle.unit}` : '', vehicle?.plate || ''].filter(Boolean).join(' · ') || '—',
         driver: driverName,
+        thumbnailUrl,
         type: inspection.type === 'post-trip' ? 'post-trip' : 'pre-trip',
         status: inspection.status,
         result: inspection.status === 'draft' ? 'draft' : failed ? 'fail' : 'pass',
@@ -379,6 +406,10 @@ function continueDraft(r: Report) {
 
 function viewReport(r: Report) {
   router.push(`/driver/reports/${r.id}`)
+}
+
+function hideBrokenThumb(event: Event) {
+  ;(event.target as HTMLImageElement).style.display = 'none'
 }
 
 async function openInspectionModal(r: Report) {

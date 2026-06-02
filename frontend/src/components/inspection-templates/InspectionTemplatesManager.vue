@@ -6,6 +6,9 @@
         <p class="section-description">
           Manage reusable inspection templates for different vehicle types.
         </p>
+        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+          Current company: {{ authStore.companyName || 'Not selected' }}
+        </p>
       </div>
     </div>
 
@@ -184,6 +187,11 @@ onMounted(async () => {
 watch(
   () => authStore.companyId,
   async (companyId) => {
+    localSearch.value = ''
+    templateStore.search = ''
+    templateStore.vehicleTypeFilter = 'all'
+    templateStore.page = 1
+
     if (companyId) await templateStore.fetchTemplates()
   },
   { immediate: true }

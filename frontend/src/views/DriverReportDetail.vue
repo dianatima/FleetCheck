@@ -5,16 +5,35 @@
         <ArrowLeft :size="16" />
         Back to Reports
       </RouterLink>
-      <button
-        v-if="inspection"
-        type="button"
-        class="btn-secondary gap-2 text-sm"
-        :disabled="downloading"
-        @click="downloadPdf"
-      >
-        <Download :size="15" />
-        {{ downloading ? 'Preparing PDF...' : 'Download PDF' }}
-      </button>
+      <div v-if="inspection" class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          class="btn-secondary gap-2 text-sm"
+          :disabled="pdfAction === 'preview'"
+          @click="runPdfAction('preview')"
+        >
+          <Eye :size="15" />
+          {{ pdfAction === 'preview' ? 'Opening...' : 'Preview PDF' }}
+        </button>
+        <button
+          type="button"
+          class="btn-secondary gap-2 text-sm"
+          :disabled="pdfAction === 'share'"
+          @click="runPdfAction('share')"
+        >
+          <Share2 :size="15" />
+          {{ pdfAction === 'share' ? 'Sharing...' : 'Share copy' }}
+        </button>
+        <button
+          type="button"
+          class="btn-secondary gap-2 text-sm"
+          :disabled="pdfAction === 'download'"
+          @click="runPdfAction('download')"
+        >
+          <Download :size="15" />
+          {{ pdfAction === 'download' ? 'Preparing PDF...' : 'Download PDF' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="card p-6 text-sm text-gray-500">
@@ -106,13 +125,13 @@
               {{ row.comment }}
             </p>
 
-            <div v-if="row.photo_urls?.length" class="mt-3 flex flex-wrap gap-2">
+            <div v-if="(row.photo_urls_normalized || row.photo_urls)?.length" class="mt-3 flex flex-wrap gap-2">
               <button
-                v-for="(url, index) in row.photo_urls"
+                v-for="(url, index) in (row.photo_urls_normalized || row.photo_urls)"
                 :key="`${row.id}-${index}`"
                 type="button"
                 class="photo-thumb"
-                @click="openPhotoLightbox(row.photo_urls, index)"
+                @click="openPhotoLightbox(row.photo_urls_normalized || row.photo_urls, index)"
               >
                 <img :src="url" alt="" class="w-full h-full object-cover" />
               </button>
@@ -138,13 +157,13 @@
               </div>
             </div>
             <p v-if="issue.description" class="text-sm text-gray-600 dark:text-gray-300 mt-2">{{ issue.description }}</p>
-            <div v-if="issue.photo_urls?.length" class="mt-3 flex flex-wrap gap-2">
+            <div v-if="(issue.photo_urls_normalized || issue.photo_urls)?.length" class="mt-3 flex flex-wrap gap-2">
               <button
-                v-for="(url, index) in issue.photo_urls"
+                v-for="(url, index) in (issue.photo_urls_normalized || issue.photo_urls)"
                 :key="`${issue.id}-${index}`"
                 type="button"
                 class="photo-thumb"
-                @click="openPhotoLightbox(issue.photo_urls, index)"
+                @click="openPhotoLightbox(issue.photo_urls_normalized || issue.photo_urls, index)"
               >
                 <img :src="url" alt="" class="w-full h-full object-cover" />
               </button>
@@ -165,14 +184,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, ChevronRight, Download, Truck } from 'lucide-vue-next'
+import { ArrowLeft, ChevronRight, Download, Eye, Share2, Truck } from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PhotoLightbox from '@/components/shared/PhotoLightbox.vue'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
-import { downloadInspectionReportPdf } from '@/lib/reportPdf'
+import { downloadInspectionReportPdf, previewInspectionReportPdf, shareInspectionReportPdf } from '@/lib/reportPdf'
+import { normalizePhotoUrls } from '@/lib/photoUrls'
 
 const route = useRoute()
 const store = useAppStore()
@@ -182,7 +202,7 @@ const results = ref<any[]>([])
 const issues = ref<any[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
-const downloading = ref(false)
+const pdfAction = ref<'download' | 'preview' | 'share' | null>(null)
 const photoLightboxOpen = ref(false)
 const lightboxPhotos = ref<string[]>([])
 const lightboxStartIndex = ref(0)
@@ -192,7 +212,7 @@ onMounted(loadReport)
 
 const passed = computed(() => results.value.every((row) => row.result !== 'fail'))
 const photoCount = computed(() =>
-  results.value.reduce((count, row) => count + (row.photo_urls?.length || 0), 0)
+  results.value.reduce((count, row) => count + ((row.photo_urls_normalized || row.photo_urls || []).length || 0), 0)
 )
 const vehicle = computed(() => {
   return Array.isArray(inspection.value?.vehicles) ? inspection.value.vehicles[0] : inspection.value?.vehicles
@@ -303,11 +323,19 @@ async function loadReport() {
   }
 
   inspection.value = data
-  results.value = [...(data.inspection_results || [])].sort(
-    (a: any, b: any) =>
-      (a.inspection_template_items?.sort_order || 0) - (b.inspection_template_items?.sort_order || 0)
-  )
-  issues.value = data.issues || []
+  results.value = [...(data.inspection_results || [])]
+    .map((row: any) => ({
+      ...row,
+      photo_urls_normalized: normalizePhotoUrls(row.photo_urls),
+    }))
+    .sort(
+      (a: any, b: any) =>
+        (a.inspection_template_items?.sort_order || 0) - (b.inspection_template_items?.sort_order || 0)
+    )
+  issues.value = (data.issues || []).map((issue: any) => ({
+    ...issue,
+    photo_urls_normalized: normalizePhotoUrls(issue.photo_urls),
+  }))
   loading.value = false
 }
 
@@ -315,17 +343,27 @@ function formatDate(value: string | null) {
   return formatDateTime(value, store.language)
 }
 
-async function downloadPdf() {
+async function runPdfAction(action: 'download' | 'preview' | 'share') {
   if (!inspection.value?.id) return
-  downloading.value = true
+  pdfAction.value = action
   error.value = null
 
   try {
-    await downloadInspectionReportPdf(inspection.value.id, store.language)
+    if (action === 'preview') {
+      const previewWindow = window.open('', '_blank', 'noopener,noreferrer')
+      if (!previewWindow) {
+        throw new Error('Popup blocked. Allow popups to preview the PDF.')
+      }
+      await previewInspectionReportPdf(inspection.value.id, store.language, previewWindow)
+    } else if (action === 'share') {
+      await shareInspectionReportPdf(inspection.value.id, store.language)
+    } else {
+      await downloadInspectionReportPdf(inspection.value.id, store.language)
+    }
   } catch (downloadError: any) {
-    error.value = downloadError?.message || 'Report PDF could not be downloaded.'
+    error.value = downloadError?.message || 'Report PDF action failed.'
   } finally {
-    downloading.value = false
+    pdfAction.value = null
   }
 }
 

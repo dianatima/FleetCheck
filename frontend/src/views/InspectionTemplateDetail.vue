@@ -165,6 +165,7 @@ watch(
       category_id: item.category_id || '',
       is_required: Boolean(item.is_required),
       requires_photo: Boolean(item.requires_photo),
+      reference_photo_url: item.reference_photo_url || null,
       sort_order: index + 1,
     }))
   },
@@ -184,6 +185,7 @@ function addItem() {
     category_id: templateStore.itemCategories[0]?.id || '',
     is_required: true,
     requires_photo: false,
+    reference_photo_url: null,
     sort_order: items.value.length + 1,
   })
 }

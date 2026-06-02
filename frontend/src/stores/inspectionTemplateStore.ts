@@ -10,6 +10,7 @@ export type TemplateItemDraft = {
   category_id: string
   is_required: boolean
   requires_photo: boolean
+  reference_photo_url: string | null
   sort_order: number
 }
 
@@ -29,6 +30,93 @@ const templateSelect = `
   vehicle_type_id,
   is_default,
   engine_hours_required,
+  created_at,
+  vehicle_types (
+    id,
+    name
+  ),
+  inspection_template_items (
+    id,
+    title,
+    description,
+    category_id,
+    is_required,
+    requires_photo,
+    reference_photo_url,
+    sort_order,
+    inspection_item_categories (
+      id,
+      name,
+      severity
+    )
+  )
+`
+
+const templateSelectNoReferencePhoto = `
+  id,
+  company_id,
+  name,
+  description,
+  vehicle_type_id,
+  is_default,
+  engine_hours_required,
+  created_at,
+  vehicle_types (
+    id,
+    name
+  ),
+  inspection_template_items (
+    id,
+    title,
+    description,
+    category_id,
+    is_required,
+    requires_photo,
+    sort_order,
+    inspection_item_categories (
+      id,
+      name,
+      severity
+    )
+  )
+`
+
+const templateSelectNoEngineHours = `
+  id,
+  company_id,
+  name,
+  description,
+  vehicle_type_id,
+  is_default,
+  created_at,
+  vehicle_types (
+    id,
+    name
+  ),
+  inspection_template_items (
+    id,
+    title,
+    description,
+    category_id,
+    is_required,
+    requires_photo,
+    reference_photo_url,
+    sort_order,
+    inspection_item_categories (
+      id,
+      name,
+      severity
+    )
+  )
+`
+
+const templateSelectLegacy = `
+  id,
+  company_id,
+  name,
+  description,
+  vehicle_type_id,
+  is_default,
   created_at,
   vehicle_types (
     id,
@@ -64,10 +152,40 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
   const page = ref(1)
   const pageSize = ref(10)
   const total = ref(0)
+  const hasEngineHoursColumn = ref(true)
+  const hasReferencePhotoColumn = ref(true)
 
   const totalPages = computed(() =>
     Math.max(1, Math.ceil(total.value / pageSize.value))
   )
+
+  function isMissingReferencePhotoColumnError(message?: string | null) {
+    return String(message || '').toLowerCase().includes('reference_photo_url')
+  }
+
+  function isMissingEngineHoursColumnError(message?: string | null) {
+    return String(message || '').toLowerCase().includes('engine_hours_required')
+  }
+
+  function currentTemplateSelect() {
+    if (hasEngineHoursColumn.value && hasReferencePhotoColumn.value) return templateSelect
+    if (hasEngineHoursColumn.value && !hasReferencePhotoColumn.value) return templateSelectNoReferencePhoto
+    if (!hasEngineHoursColumn.value && hasReferencePhotoColumn.value) return templateSelectNoEngineHours
+    return templateSelectLegacy
+  }
+
+  function normalizeTemplateItemColumns(template: any) {
+    if (!template) return template
+
+    return {
+      ...template,
+      engine_hours_required: !!template?.engine_hours_required,
+      inspection_template_items: (template.inspection_template_items || []).map((item: any) => ({
+        ...item,
+        reference_photo_url: item?.reference_photo_url || null,
+      })),
+    }
+  }
 
   async function fetchVehicleTypes() {
     const { data, error: typesError } = await supabase
@@ -136,34 +254,109 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return
     }
 
-    const from = (page.value - 1) * pageSize.value
-    const to = from + pageSize.value - 1
-    let query = supabase
-      .from('inspection_templates')
-      .select(templateSelect, { count: 'exact' })
-      .eq('company_id', authStore.companyId)
-      .order('created_at', { ascending: false })
-
-    if (vehicleTypeFilter.value !== 'all') {
-      query = query.eq('vehicle_type_id', vehicleTypeFilter.value)
-    }
-
     const searchValue = search.value.trim()
 
-    if (searchValue) {
-      query = query.or(
-        `name.ilike.%${searchValue}%,description.ilike.%${searchValue}%`
-      )
+    async function runTemplatesQuery(options: {
+      useSearch: boolean
+      useVehicleType: boolean
+      requestedPage: number
+    }) {
+      const from = (options.requestedPage - 1) * pageSize.value
+      const to = from + pageSize.value - 1
+
+      let query = supabase
+        .from('inspection_templates')
+        .select(currentTemplateSelect(), { count: 'exact' })
+        .eq('company_id', authStore.companyId)
+        .order('created_at', { ascending: false })
+
+      if (options.useVehicleType && vehicleTypeFilter.value !== 'all') {
+        query = query.eq('vehicle_type_id', vehicleTypeFilter.value)
+      }
+
+      if (options.useSearch && searchValue) {
+        query = query.or(`name.ilike.%${searchValue}%,description.ilike.%${searchValue}%`)
+      }
+
+      let response = await query.range(from, to)
+
+      if (response.error && isMissingEngineHoursColumnError(response.error.message)) {
+        hasEngineHoursColumn.value = false
+
+        let retryQuery = supabase
+          .from('inspection_templates')
+          .select(currentTemplateSelect(), { count: 'exact' })
+          .eq('company_id', authStore.companyId)
+          .order('created_at', { ascending: false })
+
+        if (options.useVehicleType && vehicleTypeFilter.value !== 'all') {
+          retryQuery = retryQuery.eq('vehicle_type_id', vehicleTypeFilter.value)
+        }
+
+        if (options.useSearch && searchValue) {
+          retryQuery = retryQuery.or(`name.ilike.%${searchValue}%,description.ilike.%${searchValue}%`)
+        }
+
+        response = await retryQuery.range(from, to)
+      }
+
+      if (response.error && isMissingReferencePhotoColumnError(response.error.message)) {
+        hasReferencePhotoColumn.value = false
+
+        let retryQuery = supabase
+          .from('inspection_templates')
+          .select(currentTemplateSelect(), { count: 'exact' })
+          .eq('company_id', authStore.companyId)
+          .order('created_at', { ascending: false })
+
+        if (options.useVehicleType && vehicleTypeFilter.value !== 'all') {
+          retryQuery = retryQuery.eq('vehicle_type_id', vehicleTypeFilter.value)
+        }
+
+        if (options.useSearch && searchValue) {
+          retryQuery = retryQuery.or(`name.ilike.%${searchValue}%,description.ilike.%${searchValue}%`)
+        }
+
+        response = await retryQuery.range(from, to)
+      }
+
+      return response
     }
 
-    const { data, count, error: templatesError } = await query.range(from, to)
+    let { data, count, error: templatesError } = await runTemplatesQuery({
+      useSearch: true,
+      useVehicleType: true,
+      requestedPage: page.value,
+    })
+
+    const shouldResetHiddenFilters =
+      !templatesError &&
+      (count || 0) === 0 &&
+      (searchValue.length > 0 || vehicleTypeFilter.value !== 'all' || page.value > 1)
+
+    if (shouldResetHiddenFilters) {
+      const fallback = await runTemplatesQuery({
+        useSearch: false,
+        useVehicleType: false,
+        requestedPage: 1,
+      })
+
+      if (!fallback.error && (fallback.count || 0) > 0) {
+        search.value = ''
+        vehicleTypeFilter.value = 'all'
+        page.value = 1
+        data = fallback.data as any
+        count = fallback.count as any
+        templatesError = null
+      }
+    }
 
     if (templatesError) {
       error.value = templatesError.message
       templates.value = []
       total.value = 0
     } else {
-      templates.value = (data || []).map(sortTemplateItems)
+      templates.value = (data || []).map((template: any) => sortTemplateItems(normalizeTemplateItemColumns(template)))
       total.value = count || 0
     }
 
@@ -181,18 +374,42 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return
     }
 
-    const { data, error: templateError } = await supabase
+    let { data, error: templateError } = await supabase
       .from('inspection_templates')
-      .select(templateSelect)
+      .select(currentTemplateSelect())
       .eq('id', id)
       .eq('company_id', authStore.companyId)
       .single()
+
+    if (templateError && isMissingEngineHoursColumnError(templateError.message)) {
+      hasEngineHoursColumn.value = false
+      const retry = await supabase
+        .from('inspection_templates')
+        .select(currentTemplateSelect())
+        .eq('id', id)
+        .eq('company_id', authStore.companyId)
+        .single()
+      data = retry.data as any
+      templateError = retry.error as any
+    }
+
+    if (templateError && isMissingReferencePhotoColumnError(templateError.message)) {
+      hasReferencePhotoColumn.value = false
+      const retry = await supabase
+        .from('inspection_templates')
+        .select(currentTemplateSelect())
+        .eq('id', id)
+        .eq('company_id', authStore.companyId)
+        .single()
+      data = retry.data as any
+      templateError = retry.error as any
+    }
 
     if (templateError) {
       error.value = templateError.message
       selectedTemplate.value = null
     } else {
-      selectedTemplate.value = sortTemplateItems(data)
+      selectedTemplate.value = sortTemplateItems(normalizeTemplateItemColumns(data))
     }
 
     loading.value = false
@@ -236,18 +453,36 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return null
     }
 
-    const { data, error: createError } = await supabase
+    const templateInsertRow: Record<string, any> = {
+      name: payload.name,
+      description: payload.description,
+      vehicle_type_id: payload.vehicle_type_id,
+      is_default: true,
+      company_id: authStore.companyId,
+    }
+
+    if (hasEngineHoursColumn.value) {
+      templateInsertRow.engine_hours_required = !!payload.engine_hours_required
+    }
+
+    let { data, error: createError } = await supabase
       .from('inspection_templates')
-      .insert({
-        name: payload.name,
-        description: payload.description,
-        vehicle_type_id: payload.vehicle_type_id,
-        is_default: true,
-        engine_hours_required: !!payload.engine_hours_required,
-        company_id: authStore.companyId,
-      })
+      .insert(templateInsertRow)
       .select('id')
       .single()
+
+    if (createError && hasEngineHoursColumn.value && isMissingEngineHoursColumnError(createError.message)) {
+      hasEngineHoursColumn.value = false
+      delete templateInsertRow.engine_hours_required
+
+      const retry = await supabase
+        .from('inspection_templates')
+        .insert(templateInsertRow)
+        .select('id')
+        .single()
+      data = retry.data as any
+      createError = retry.error as any
+    }
 
     if (createError || !data) {
       error.value =
@@ -258,9 +493,27 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return null
     }
 
-    const { error: itemError } = await supabase
+    const defaultItemRow: Record<string, any> = {
+      template_id: data.id,
+      title: 'General condition',
+      description: 'Inspect the vehicle and note any visible concerns.',
+      category_id: defaultCategoryId,
+      is_required: true,
+      requires_photo: false,
+      sort_order: 1,
+    }
+
+    if (hasReferencePhotoColumn.value) {
+      defaultItemRow.reference_photo_url = null
+    }
+
+    let { error: itemError } = await supabase
       .from('inspection_template_items')
-      .insert({
+      .insert(defaultItemRow)
+
+    if (itemError && hasReferencePhotoColumn.value && isMissingReferencePhotoColumnError(itemError.message)) {
+      hasReferencePhotoColumn.value = false
+      const fallbackItemRow = {
         template_id: data.id,
         title: 'General condition',
         description: 'Inspect the vehicle and note any visible concerns.',
@@ -268,7 +521,12 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
         is_required: true,
         requires_photo: false,
         sort_order: 1,
-      })
+      }
+      const fallback = await supabase
+        .from('inspection_template_items')
+        .insert(fallbackItemRow)
+      itemError = fallback.error
+    }
 
     if (itemError) {
       await supabase.from('inspection_templates').delete().eq('id', data.id)
@@ -308,17 +566,35 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       return false
     }
 
-    const { error: updateError } = await supabase
+    const templateUpdateRow: Record<string, any> = {
+      name: payload.name,
+      description: payload.description,
+      vehicle_type_id: payload.vehicle_type_id,
+      is_default: true,
+    }
+
+    if (hasEngineHoursColumn.value) {
+      templateUpdateRow.engine_hours_required = !!payload.engine_hours_required
+    }
+
+    let { error: updateError } = await supabase
       .from('inspection_templates')
-      .update({
-        name: payload.name,
-        description: payload.description,
-        vehicle_type_id: payload.vehicle_type_id,
-        is_default: true,
-        engine_hours_required: !!payload.engine_hours_required,
-      })
+      .update(templateUpdateRow)
       .eq('id', id)
       .eq('company_id', authStore.companyId)
+
+    if (updateError && hasEngineHoursColumn.value && isMissingEngineHoursColumnError(updateError.message)) {
+      hasEngineHoursColumn.value = false
+      delete templateUpdateRow.engine_hours_required
+
+      const retry = await supabase
+        .from('inspection_templates')
+        .update(templateUpdateRow)
+        .eq('id', id)
+        .eq('company_id', authStore.companyId)
+
+      updateError = retry.error
+    }
 
     if (updateError) {
       error.value =
@@ -342,6 +618,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
       ...item,
       title: item.title.trim(),
       description: item.description?.trim() || null,
+      reference_photo_url: item.reference_photo_url?.trim() || null,
       category_id: item.category_id,
       sort_order: index + 1,
     }))
@@ -377,7 +654,7 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
     }
 
     for (const item of normalized) {
-      const row = {
+      const row: Record<string, any> = {
         template_id: templateId,
         title: item.title,
         description: item.description,
@@ -386,6 +663,11 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
         requires_photo: item.requires_photo,
         sort_order: item.sort_order,
       }
+
+      if (hasReferencePhotoColumn.value) {
+        row.reference_photo_url = item.reference_photo_url
+      }
+
       const result = item.id
         ? await supabase
             .from('inspection_template_items')
@@ -393,6 +675,27 @@ export const useInspectionTemplateStore = defineStore('inspectionTemplates', () 
             .eq('id', item.id)
             .eq('template_id', templateId)
         : await supabase.from('inspection_template_items').insert(row)
+
+      if (result.error && hasReferencePhotoColumn.value && isMissingReferencePhotoColumnError(result.error.message)) {
+        hasReferencePhotoColumn.value = false
+        delete row.reference_photo_url
+
+        const retry = item.id
+          ? await supabase
+              .from('inspection_template_items')
+              .update(row)
+              .eq('id', item.id)
+              .eq('template_id', templateId)
+          : await supabase.from('inspection_template_items').insert(row)
+
+        if (retry.error) {
+          error.value = retry.error.message
+          loading.value = false
+          return false
+        }
+
+        continue
+      }
 
       if (result.error) {
         error.value = result.error.message
