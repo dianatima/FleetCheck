@@ -1,6 +1,3 @@
-import pdfMake from 'pdfmake/build/pdfmake'
-import pdfFonts from 'pdfmake/build/vfs_fonts'
-
 import { formatDateTime } from '@/lib/dateFormat'
 import { normalizePhotoUrls, resolvePhotoUrl } from '@/lib/photoUrls'
 import { readSignatureFallback, readSignatureFallbackFromDb } from '@/lib/signatureFallback'
@@ -292,12 +289,70 @@ function dictFor(language: string): Dict {
   return DICT[normalizeLanguage(language)]
 }
 
-function ensurePdfFonts() {
-  const make = pdfMake as any
-  const fonts = pdfFonts as any
+function looksLikeVfs(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object') return false
+  const keys = Object.keys(value as Record<string, unknown>)
+  if (keys.length === 0) return false
+  const sample = (value as Record<string, unknown>)[keys[0]]
+  return typeof sample === 'string' && sample.length > 100
+}
 
-  if (!make.vfs) {
-    make.vfs = fonts?.pdfMake?.vfs || fonts?.vfs || fonts?.default?.pdfMake?.vfs || {}
+let pdfMakeCache: any = null
+let pdfMakePromise: Promise<any> | null = null
+
+async function getPdfMake(): Promise<any> {
+  if (pdfMakeCache && looksLikeVfs(pdfMakeCache.vfs)) return pdfMakeCache
+  if (pdfMakePromise) return pdfMakePromise
+
+  pdfMakePromise = (async () => {
+    const pdfMakeModule: any = await import('pdfmake/build/pdfmake')
+    const pdfMake: any = pdfMakeModule?.default || pdfMakeModule
+
+    // vfs_fonts.js IIFE tries `_global.pdfMake.addVirtualFileSystem(vfs)`.
+    // Make pdfMake available on window BEFORE importing vfs_fonts.
+    if (typeof window !== 'undefined') {
+      ;(window as any).pdfMake = pdfMake
+    }
+
+    const fontsModule: any = await import('pdfmake/build/vfs_fonts')
+    const candidates = [
+      pdfMake.vfs,
+      fontsModule?.default,
+      fontsModule?.pdfMake?.vfs,
+      fontsModule?.default?.pdfMake?.vfs,
+      fontsModule?.vfs,
+      fontsModule?.default?.vfs,
+      fontsModule,
+    ]
+
+    for (const candidate of candidates) {
+      if (looksLikeVfs(candidate)) {
+        pdfMake.vfs = candidate
+        break
+      }
+    }
+
+    if (!looksLikeVfs(pdfMake.vfs)) {
+      console.error('[reportPdf] pdfmake vfs not initialized', {
+        pdfMakeKeys: Object.keys(pdfMake || {}),
+        fontsKeys: fontsModule && typeof fontsModule === 'object' ? Object.keys(fontsModule) : null,
+        defaultKeys:
+          fontsModule?.default && typeof fontsModule.default === 'object'
+            ? Object.keys(fontsModule.default)
+            : null,
+      })
+      throw new Error('pdfmake fonts (vfs) could not be initialized.')
+    }
+
+    pdfMakeCache = pdfMake
+    return pdfMake
+  })()
+
+  try {
+    return await pdfMakePromise
+  } catch (error) {
+    pdfMakePromise = null
+    throw error
   }
 }
 
@@ -389,37 +444,119 @@ function badge(textValue: string) {
   }
 }
 
-async function loadImageDataUrl(url: string | null | undefined, maxSide = 420, quality = 0.84): Promise<string | null> {
-  if (!url) return null
-  if (url.startsWith('data:image/')) return url
+function parseStorageSource(source: string): { bucket: string; path: string } | null {
+  const trimmed = source.trim()
+  if (!trimmed) return null
 
-  return new Promise((resolve) => {
-    const image = new Image()
-    image.crossOrigin = 'anonymous'
-    image.onload = () => {
-      try {
-        const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight))
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
-        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
-        const context = canvas.getContext('2d')
+  const normalized = trimmed.replace(/^\/+/, '')
+  const directParts = normalized.split('/').filter(Boolean)
 
-        if (!context) {
-          resolve(null)
-          return
-        }
-
-        context.fillStyle = '#ffffff'
-        context.fillRect(0, 0, canvas.width, canvas.height)
-        context.drawImage(image, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', quality))
-      } catch {
-        resolve(null)
+  if (directParts.length >= 2) {
+    const [candidateBucket, ...rest] = directParts
+    if (candidateBucket && !candidateBucket.includes('.') && !candidateBucket.includes(':')) {
+      return {
+        bucket: candidateBucket,
+        path: rest.join('/'),
       }
     }
+  }
+
+  try {
+    const url = new URL(trimmed)
+    const match = url.pathname.match(/\/storage\/v1\/object\/(?:public|authenticated|sign)\/([^/]+)\/(.+)$/)
+    if (match) {
+      return {
+        bucket: decodeURIComponent(match[1] || ''),
+        path: decodeURIComponent(match[2] || ''),
+      }
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+
+async function storageSourceToBlob(source: string): Promise<Blob | null> {
+  const parsed = parseStorageSource(source)
+  if (!parsed?.bucket || !parsed.path) return null
+
+  const { data, error } = await supabase.storage
+    .from(parsed.bucket)
+    .download(parsed.path)
+
+  if (error || !data) return null
+  return data
+}
+
+async function imageToJpegDataUrl(image: HTMLImageElement, maxSide: number, quality: number): Promise<string | null> {
+  try {
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+    const context = canvas.getContext('2d')
+    if (!context) return null
+
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', quality)
+  } catch (error) {
+    console.warn('[reportPdf] canvas encode failed', error)
+    return null
+  }
+}
+
+function loadHtmlImage(src: string, crossOrigin: boolean): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const image = new Image()
+    if (crossOrigin) image.crossOrigin = 'anonymous'
+    image.onload = () => resolve(image)
     image.onerror = () => resolve(null)
-    image.src = url
+    image.src = src
   })
+}
+
+async function loadImageDataUrl(url: string | null | undefined, maxSide = 420, quality = 0.84): Promise<string | null> {
+  if (!url) return null
+
+  // 1) Inline data URL: re-encode via canvas to guarantee image/jpeg for pdfmake.
+  if (url.startsWith('data:')) {
+    const image = await loadHtmlImage(url, false)
+    if (!image) {
+      console.warn('[reportPdf] data URL is not a valid image', url.slice(0, 64))
+      return null
+    }
+    return imageToJpegDataUrl(image, maxSide, quality)
+  }
+
+  // 2) Supabase Storage source (URL or bucket/path): download via SDK, encode via canvas.
+  const storageBlob = await storageSourceToBlob(url)
+  if (storageBlob) {
+    const objectUrl = URL.createObjectURL(storageBlob)
+    try {
+      const image = await loadHtmlImage(objectUrl, false)
+      if (image) {
+        const encoded = await imageToJpegDataUrl(image, maxSide, quality)
+        if (encoded) return encoded
+      }
+    } finally {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }
+
+  // 3) Remote URL: try with CORS, then without (for same-origin or proxied images).
+  for (const crossOrigin of [true, false]) {
+    const image = await loadHtmlImage(url, crossOrigin)
+    if (!image) continue
+    const encoded = await imageToJpegDataUrl(image, maxSide, quality)
+    if (encoded) return encoded
+  }
+
+  console.warn('[reportPdf] image could not be loaded for PDF', url)
+  return null
 }
 
 function toBlob(pdfDoc: any): Promise<Blob> {
@@ -449,6 +586,12 @@ function previewBlob(blob: Blob, previewWindow: Window) {
   previewWindow.document.write(`<!doctype html><html><head><title>PDF Preview</title><style>html,body,iframe{height:100%;width:100%;margin:0;border:0;background:#111;}</style></head><body><iframe src="${url}"></iframe></body></html>`)
   previewWindow.document.close()
   window.setTimeout(() => URL.revokeObjectURL(url), 20000)
+}
+
+function previewBlobInCurrentTab(blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  window.location.assign(url)
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 async function shareBlob(blob: Blob, fileName: string, dict: Dict) {
@@ -611,33 +754,59 @@ function metricCard(label: string, value: number, color: string) {
   return {
     table: {
       widths: ['*'],
-      body: [[{
-        margin: [8, 8, 8, 8],
-        stack: [
-          { text: String(value), fontSize: 16, bold: true, color, margin: [0, 0, 0, 2] },
-          { text: label, fontSize: 8, color: '#6b7280', bold: true },
-        ],
-      }]],
+      body: [
+        [{ fillColor: color, text: '', border: [false, false, false, false], margin: [0, 0, 0, 0], minHeight: 3 }],
+        [{
+          margin: [8, 8, 8, 10],
+          stack: [
+            { text: String(value), fontSize: 20, bold: true, color, margin: [0, 0, 0, 2] },
+            { text: label.toUpperCase(), fontSize: 7, color: '#6b7280', bold: true, characterSpacing: 0.4 },
+          ],
+          border: [true, false, true, true],
+        }],
+      ],
     },
     layout: {
-      hLineColor: () => '#d1d5db',
-      vLineColor: () => '#d1d5db',
+      hLineColor: () => '#e5e7eb',
+      vLineColor: () => '#e5e7eb',
+      hLineWidth: (i: number) => (i === 0 ? 0 : 0.5),
+      vLineWidth: () => 0.5,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 0,
     },
   }
 }
 
 function sectionTitle(textValue: string) {
   return {
-    text: textValue,
-    fontSize: 14,
-    bold: true,
-    color: '#111827',
+    table: {
+      widths: ['*'],
+      body: [[{
+        text: textValue.toUpperCase(),
+        fontSize: 10,
+        bold: true,
+        color: '#1f2937',
+        characterSpacing: 0.6,
+        margin: [0, 0, 0, 4],
+        border: [false, false, false, true],
+      }]],
+    },
+    layout: {
+      hLineColor: () => '#2563eb',
+      hLineWidth: (i: number, node: any) => (i === node.table.body.length ? 1.5 : 0),
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 0,
+    },
     margin: [0, 14, 0, 8],
   }
 }
 
 async function buildInspectionReportPdf(inspectionId: string, language: string) {
-  ensurePdfFonts()
+  const pdfMake = await getPdfMake()
   const dict = dictFor(language)
   const inspection = await loadInspectionData(inspectionId, dict)
 
@@ -648,10 +817,22 @@ async function buildInspectionReportPdf(inspectionId: string, language: string) 
   )
   const issues = relationArray(inspection.issues)
 
-  const photos = [
-    ...results.flatMap((row: any) => normalizePhotoUrls(row.photo_urls)),
-    ...issues.flatMap((issue: any) => normalizePhotoUrls(issue.photo_urls)),
-  ]
+  const photoEntries: Array<{ url: string; title: string; result: string | null }> = []
+  results.forEach((row: any) => {
+    const urls = normalizePhotoUrls(row.photo_urls)
+    const itemTitle = row.inspection_template_items?.title || dict.checklistFallback
+    urls.forEach((url: string) => {
+      photoEntries.push({ url, title: itemTitle, result: row.result })
+    })
+  })
+  issues.forEach((issue: any) => {
+    const urls = normalizePhotoUrls(issue.photo_urls)
+    urls.forEach((url: string) => {
+      photoEntries.push({ url, title: text(issue.title, dict.issueFallback), result: null })
+    })
+  })
+
+  const photos = photoEntries.map((entry) => entry.url)
 
   const { data: repairs } = issues.length
     ? await supabase
@@ -667,7 +848,7 @@ async function buildInspectionReportPdf(inspectionId: string, language: string) 
   const [vehiclePhoto, signatureImage, ...photoImages] = await Promise.all([
     loadImageDataUrl(resolvePhotoUrl(vehicle?.photo_url), 320, 0.86),
     loadImageDataUrl(resolvePhotoUrl(inspection.signature_data_url), 900, 0.95),
-    ...photos.slice(0, 12).map((url: string) => loadImageDataUrl(url, 420, 0.82)),
+    ...photos.slice(0, 12).map((url: string) => loadImageDataUrl(url, 520, 0.85)),
   ])
 
   const generatedAt = formatDateTime(new Date().toISOString(), language as any, '-')
@@ -688,63 +869,87 @@ async function buildInspectionReportPdf(inspectionId: string, language: string) 
     table: {
       widths: ['*'],
       body: [[{
-        fillColor: '#2563eb',
-        margin: [12, 10, 12, 10],
+        fillColor: '#1d4ed8',
+        margin: [16, 14, 16, 14],
         stack: [
-          { text: dict.appName, fontSize: 18, bold: true, color: '#ffffff' },
-          { text: dict.reportTitle, fontSize: 24, bold: true, color: '#ffffff', margin: [0, 3, 0, 0] },
           {
             columns: [
-              { text: `${dict.reportId}: ${inspection.id}`, fontSize: 9, color: '#dbeafe' },
-              { text: `${dict.generated}: ${generatedAt}`, fontSize: 9, color: '#dbeafe', alignment: 'right' },
+              {
+                width: '*',
+                stack: [
+                  { text: dict.appName.toUpperCase(), fontSize: 9, bold: true, color: '#bfdbfe', characterSpacing: 1.2 },
+                  { text: dict.reportTitle, fontSize: 22, bold: true, color: '#ffffff', margin: [0, 4, 0, 0] },
+                ],
+              },
+              {
+                width: 'auto',
+                stack: [
+                  { text: dict.generated.toUpperCase(), fontSize: 7, bold: true, color: '#bfdbfe', alignment: 'right', characterSpacing: 0.8 },
+                  { text: generatedAt, fontSize: 10, color: '#ffffff', alignment: 'right', margin: [0, 2, 0, 0] },
+                ],
+              },
             ],
-            margin: [0, 6, 0, 0],
+          },
+          {
+            text: `${dict.reportId}: ${inspection.id}`,
+            fontSize: 8,
+            color: '#dbeafe',
+            margin: [0, 8, 0, 0],
           },
         ],
       }]],
     },
     layout: 'noBorders',
-    margin: [0, 0, 0, 12],
+    margin: [0, 0, 0, 14],
   })
 
   content.push(sectionTitle(dict.vehicleSummary))
 
   content.push({
     table: {
-      widths: [110, '*', 140],
+      widths: [110, '*', 130],
       body: [[
         {
+          fillColor: '#f9fafb',
           margin: [8, 8, 8, 8],
           stack: vehiclePhoto
             ? [{ image: vehiclePhoto, fit: [94, 74], alignment: 'center' }]
-            : [{ text: dict.noPhoto, color: '#6b7280', alignment: 'center', margin: [0, 26, 0, 0] }],
+            : [{ text: dict.noPhoto, color: '#9ca3af', alignment: 'center', fontSize: 8, margin: [0, 30, 0, 0] }],
         },
         {
-          margin: [4, 8, 8, 8],
+          margin: [10, 10, 10, 10],
           stack: [
-            { text: vehicleName(vehicle), fontSize: 16, bold: true, color: '#111827' },
-            { text: `${dict.unit} ${text(vehicle?.unit)} - ${dict.plate} ${text(vehicle?.plate)} - ${dict.vin} ${text(vehicle?.vin)}`, fontSize: 9, color: '#6b7280', margin: [0, 4, 0, 0] },
-            { text: `${dict.inspectionType}: ${inspectionTypeLabel(inspection.type, dict)}`, fontSize: 10, color: '#374151', margin: [0, 4, 0, 0] },
-            { text: `${dict.submitted}: ${submittedAt}`, fontSize: 10, color: '#374151', margin: [0, 2, 0, 0] },
-            { text: `${dict.driver}: ${text(driver?.name || driver?.email, '-')}`, fontSize: 10, color: '#374151', margin: [0, 2, 0, 0] },
+            { text: vehicleName(vehicle), fontSize: 15, bold: true, color: '#111827' },
+            {
+              columns: [
+                { text: `${dict.unit}: ${text(vehicle?.unit)}`, fontSize: 9, color: '#374151', width: 'auto' },
+                { text: `${dict.plate}: ${text(vehicle?.plate)}`, fontSize: 9, color: '#374151', width: 'auto', margin: [10, 0, 0, 0] },
+              ],
+              margin: [0, 5, 0, 2],
+            },
+            { text: `${dict.vin}: ${text(vehicle?.vin)}`, fontSize: 9, color: '#6b7280' },
+            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 240, y2: 0, lineWidth: 0.5, lineColor: '#e5e7eb' }], margin: [0, 6, 0, 6] },
+            { text: `${dict.inspectionType}: ${inspectionTypeLabel(inspection.type, dict)}`, fontSize: 9, color: '#374151' },
+            { text: `${dict.submitted}: ${submittedAt}`, fontSize: 9, color: '#374151', margin: [0, 2, 0, 0] },
+            { text: `${dict.driver}: ${text(driver?.name || driver?.email, '-')}`, fontSize: 9, color: '#374151', margin: [0, 2, 0, 0] },
           ],
         },
         {
-          margin: [0, 10, 8, 8],
+          margin: [10, 12, 10, 10],
           stack: [
-            { text: dict.result, fontSize: 8, bold: true, color: '#6b7280', margin: [0, 0, 0, 4] },
+            { text: dict.result.toUpperCase(), fontSize: 7, bold: true, color: '#6b7280', characterSpacing: 0.6, margin: [0, 0, 0, 4] },
             badge(resultLabel),
-            { text: dict.review, fontSize: 8, bold: true, color: '#6b7280', margin: [0, 10, 0, 4] },
+            { text: dict.review.toUpperCase(), fontSize: 7, bold: true, color: '#6b7280', characterSpacing: 0.6, margin: [0, 10, 0, 4] },
             badge(reviewLabel),
           ],
         },
       ]],
     },
     layout: {
-      hLineColor: () => '#d1d5db',
-      vLineColor: () => '#d1d5db',
-      hLineWidth: () => 1,
-      vLineWidth: () => 1,
+      hLineColor: () => '#e5e7eb',
+      vLineColor: () => '#e5e7eb',
+      hLineWidth: () => 0.5,
+      vLineWidth: () => 0.5,
     },
     margin: [0, 0, 0, 12],
   })
@@ -809,43 +1014,55 @@ async function buildInspectionReportPdf(inspectionId: string, language: string) 
       const item = row.inspection_template_items || {}
       const category = item.inspection_item_categories?.name || dict.checklistFallback
       const photoCount = row.photo_urls?.length || 0
+      const accent = row.result === 'pass' ? '#16a34a' : row.result === 'fail' ? '#dc2626' : row.result === 'not_applicable' ? '#9ca3af' : '#d97706'
 
       const stack: any[] = [
-        { text: `${index + 1}. ${text(item.title, dict.checklistFallback)}`, fontSize: 11, bold: true, color: '#111827' },
-        { text: category, fontSize: 8, bold: true, color: '#6b7280', margin: [0, 3, 0, 4] },
         {
           columns: [
-            ...(item.requires_photo ? [{ width: 'auto', ...badge(dict.photoRequired) }] : []),
+            { text: `${index + 1}.`, width: 18, fontSize: 11, bold: true, color: '#6b7280' },
+            { text: text(item.title, dict.checklistFallback), fontSize: 11, bold: true, color: '#111827' },
             { width: 'auto', ...badge(localizedResult(row.result, dict)) },
           ],
-          columnGap: 6,
-          margin: [0, 0, 0, 4],
+          columnGap: 4,
         },
+        { text: category, fontSize: 8, color: '#6b7280', margin: [18, 3, 0, 0] },
       ]
 
-      if (row.comment) {
-        stack.push({ text: `${dict.notes}: ${row.comment}`, fontSize: 9, color: '#374151', margin: [0, 3, 0, 2] })
-      }
+      const meta: any[] = []
+      if (item.requires_photo) meta.push({ text: dict.photoRequired, fontSize: 8, color: '#d97706', bold: true })
+      if (photoCount) meta.push({ text: photoCount === 1 ? `1 ${dict.photoReferenceAttached}` : `${photoCount} ${dict.photoReferencesAttached}`, fontSize: 8, color: '#2563eb', bold: true })
 
-      if (photoCount) {
+      if (meta.length) {
         stack.push({
-          text: photoCount === 1
-            ? `1 ${dict.photoReferenceAttached}`
-            : `${photoCount} ${dict.photoReferencesAttached}`,
-          fontSize: 8,
-          bold: true,
-          color: '#2563eb',
-          margin: [0, 2, 0, 0],
+          columns: meta.map((m) => ({ ...m, width: 'auto' })),
+          columnGap: 10,
+          margin: [18, 3, 0, 0],
         })
       }
 
+      if (row.comment) {
+        stack.push({ text: `${dict.notes}: ${row.comment}`, fontSize: 9, color: '#374151', margin: [18, 4, 0, 0], italics: true })
+      }
+
       content.push({
-        table: { widths: ['*'], body: [[{ stack, margin: [12, 10, 12, 8] }]] },
-        layout: {
-          hLineColor: () => '#d1d5db',
-          vLineColor: () => '#d1d5db',
+        table: {
+          widths: [3, '*'],
+          body: [[
+            { fillColor: accent, text: '', border: [false, false, false, false] },
+            { stack, margin: [10, 8, 10, 8], border: [false, false, false, false] },
+          ]],
         },
-        margin: [0, 0, 0, 6],
+        layout: {
+          paddingLeft: () => 0,
+          paddingRight: () => 0,
+          paddingTop: () => 0,
+          paddingBottom: () => 0,
+          hLineColor: () => '#e5e7eb',
+          vLineColor: () => '#e5e7eb',
+          hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 0.5 : 0),
+          vLineWidth: (i: number, node: any) => (i === node.table.widths.length ? 0.5 : 0),
+        },
+        margin: [0, 0, 0, 5],
       })
     })
   }
@@ -902,14 +1119,30 @@ async function buildInspectionReportPdf(inspectionId: string, language: string) 
     })
   }
 
-  const filteredPhotoImages = photoImages.filter(Boolean) as string[]
-  if (filteredPhotoImages.length) {
+  const photoCards = photoImages
+    .map((image, idx) => ({ image, entry: photoEntries[idx] }))
+    .filter((p) => Boolean(p.image))
+
+  if (photoCards.length) {
     content.push({ ...sectionTitle(dict.photos), pageBreak: 'before' })
 
-    for (let index = 0; index < filteredPhotoImages.length; index += 3) {
-      const row = filteredPhotoImages.slice(index, index + 3).map((image) => ({ image, fit: [160, 110], margin: [0, 4, 0, 4] }))
-      while (row.length < 3) row.push({ text: '' })
-      content.push({ columns: row, columnGap: 8 })
+    for (let index = 0; index < photoCards.length; index += 2) {
+      const slice = photoCards.slice(index, index + 2)
+      const cells = slice.map(({ image, entry }) => ({
+        stack: [
+          { image, fit: [240, 180], alignment: 'center' },
+          {
+            stack: [
+              { text: entry?.title || '', fontSize: 9, bold: true, color: '#111827', margin: [0, 6, 0, 2] },
+              ...(entry?.result ? [{ ...badge(localizedResult(entry.result, dict)), alignment: 'left' as const }] : []),
+            ],
+            margin: [4, 0, 4, 0],
+          },
+        ],
+        margin: [0, 0, 0, 14],
+      }))
+      while (cells.length < 2) cells.push({ stack: [], margin: [0, 0, 0, 0] } as any)
+      content.push({ columns: cells, columnGap: 12 })
     }
   }
 
@@ -930,7 +1163,7 @@ async function buildInspectionReportPdf(inspectionId: string, language: string) 
     content,
   }
 
-  const pdfDoc = (pdfMake as any).createPdf(docDefinition)
+  const pdfDoc = pdfMake.createPdf(docDefinition)
   const blob = await toBlob(pdfDoc)
   ensureBlobHasContent(blob, dict)
 
@@ -945,8 +1178,13 @@ async function buildInspectionReportPdf(inspectionId: string, language: string) 
 }
 
 export async function downloadInspectionReportPdf(inspectionId: string, language: string) {
-  const { blob, fileName } = await buildInspectionReportPdf(inspectionId, language)
-  downloadBlob(blob, fileName)
+  try {
+    const { blob, fileName } = await buildInspectionReportPdf(inspectionId, language)
+    downloadBlob(blob, fileName)
+  } catch (error) {
+    console.error('[reportPdf] downloadInspectionReportPdf failed', error)
+    throw error
+  }
 }
 
 export async function previewInspectionReportPdf(
@@ -954,18 +1192,36 @@ export async function previewInspectionReportPdf(
   language: string,
   previewWindow?: Window | null
 ) {
-  const dict = dictFor(language)
-  const targetWindow = previewWindow || window.open('', '_blank', 'noopener,noreferrer')
+  try {
+    const { blob } = await buildInspectionReportPdf(inspectionId, language)
 
-  if (!targetWindow) {
-    throw new Error(dict.popupBlocked)
+    if (previewWindow && !previewWindow.closed) {
+      previewBlob(blob, previewWindow)
+      return
+    }
+
+    const url = URL.createObjectURL(blob)
+    const openedWindow = window.open(url, '_blank', 'noopener,noreferrer')
+
+    if (openedWindow) {
+      window.setTimeout(() => URL.revokeObjectURL(url), 20000)
+      return
+    }
+
+    // Popup blockers may reject new tabs; open preview in the same tab instead.
+    previewBlobInCurrentTab(blob)
+  } catch (error) {
+    console.error('[reportPdf] previewInspectionReportPdf failed', error)
+    throw error
   }
-
-  const { blob } = await buildInspectionReportPdf(inspectionId, language)
-  previewBlob(blob, targetWindow)
 }
 
 export async function shareInspectionReportPdf(inspectionId: string, language: string) {
-  const { blob, fileName, dict } = await buildInspectionReportPdf(inspectionId, language)
-  await shareBlob(blob, fileName, dict)
+  try {
+    const { blob, fileName, dict } = await buildInspectionReportPdf(inspectionId, language)
+    await shareBlob(blob, fileName, dict)
+  } catch (error) {
+    console.error('[reportPdf] shareInspectionReportPdf failed', error)
+    throw error
+  }
 }

@@ -136,7 +136,7 @@
                     </button>
                     <button
                       @click.stop="downloadReport(r)"
-                      :title="downloadingId === r.id ? 'Preparing PDF...' : 'Download PDF'"
+                      :title="downloadingId === r.id ? store.t('preparingPdf') : `${store.t('download')} ${store.t('pdf')}`"
                       :disabled="downloadingId === r.id"
                       class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-wait transition-colors">
                       <Download :size="13" />

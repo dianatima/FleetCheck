@@ -155,7 +155,7 @@
           :disabled="pdfAction === 'preview'"
           @click="runPdfAction('preview')"
         >
-          <Eye :size="16" /> {{ pdfAction === 'preview' ? 'Opening...' : 'Preview PDF' }}
+          <Eye :size="16" /> {{ pdfAction === 'preview' ? store.t('opening') : store.t('previewPdf') }}
         </button>
         <button
           type="button"
@@ -163,7 +163,7 @@
           :disabled="pdfAction === 'share'"
           @click="runPdfAction('share')"
         >
-          <Share2 :size="16" /> {{ pdfAction === 'share' ? 'Sharing...' : 'Share copy' }}
+          <Share2 :size="16" /> {{ pdfAction === 'share' ? store.t('sharing') : store.t('shareCopy') }}
         </button>
         <button
           type="button"
@@ -171,7 +171,7 @@
           :disabled="pdfAction === 'download'"
           @click="runPdfAction('download')"
         >
-          <Download :size="16" /> {{ pdfAction === 'download' ? 'Preparing PDF...' : 'Download PDF' }}
+          <Download :size="16" /> {{ pdfAction === 'download' ? store.t('preparingPdf') : `${store.t('download')} ${store.t('pdf')}` }}
         </button>
       </div>
       <RouterLink :to="reportLink" class="btn-secondary w-full py-3 gap-2 text-sm justify-center inline-flex">
@@ -344,18 +344,14 @@ async function runPdfAction(action: 'download' | 'preview' | 'share') {
 
   try {
     if (action === 'preview') {
-      const previewWindow = window.open('', '_blank', 'noopener,noreferrer')
-      if (!previewWindow) {
-        throw new Error('Popup blocked. Allow popups to preview the PDF.')
-      }
-      await previewInspectionReportPdf(inspection.value.id, store.language, previewWindow)
+      await previewInspectionReportPdf(inspection.value.id, store.language)
     } else if (action === 'share') {
       await shareInspectionReportPdf(inspection.value.id, store.language)
     } else {
       await downloadInspectionReportPdf(inspection.value.id, store.language)
     }
   } catch (downloadError: any) {
-    pdfError.value = downloadError?.message || 'Report PDF action failed.'
+    pdfError.value = downloadError?.message || store.t('reportPdfActionFailed')
   } finally {
     pdfAction.value = null
   }

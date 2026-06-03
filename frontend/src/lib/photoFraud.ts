@@ -66,6 +66,23 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.trunc(value)))
 }
 
+export function haversineMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  if (![lat1, lng1, lat2, lng2].every((v) => Number.isFinite(v))) return Number.NaN
+  const R = 6371000 // Earth radius, meters
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
+}
+
 function scoreToLevel(score: number): PhotoRiskLevel {
   if (score <= 20) return 'ok'
   if (score <= 50) return 'needs-review'
@@ -175,18 +192,33 @@ function isCandidateNotLaterThanCurrent(candidateUploadedAt: string | null | und
 async function extractExifInfo(dataUrl: string): Promise<ExifInfo> {
   try {
     const parsed = await exifr.parse(dataUrl, {
-      pick: ['DateTimeOriginal', 'CreateDate', 'Make', 'Model', 'Software', 'latitude', 'longitude'],
+      tiff: true,
+      exif: true,
+      gps: true,
+      pick: ['DateTimeOriginal', 'CreateDate', 'Make', 'Model', 'Software', 'latitude', 'longitude', 'GPSLatitude', 'GPSLongitude', 'GPSLatitudeRef', 'GPSLongitudeRef'],
     })
 
     const taken = parsed?.DateTimeOriginal || parsed?.CreateDate
+
+    // exifr exposes computed `latitude`/`longitude` (signed decimals) when `gps: true` is set.
+    // Fallback: convert raw GPSLatitude/GPSLongitude arrays manually if computed is missing.
+    let lat: number | null = Number.isFinite(parsed?.latitude) ? Number(parsed.latitude) : null
+    let lng: number | null = Number.isFinite(parsed?.longitude) ? Number(parsed.longitude) : null
+
+    if (lat == null && Array.isArray(parsed?.GPSLatitude)) {
+      lat = dmsToDecimal(parsed.GPSLatitude, parsed?.GPSLatitudeRef)
+    }
+    if (lng == null && Array.isArray(parsed?.GPSLongitude)) {
+      lng = dmsToDecimal(parsed.GPSLongitude, parsed?.GPSLongitudeRef)
+    }
 
     return {
       takenAt: taken instanceof Date ? taken.toISOString() : taken ? new Date(taken).toISOString() : null,
       make: parsed?.Make ? String(parsed.Make) : null,
       model: parsed?.Model ? String(parsed.Model) : null,
       software: parsed?.Software ? String(parsed.Software) : null,
-      latitude: Number.isFinite(parsed?.latitude) ? Number(parsed.latitude) : null,
-      longitude: Number.isFinite(parsed?.longitude) ? Number(parsed.longitude) : null,
+      latitude: lat,
+      longitude: lng,
       raw: parsed ? (parsed as Record<string, unknown>) : null,
     }
   } catch {
@@ -200,6 +232,15 @@ async function extractExifInfo(dataUrl: string): Promise<ExifInfo> {
       raw: null,
     }
   }
+}
+
+function dmsToDecimal(dms: number[], ref: string | undefined): number | null {
+  if (!Array.isArray(dms) || dms.length < 3) return null
+  const [deg = 0, min = 0, sec = 0] = dms
+  let decimal = Number(deg) + Number(min) / 60 + Number(sec) / 3600
+  if (!Number.isFinite(decimal)) return null
+  if (ref === 'S' || ref === 'W') decimal *= -1
+  return decimal
 }
 
 async function fetchRecentDriverDevice(companyId: string, driverId?: string | null) {
@@ -460,6 +501,42 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
   }
 
   if (!rows.length) return
+
+  // Geofence check: all photos of the same inspection should be near the same place.
+  // Compute centroid of photos with GPS; flag any photo farther than GEOFENCE_RADIUS_M from centroid.
+  const GEOFENCE_RADIUS_M = 300
+  const gpsRows = rows.filter(
+    (r) => Number.isFinite(r.gps_latitude) && Number.isFinite(r.gps_longitude)
+  )
+  if (gpsRows.length >= 2) {
+    const centroidLat =
+      gpsRows.reduce((sum, r) => sum + Number(r.gps_latitude), 0) / gpsRows.length
+    const centroidLng =
+      gpsRows.reduce((sum, r) => sum + Number(r.gps_longitude), 0) / gpsRows.length
+
+    for (const row of gpsRows) {
+      const distance = haversineMeters(
+        Number(row.gps_latitude),
+        Number(row.gps_longitude),
+        centroidLat,
+        centroidLng
+      )
+      row.details = row.details || {}
+      row.details.geofence = {
+        centroid_lat: centroidLat,
+        centroid_lng: centroidLng,
+        distance_m: Math.round(distance),
+        radius_m: GEOFENCE_RADIUS_M,
+      }
+      if (distance > GEOFENCE_RADIUS_M) {
+        if (!Array.isArray(row.flags)) row.flags = []
+        if (!row.flags.includes('GPS_OUTLIER')) row.flags.push('GPS_OUTLIER')
+        row.risk_score = clampScore(Number(row.risk_score || 0) + 35)
+        row.risk_level = scoreToLevel(row.risk_score)
+        row.verification_status = row.risk_level
+      }
+    }
+  }
 
   const { error: upsertError } = await supabase
     .from('inspection_photo_verifications')

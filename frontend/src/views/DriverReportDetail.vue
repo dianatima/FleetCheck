@@ -13,7 +13,7 @@
           @click="runPdfAction('preview')"
         >
           <Eye :size="15" />
-          {{ pdfAction === 'preview' ? 'Opening...' : 'Preview PDF' }}
+          {{ pdfAction === 'preview' ? store.t('opening') : store.t('previewPdf') }}
         </button>
         <button
           type="button"
@@ -22,7 +22,7 @@
           @click="runPdfAction('share')"
         >
           <Share2 :size="15" />
-          {{ pdfAction === 'share' ? 'Sharing...' : 'Share copy' }}
+          {{ pdfAction === 'share' ? store.t('sharing') : store.t('shareCopy') }}
         </button>
         <button
           type="button"
@@ -31,7 +31,7 @@
           @click="runPdfAction('download')"
         >
           <Download :size="15" />
-          {{ pdfAction === 'download' ? 'Preparing PDF...' : 'Download PDF' }}
+          {{ pdfAction === 'download' ? store.t('preparingPdf') : `${store.t('download')} ${store.t('pdf')}` }}
         </button>
       </div>
     </div>
@@ -350,18 +350,14 @@ async function runPdfAction(action: 'download' | 'preview' | 'share') {
 
   try {
     if (action === 'preview') {
-      const previewWindow = window.open('', '_blank', 'noopener,noreferrer')
-      if (!previewWindow) {
-        throw new Error('Popup blocked. Allow popups to preview the PDF.')
-      }
-      await previewInspectionReportPdf(inspection.value.id, store.language, previewWindow)
+      await previewInspectionReportPdf(inspection.value.id, store.language)
     } else if (action === 'share') {
       await shareInspectionReportPdf(inspection.value.id, store.language)
     } else {
       await downloadInspectionReportPdf(inspection.value.id, store.language)
     }
   } catch (downloadError: any) {
-    error.value = downloadError?.message || 'Report PDF action failed.'
+    error.value = downloadError?.message || store.t('reportPdfActionFailed')
   } finally {
     pdfAction.value = null
   }

@@ -73,12 +73,10 @@
                   </button>
                 </div>
               </form>
-            <!-- JS-логіка переміщена у <script setup> -->
             </div>
           </div>
         </Teleport>
       </template>
-      <!-- JS-логіка переміщена у <script setup> -->
       <div class="relative w-full sm:flex-1 sm:min-w-[220px]">
         <Search
           :size="15"
@@ -194,7 +192,8 @@
             <tr
               v-for="r in paginatedReports"
               :key="r.id"
-              class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors"
+              class="border-b border-gray-100/70 dark:border-gray-800/70 hover:bg-gray-50/70 dark:hover:bg-gray-800/45 transition-colors cursor-pointer"
+              @click="viewReport(r)"
               :class="[
                 (r.reviewStatus === 'needs-review' || r.fraudSuspicious) ? 'bg-yellow-50/40 dark:bg-yellow-900/5' : '',
                 selectedReportIds.includes(r.id) ? 'ring-2 ring-blue-400/40 dark:ring-blue-600/40' : ''
@@ -301,7 +300,7 @@
                   </button>
                   <button
                     @click.stop="downloadReport(r)"
-                    :title="downloadingId === r.id ? 'Preparing PDF...' : 'Download PDF'"
+                    :title="downloadingId === r.id ? store.t('preparingPdf') : `${store.t('download')} ${store.t('pdf')}`"
                     :disabled="downloadingId === r.id"
                     class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-wait transition-colors"
                   >
