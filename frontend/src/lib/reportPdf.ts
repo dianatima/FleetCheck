@@ -305,7 +305,7 @@ async function getPdfMake(): Promise<any> {
   if (pdfMakePromise) return pdfMakePromise
 
   pdfMakePromise = (async () => {
-    const pdfMakeModule: any = await import('pdfmake/build/pdfmake')
+    const pdfMakeModule: any = await import('pdfmake/build/pdfmake.js')
     const pdfMake: any = pdfMakeModule?.default || pdfMakeModule
 
     // vfs_fonts.js IIFE tries `_global.pdfMake.addVirtualFileSystem(vfs)`.
@@ -314,7 +314,7 @@ async function getPdfMake(): Promise<any> {
       ;(window as any).pdfMake = pdfMake
     }
 
-    const fontsModule: any = await import('pdfmake/build/vfs_fonts')
+    const fontsModule: any = await import('pdfmake/build/vfs_fonts.js')
     const candidates = [
       pdfMake.vfs,
       fontsModule?.default,
