@@ -11,6 +11,8 @@ export type InspectionPhotoInput = {
   fileSizeBytes?: number | null
   mimeType?: string | null
   uploadedAt?: string | null
+  browserLat?: number | null
+  browserLng?: number | null
 }
 
 export type AnalyzeInspectionPhotosInput = {
@@ -428,8 +430,8 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
         exif_device_make: exif.make,
         exif_device_model: exif.model,
         exif_software: exif.software,
-        gps_latitude: exif.latitude,
-        gps_longitude: exif.longitude,
+        gps_latitude: exif.latitude ?? photo.browserLat ?? null,
+        gps_longitude: exif.longitude ?? photo.browserLng ?? null,
         sha256,
         d_hash: dHash,
         exact_duplicate_of_id: exactDuplicate?.id || null,
@@ -483,8 +485,8 @@ export async function analyzeAndStoreInspectionPhotos(input: AnalyzeInspectionPh
         exif_device_make: null,
         exif_device_model: null,
         exif_software: null,
-        gps_latitude: null,
-        gps_longitude: null,
+        gps_latitude: photo.browserLat ?? null,
+        gps_longitude: photo.browserLng ?? null,
         sha256: null,
         d_hash: null,
         exact_duplicate_of_id: null,

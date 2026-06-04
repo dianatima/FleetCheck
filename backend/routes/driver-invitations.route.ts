@@ -170,25 +170,26 @@ const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
                 })
 
             if (inviteError) {
-                if (!isAlreadyRegisteredInviteError(inviteError)) {
+                // Supabase may return "already registered" variants OR "email address is invalid"
+                // when the user already exists. Always try to look up the user first; only fail
+                // with the original error if the user genuinely doesn't exist in auth.
+                const { user: existingUser, error: existingUserError } =
+                    await findAuthUserByEmail(driver.email)
+
+                if (!existingUser && !existingUserError) {
+                    // User truly does not exist — the invite error is legitimate.
+                    return reply.code(400).send({ error: inviteError.message })
+                }
+
+                if (existingUserError) {
+                    request.log.error(
+                        { err: existingUserError, originalInviteError: inviteError.message, driverId: driver.id, driverEmail: driver.email },
+                        'Invite failed and existing auth user could not be looked up'
+                    )
                     return reply.code(400).send({ error: inviteError.message })
                 }
 
                 resent = true
-
-                const { user: existingUser, error: existingUserError } =
-                    await findAuthUserByEmail(driver.email)
-
-                if (existingUserError) {
-                    request.log.error(
-                        { err: existingUserError, driverId: driver.id, driverEmail: driver.email },
-                        'Existing driver auth user could not be loaded for invitation resend'
-                    )
-
-                    return reply.code(400).send({
-                        error: 'Existing auth user could not be loaded for invitation resend',
-                    })
-                }
 
                 if (existingUser) {
                     authUserId = existingUser.id

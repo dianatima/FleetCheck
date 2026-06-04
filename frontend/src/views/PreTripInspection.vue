@@ -86,6 +86,23 @@
             <button @click.stop="setState(item, 'not_applicable')" class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-semibold transition-all border-2" :class="item.state === 'not_applicable' ? 'bg-gray-500 border-gray-500 text-white' : 'border-gray-200 dark:border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-600'">N/A</button>
           </div>
         </div>
+        <!-- Inline photo row — always visible when photo is required -->
+        <div v-if="item.requiresPhoto" class="mt-2 ml-7 flex flex-wrap items-center gap-3">
+          <label class="flex items-center gap-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors cursor-pointer">
+            <Camera :size="13" /> {{ store.t('addPhoto') }}
+            <input type="file" accept="image/*" capture="environment" class="sr-only" @change="addPhotos(item, $event)" />
+          </label>
+          <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
+            <ImageIcon :size="13" /> {{ store.t('fromGallery') }}
+            <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
+          </label>
+          <div v-if="item.photos.length" class="flex gap-1.5 flex-wrap">
+            <div v-for="(url, pi) in item.photos" :key="pi" class="relative">
+              <button type="button" class="photo-thumb" @click="openPhotoLightbox(item.photos, pi)"><img :src="url" alt="" class="w-full h-full object-cover" /></button>
+              <button type="button" @click.stop="removePhoto(item, pi)" class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white"><X :size="7" /></button>
+            </div>
+          </div>
+        </div>
         <Transition name="slide">
           <div v-if="isExpanded(item.id)" class="mt-3 ml-7 space-y-3">
             <p v-if="item.description" class="text-sm text-gray-600 dark:text-gray-300">{{ item.description }}</p>
@@ -96,9 +113,13 @@
               </button>
             </div>
             <textarea v-model="item.comment" :placeholder="item.state === 'fail' ? store.t('describeIssue') : 'Add a comment'" rows="3" class="w-full text-sm input-field resize-none" :class="item.state === 'fail' ? 'placeholder-red-300 dark:placeholder-red-700 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10' : ''" />
-            <div class="flex items-center gap-3 mt-2">
+            <div v-if="!item.requiresPhoto" class="flex items-center gap-3 mt-2">
               <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
                 <Camera :size="13" /> {{ store.t('addPhoto') }}
+                <input type="file" accept="image/*" capture="environment" class="sr-only" @change="addPhotos(item, $event)" />
+              </label>
+              <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
+                <ImageIcon :size="13" /> {{ store.t('fromGallery') }}
                 <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
               </label>
               <div v-if="item.photos.length" class="flex gap-1.5">
@@ -108,7 +129,7 @@
                 </div>
               </div>
             </div>
-            <p v-if="item.requiresPhoto" class="text-xs text-gray-500 dark:text-gray-400">{{ store.t('requiresPhotoBeforeSubmit') }}</p>
+            <p v-if="item.requiresPhoto" class="text-xs text-orange-600 dark:text-orange-400 font-medium">{{ store.t('requiresPhotoBeforeSubmit') }}</p>
           </div>
         </Transition>
       </div>
@@ -275,6 +296,24 @@
           </div>
         </div>
 
+        <!-- Inline photo row — always visible when photo is required -->
+        <div v-if="item.requiresPhoto" class="mt-2 ml-7 flex flex-wrap items-center gap-3">
+          <label class="flex items-center gap-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors cursor-pointer">
+            <Camera :size="13" /> {{ store.t('addPhoto') }}
+            <input type="file" accept="image/*" capture="environment" class="sr-only" @change="addPhotos(item, $event)" />
+          </label>
+          <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
+            <ImageIcon :size="13" /> {{ store.t('fromGallery') }}
+            <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
+          </label>
+          <div v-if="item.photos.length" class="flex gap-1.5 flex-wrap">
+            <div v-for="(url, pi) in item.photos" :key="pi" class="relative">
+              <button type="button" class="photo-thumb" @click="openPhotoLightbox(item.photos, pi)"><img :src="url" alt="" class="w-full h-full object-cover" /></button>
+              <button type="button" @click.stop="removePhoto(item, pi)" class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white"><X :size="7" /></button>
+            </div>
+          </div>
+        </div>
+
         <Transition name="slide">
           <div v-if="isExpanded(item.id)" class="mt-3 ml-7 space-y-3">
             <p v-if="item.description" class="text-sm text-gray-600 dark:text-gray-300">
@@ -294,9 +333,13 @@
               class="w-full text-sm input-field resize-none"
               :class="item.state === 'fail' ? 'placeholder-red-300 dark:placeholder-red-700 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10' : ''"
             />
-            <div class="flex items-center gap-3 mt-2">
+            <div v-if="!item.requiresPhoto" class="flex items-center gap-3 mt-2">
               <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
                 <Camera :size="13" /> {{ store.t('addPhoto') }}
+                <input type="file" accept="image/*" capture="environment" class="sr-only" @change="addPhotos(item, $event)" />
+              </label>
+              <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
+                <ImageIcon :size="13" /> {{ store.t('fromGallery') }}
                 <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
               </label>
               <div v-if="item.photos.length" class="flex gap-1.5">
@@ -318,7 +361,7 @@
                 </div>
               </div>
             </div>
-            <p v-if="item.requiresPhoto" class="text-xs text-gray-500 dark:text-gray-400">
+            <p v-if="item.requiresPhoto" class="text-xs text-orange-600 dark:text-orange-400 font-medium">
               {{ store.t('requiresPhotoBeforeSubmit') }}
             </p>
           </div>
@@ -388,7 +431,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Camera, Check, CheckCheck, X, FileText } from 'lucide-vue-next'
+import { ArrowLeft, Camera, Check, CheckCheck, X, FileText, ImageIcon } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
 import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
@@ -437,6 +480,8 @@ interface UploadedPhotoMeta {
   fileSizeBytes: number | null
   mimeType: string | null
   uploadedAt: string
+  browserLat?: number | null
+  browserLng?: number | null
 }
 
 const inspection = ref<any | null>(null)
@@ -503,6 +548,28 @@ async function addPhotos(item: Item, event: Event) {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files || [])
   const uploadedAt = new Date().toISOString()
+
+  // Capture browser GPS at upload time — browser strips EXIF GPS for privacy.
+  let browserLat: number | null = null
+  let browserLng: number | null = null
+  if (navigator.geolocation) {
+    try {
+      const pos = await new Promise<GeolocationPosition | null>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (p) => resolve(p),
+          () => resolve(null),
+          { timeout: 5000, maximumAge: 30000, enableHighAccuracy: true }
+        )
+      })
+      if (pos) {
+        browserLat = pos.coords.latitude
+        browserLng = pos.coords.longitude
+      }
+    } catch {
+      // GPS denied or unavailable — continue without it
+    }
+  }
+
   const urls = await Promise.all(files.map(readFileAsDataUrl))
   const nextMeta = files.map((file, index) => ({
     dataUrl: urls[index],
@@ -510,6 +577,8 @@ async function addPhotos(item: Item, event: Event) {
     fileSizeBytes: Number.isFinite(file.size) ? file.size : null,
     mimeType: file.type || null,
     uploadedAt,
+    browserLat,
+    browserLng,
   }))
 
   item.photos.push(...urls)
@@ -986,6 +1055,8 @@ async function runPhotoFraudAnalysis(inspectionId: string) {
           fileSizeBytes: meta?.fileSizeBytes ?? null,
           mimeType: meta?.mimeType || null,
           uploadedAt: meta?.uploadedAt || new Date().toISOString(),
+          browserLat: meta?.browserLat ?? null,
+          browserLng: meta?.browserLng ?? null,
         }
       })
   })
