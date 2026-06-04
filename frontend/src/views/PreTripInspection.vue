@@ -90,10 +90,6 @@
         <div v-if="item.requiresPhoto" class="mt-2 ml-7 flex flex-wrap items-center gap-3">
           <label class="flex items-center gap-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors cursor-pointer">
             <Camera :size="13" /> {{ store.t('addPhoto') }}
-            <input type="file" accept="image/*" capture="environment" class="sr-only" @change="addPhotos(item, $event)" />
-          </label>
-          <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
-            <ImageIcon :size="13" /> {{ store.t('fromGallery') }}
             <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
           </label>
           <div v-if="item.photos.length" class="flex gap-1.5 flex-wrap">
@@ -116,10 +112,6 @@
             <div v-if="!item.requiresPhoto" class="flex items-center gap-3 mt-2">
               <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
                 <Camera :size="13" /> {{ store.t('addPhoto') }}
-                <input type="file" accept="image/*" capture="environment" class="sr-only" @change="addPhotos(item, $event)" />
-              </label>
-              <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
-                <ImageIcon :size="13" /> {{ store.t('fromGallery') }}
                 <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
               </label>
               <div v-if="item.photos.length" class="flex gap-1.5">
@@ -300,10 +292,6 @@
         <div v-if="item.requiresPhoto" class="mt-2 ml-7 flex flex-wrap items-center gap-3">
           <label class="flex items-center gap-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors cursor-pointer">
             <Camera :size="13" /> {{ store.t('addPhoto') }}
-            <input type="file" accept="image/*" capture="environment" class="sr-only" @change="addPhotos(item, $event)" />
-          </label>
-          <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
-            <ImageIcon :size="13" /> {{ store.t('fromGallery') }}
             <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
           </label>
           <div v-if="item.photos.length" class="flex gap-1.5 flex-wrap">
@@ -336,10 +324,6 @@
             <div v-if="!item.requiresPhoto" class="flex items-center gap-3 mt-2">
               <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
                 <Camera :size="13" /> {{ store.t('addPhoto') }}
-                <input type="file" accept="image/*" capture="environment" class="sr-only" @change="addPhotos(item, $event)" />
-              </label>
-              <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
-                <ImageIcon :size="13" /> {{ store.t('fromGallery') }}
                 <input type="file" accept="image/*" multiple class="sr-only" @change="addPhotos(item, $event)" />
               </label>
               <div v-if="item.photos.length" class="flex gap-1.5">
@@ -431,7 +415,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Camera, Check, CheckCheck, X, FileText, ImageIcon } from 'lucide-vue-next'
+import { ArrowLeft, Camera, Check, CheckCheck, X, FileText } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
 import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
@@ -797,6 +781,30 @@ async function loadInspectionItems() {
 
   if (!inspectionError) {
     inspection.value = inspectionData
+
+    // Fallback: if the vehicles/drivers join returned null (RLS blocks driver from joining),
+    // fetch them separately using the URL vehicleId + driver profile.
+    const vehicleId = String(route.query.vehicleId || inspectionData?.vehicle_id || '')
+    if (!inspection.value?.vehicles && vehicleId) {
+      const { data: vehicleData } = await supabase
+        .from('vehicles')
+        .select('id, unit, make, model, odometer, odometer_unit')
+        .eq('id', vehicleId)
+        .maybeSingle()
+      if (vehicleData) {
+        inspection.value = { ...inspection.value, vehicles: vehicleData }
+      }
+    }
+    if (!inspection.value?.drivers && inspectionData?.driver_id) {
+      const { data: driverData } = await supabase
+        .from('drivers')
+        .select('id, name')
+        .eq('id', inspectionData.driver_id)
+        .maybeSingle()
+      if (driverData) {
+        inspection.value = { ...inspection.value, drivers: driverData }
+      }
+    }
     initialInspectionOdometer.value =
       inspectionData?.odometer != null && Number.isFinite(Number(inspectionData.odometer))
         ? Number(inspectionData.odometer)

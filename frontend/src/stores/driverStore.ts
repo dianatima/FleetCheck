@@ -260,7 +260,9 @@ export const useDriverStore = defineStore('drivers', () => {
     error.value = null
     invitationMessage.value = null
 
-    const token = authStore.session?.access_token
+    // Refresh the session to get a valid (non-expired) access token
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    const token = refreshed?.session?.access_token || authStore.session?.access_token
 
     if (!token) {
       error.value = 'Access token is missing'
