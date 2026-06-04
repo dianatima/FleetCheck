@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { getAuthCallbackUrl } from '@/lib/appUrl'
 import { useAuthStore } from '@/stores/authStore'
 
 export const useDriverStore = defineStore('drivers', () => {
@@ -277,7 +278,7 @@ export const useDriverStore = defineStore('drivers', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        redirectTo: `${window.location.origin}/auth/callback?driver_invite=1`,
+        redirectTo: getAuthCallbackUrl('driver_invite=1'),
       }),
     })
 
@@ -287,6 +288,14 @@ export const useDriverStore = defineStore('drivers', () => {
       error.value = result?.error || 'Invitation could not be sent'
       loading.value = false
       return false
+    }
+
+    if (result?.inviteLink) {
+      try {
+        await navigator.clipboard.writeText(String(result.inviteLink))
+      } catch (clipboardError) {
+        console.warn('[driverStore] failed to copy invite link', clipboardError)
+      }
     }
 
     invitationMessage.value =

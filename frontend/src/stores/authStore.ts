@@ -1,12 +1,14 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { getAuthCallbackUrl } from '@/lib/appUrl'
 
 type UserRole = 'owner' | 'driver'
 
 type OwnerCompany = {
   company_id: string
   company_name: string
+  odometer_unit?: 'mi' | 'km' | 'nm' | null
   country?: string | null
   state?: string | null
   city?: string | null
@@ -24,6 +26,11 @@ const STALE_AUTH_KEY_PREFIXES = [
   'fleetcheck.company',
   'pinia-auth',
 ]
+
+function isMissingOdometerUnitColumn(error: any) {
+  const message = String(error?.message || '').toLowerCase()
+  return message.includes('odometer_unit') && message.includes('schema')
+}
 
 export const useAuthStore = defineStore('auth', () => {
   const session = ref<any | null>(null)
@@ -63,6 +70,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     return profile.value?.company_name || null
+  })
+
+  const companyOdometerUnit = computed<'mi' | 'km' | 'nm'>(() => {
+    if (role.value === 'owner') {
+      return (currentCompany.value?.odometer_unit as 'mi' | 'km' | 'nm' | undefined) || 'mi'
+    }
+
+    return (profile.value?.company_odometer_unit as 'mi' | 'km' | 'nm' | undefined) || 'mi'
   })
 
   const hasMultipleCompanies = computed(() => {
@@ -172,17 +187,35 @@ export const useAuthStore = defineStore('auth', () => {
       return null
     }
 
-    const { data, error: profileError } = await supabase
+    let { data, error: profileError } = await supabase
       .from('profiles')
       .select(`
         *,
         companies (
           id,
-          name
+          name,
+          odometer_unit
         )
       `)
       .eq('auth_user_id', user.value.id)
       .maybeSingle()
+
+    if (profileError && isMissingOdometerUnitColumn(profileError)) {
+      const retry = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          companies (
+            id,
+            name
+          )
+        `)
+        .eq('auth_user_id', user.value.id)
+        .maybeSingle()
+
+      data = retry.data as any
+      profileError = retry.error
+    }
 
     if (profileError || !data) {
       error.value = profileError?.message || 'Profile could not be found'
@@ -193,6 +226,7 @@ export const useAuthStore = defineStore('auth', () => {
     profile.value = {
       ...data,
       company_name: data.companies?.name || null,
+      company_odometer_unit: data.companies?.odometer_unit || 'mi',
     }
 
     if (options.validateAccess) {
@@ -214,13 +248,14 @@ export const useAuthStore = defineStore('auth', () => {
       return []
     }
 
-    const { data, error: companiesError } = await supabase
+    let { data, error: companiesError } = await supabase
       .from('company_owners')
       .select(`
         company_id,
         companies (
           id,
           name,
+          odometer_unit,
           country,
           state,
           city,
@@ -230,6 +265,28 @@ export const useAuthStore = defineStore('auth', () => {
         )
       `)
       .eq('profile_id', profile.value.id)
+
+    if (companiesError && isMissingOdometerUnitColumn(companiesError)) {
+      const retry = await supabase
+        .from('company_owners')
+        .select(`
+          company_id,
+          companies (
+            id,
+            name,
+            country,
+            state,
+            city,
+            address,
+            phone,
+            industry
+          )
+        `)
+        .eq('profile_id', profile.value.id)
+
+      data = retry.data as any
+      companiesError = retry.error
+    }
   
     if (companiesError) {
       error.value = companiesError.message
@@ -248,6 +305,7 @@ export const useAuthStore = defineStore('auth', () => {
       return {
         company_id: item.company_id,
         company_name: company?.name || 'Company',
+        odometer_unit: company?.odometer_unit || 'mi',
         country: company?.country || null,
         state: company?.state || null,
         city: company?.city || null,
@@ -417,7 +475,7 @@ export const useAuthStore = defineStore('auth', () => {
     const { error: googleError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: getAuthCallbackUrl(),
       },
     })
 
@@ -456,7 +514,8 @@ export const useAuthStore = defineStore('auth', () => {
         *,
         companies (
           id,
-          name
+          name,
+          odometer_unit
         )
       `)
       .single()
@@ -475,6 +534,7 @@ export const useAuthStore = defineStore('auth', () => {
           ? {
               ...profile.value,
               password_set_at: nextPasswordSetAt,
+              company_odometer_unit: profile.value?.company_odometer_unit || 'mi',
             }
           : profile.value
         const statusUpdated = await markDriverPasswordCompleted()
@@ -501,6 +561,7 @@ export const useAuthStore = defineStore('auth', () => {
     profile.value = {
       ...updatedProfile,
       company_name: updatedProfile.companies?.name || null,
+      company_odometer_unit: updatedProfile.companies?.odometer_unit || 'mi',
     }
 
     const statusUpdated = await markDriverPasswordCompleted()
@@ -681,6 +742,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function createCompany(payload: {
     name: string
+    odometer_unit?: 'mi' | 'km' | 'nm'
     country?: string
     state?: string
     city?: string
@@ -700,6 +762,7 @@ export const useAuthStore = defineStore('auth', () => {
       .from('companies')
       .insert({
         name: payload.name,
+        odometer_unit: payload.odometer_unit || 'mi',
         country: payload.country || null,
         state: payload.state || null,
         city: payload.city || null,
@@ -803,6 +866,7 @@ export const useAuthStore = defineStore('auth', () => {
     role,
     companyId,
     companyName,
+    companyOdometerUnit,
     currentCompany,
     hasMultipleCompanies,
     passwordSetAt,

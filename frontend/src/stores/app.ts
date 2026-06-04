@@ -4,6 +4,12 @@ import { ref, watch } from 'vue'
 export type Language = 'en' | 'uk' | 'es' | 'fr'
 export type Role = 'manager' | 'driver' | 'admin' | null
 
+const supportedLanguages: Language[] = ['en', 'uk', 'es', 'fr']
+
+function normalizeLanguage(value?: string | null): Language {
+  return supportedLanguages.includes(value as Language) ? (value as Language) : 'en'
+}
+
 const translations: Record<Language, Record<string, string>> = {
   en: {
     // App
@@ -156,7 +162,7 @@ const translations: Record<Language, Record<string, string>> = {
     year: 'Year',
     plateNumber: 'Plate Number',
     vin: 'VIN',
-    odometer: 'Odometer (mi)',
+    odometer: 'Odometer',
     dateLabel: 'Date',
     engineHours: 'Engine Hours',
     vehiclePhoto: 'Vehicle Photo',
@@ -652,7 +658,7 @@ const translations: Record<Language, Record<string, string>> = {
     year: 'Рік',
     plateNumber: 'Номерний знак',
     vin: 'VIN',
-    odometer: 'Одометр (км)',
+    odometer: 'Одометр',
     dateLabel: 'Дата',
     engineHours: 'Мотогодини',
     vehiclePhoto: 'Фото транспорту',
@@ -1148,7 +1154,7 @@ const translations: Record<Language, Record<string, string>> = {
     year: 'Año',
     plateNumber: 'Número de Placa',
     vin: 'VIN',
-    odometer: 'Odómetro (mi)',
+    odometer: 'Odómetro',
     dateLabel: 'Fecha',
     engineHours: 'Horas de Motor',
     vehiclePhoto: 'Foto del Vehículo',
@@ -1644,7 +1650,7 @@ const translations: Record<Language, Record<string, string>> = {
     year: 'Année',
     plateNumber: "Numéro d'Immatriculation",
     vin: 'NIV',
-    odometer: 'Odomètre (km)',
+    odometer: 'Odomètre',
     dateLabel: 'Date',
     engineHours: 'Heures Moteur',
     vehiclePhoto: 'Photo du Véhicule',
@@ -1997,7 +2003,7 @@ export const useAppStore = defineStore('app', () => {
   const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null
   const prefDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   const theme = ref<'light' | 'dark'>(savedTheme ?? (prefDark ? 'dark' : 'light'))
-  const language = ref<Language>((localStorage.getItem('lang') as Language) ?? 'en')
+  const language = ref<Language>(normalizeLanguage(localStorage.getItem('lang')))
   const role = ref<Role>(null)
   const inspectionResult = ref<'pass' | 'fail' | null>(null)
 
@@ -2009,7 +2015,7 @@ export const useAppStore = defineStore('app', () => {
   }, { immediate: true })
 
   watch(language, (val) => {
-    localStorage.setItem('lang', val)
+    localStorage.setItem('lang', normalizeLanguage(val))
   })
 
   function toggleTheme() {
@@ -2017,7 +2023,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function setLanguage(lang: Language) {
-    language.value = lang
+    language.value = normalizeLanguage(lang)
   }
 
   function setRole(r: Role) {
@@ -2029,7 +2035,8 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function t(key: string): string {
-    return translations[language.value][key] ?? translations['en'][key] ?? key
+    const currentLanguage = normalizeLanguage(language.value)
+    return translations[currentLanguage][key] ?? translations.en[key] ?? key
   }
 
   return { theme, language, role, inspectionResult, toggleTheme, setLanguage, setRole, setInspectionResult, t }

@@ -82,6 +82,23 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 
 ## Останні зміни (June 2026)
 
+- **Запрошення водіїв / auth callback / fallback delivery**:
+	- Frontend auth callback тепер коректно обробляє `code`, `token_hash` і direct session tokens з `/auth/callback`.
+	- Для invite flow використовується `VITE_APP_URL` / `APP_URL`, щоб email-посилання не вказували на локальний `localhost` у production.
+	- Для вже існуючих auth-користувачів resend invite генерує magic link замість password reset email.
+	- Якщо кастомна email-відправка недоступна, backend повертає готовий invite link для ручної передачі водію замість hard-fail помилки.
+
+- **Company-wide одиниці пробігу**:
+	- Додано `companies.odometer_unit` (`mi` / `km` / `nm`) як єдине налаштування одиниць пробігу на рівні компанії.
+	- У `Settings -> Company` з'явився селектор одиниць відстані.
+	- Manager reports, inspection modal і driver inspection flow відображають пробіг з малим unit suffix (`mi`, `km`, `nm`) біля числа.
+	- Для середовищ без нової колонки frontend має fallback на `mi`, щоб не ламати login/profile flow до застосування міграції.
+
+- **Manager Reports: пробіг у списку звітів**:
+	- Колонку `Photos` у менеджерському списку звітів замінено на odometer.
+	- Під поточним значенням пробігу показується коротка різниця від попереднього звіту по тому ж авто у форматі `+980 mi`.
+	- Детальна модалка звіту теж показує поточний пробіг і компактний приріст від попереднього звіту.
+
 - **Legacy-сумісність фото у звітах (mobile/desktop)**:
 	- Додано нормалізацію `photo_urls` для старих записів, де фото могли зберігатись як path-only значення.
 	- Прев'ю фото у `InspectionResult`, `DriverReportDetail`, `InspectionReportModal`, `PreTripInspection` тепер стабільно працює для нових і старих звітів.
@@ -142,6 +159,8 @@ Fleet inspection SaaS platform with photo verification, PDF reports, and anti-fr
 - `202605300006_ensure_inspection_signature_columns.sql` — гарантує наявність signature-колонок у `inspections` у середовищах з частково застосованими міграціями.
 - `202605310001_add_engine_hours_required_to_templates.sql` — додає `inspection_templates.engine_hours_required` boolean колонку (backend запит для inspection/engine-hours override режиму).
 - `202606020001_template_item_reference_photo.sql` — додає `inspection_template_items.reference_photo_url` для еталонних фото пунктів шаблону.
+- `202606030001_vehicles_driver_inspected_access.sql` — розширює доступ driver до пов'язаних vehicle даних у власних inspection flow сценаріях.
+- `202606030002_company_odometer_unit.sql` — додає `companies.odometer_unit` + default `mi` + check constraint (`mi/km/nm`).
 
 ### Операційні SQL-скрипти (debug/hotfix)
 
@@ -176,6 +195,7 @@ cp .env.example .env
 - `RESEND_API_KEY`
 - `APPROVAL_EMAIL_FROM`
 - `APP_URL`
+- `VITE_APP_URL` — рекомендований public app origin для auth callback / invitation links
 
 ### 3. Запуск у DEV
 
@@ -287,6 +307,16 @@ npm run build:backend
 
 - Переконайтесь, що застосовані migration-и `300003` і `300006`.
 - Для legacy середовищ підпис може братись з fallback таблиці `inspection_signature_fallbacks`.
+
+### Логін перекидає назад на /login після auth callback
+
+- Переконайтесь, що застосована міграція `202606030002_company_odometer_unit.sql`.
+- Frontend має fallback для середовищ без `companies.odometer_unit`, але після застосування міграції company settings і unit labels працюватимуть коректно без schema fallback.
+
+### Invitation email could not be sent
+
+- Перевірте `RESEND_API_KEY`, `APPROVAL_EMAIL_FROM`, `APP_URL`, `VITE_APP_URL`.
+- Якщо email-провайдер тимчасово недоступний, invite flow повертає готовий invitation link для ручного відправлення водію.
 
 ### Anti-fraud показує неконсистентні дублікати
 

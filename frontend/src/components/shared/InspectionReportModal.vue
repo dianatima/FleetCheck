@@ -124,6 +124,15 @@
                       <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ store.t('submitted') || 'Submitted' }}</p>
                       <p class="font-medium text-gray-800 dark:text-gray-200">{{ submittedLabel }}</p>
                     </div>
+                    <div>
+                      <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ store.t('odometer') }}</p>
+                      <p class="font-medium text-gray-800 dark:text-gray-200">{{ inspectionOdometerLabel }} <span class="text-[10px] uppercase text-gray-400">{{ companyOdometerUnit }}</span></p>
+                    </div>
+                    <div v-if="dailyMileageLabel">
+                      <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Mileage since previous</p>
+                      <p class="font-medium text-gray-800 dark:text-gray-200">{{ dailyMileageLabel }}</p>
+                      <p class="text-[10px] text-gray-500 dark:text-gray-400">{{ previousInspectionLabel }}</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -460,6 +469,7 @@ const results = ref<any[]>([])
 const photoVerifications = ref<any[]>([])
 const verificationById = ref<Record<string, any>>({})
 const fraudLoadError = ref<string | null>(null)
+const previousInspection = ref<any | null>(null)
 const photoLightboxOpen = ref(false)
 const lightboxPhotos = ref<string[]>([])
 const lightboxStartIndex = ref(0)
@@ -527,6 +537,36 @@ const vehicleMeta = computed(() => {
 })
 
 const vehiclePhotoUrl = computed(() => relation(inspection.value?.vehicles)?.photo_url || null)
+
+const companyOdometerUnit = computed(() => authStore.companyOdometerUnit || 'mi')
+
+const inspectionOdometerLabel = computed(() => {
+  const value = inspection.value?.odometer
+  return value != null && Number.isFinite(Number(value))
+    ? Number(value).toLocaleString()
+    : '—'
+})
+
+const previousInspectionLabel = computed(() => {
+  if (previousInspection.value?.odometer == null || !previousInspection.value?.created_at) return ''
+  const when = formatDateTime(
+    previousInspection.value?.submitted_at || previousInspection.value?.created_at,
+    store.language,
+  )
+  return `Previous report: ${Number(previousInspection.value.odometer).toLocaleString()} ${companyOdometerUnit.value} · ${when}`
+})
+
+const dailyMileageLabel = computed(() => {
+  const currentOdometer = Number(inspection.value?.odometer)
+  const previousOdometer = Number(previousInspection.value?.odometer)
+
+  if (!Number.isFinite(currentOdometer) || !Number.isFinite(previousOdometer)) return ''
+
+  const distance = currentOdometer - previousOdometer
+  if (!Number.isFinite(distance) || distance < 0) return ''
+
+  return `+${Math.round(distance).toLocaleString()} ${companyOdometerUnit.value}`
+})
 
 const metricCounts = computed(() => {
   const rows = results.value
@@ -913,6 +953,7 @@ async function fetchInspection(inspectionId: string) {
   photoVerifications.value = []
   verificationById.value = {}
   fraudLoadError.value = null
+  previousInspection.value = null
 
   let { data, error: inspectionError } = await supabase
     .from('inspections')
@@ -923,6 +964,7 @@ async function fetchInspection(inspectionId: string) {
       driver_id,
       type,
       status,
+      odometer,
       created_at,
       submitted_at,
       signature_data_url,
@@ -967,6 +1009,7 @@ async function fetchInspection(inspectionId: string) {
         driver_id,
         type,
         status,
+        odometer,
         created_at,
         submitted_at,
         vehicles (
@@ -1015,6 +1058,21 @@ async function fetchInspection(inspectionId: string) {
     ...data,
     signature_data_url: data?.signature_data_url || fallbackSignature?.dataUrl || null,
     signed_at: data?.signed_at || fallbackSignature?.signedAt || null,
+  }
+
+  const inspectionCreatedAt = data?.submitted_at || data?.created_at
+  if (data?.vehicle_id && inspectionCreatedAt) {
+    const { data: previousData } = await supabase
+      .from('inspections')
+      .select('id, odometer, created_at, submitted_at')
+      .eq('vehicle_id', data.vehicle_id)
+      .not('odometer', 'is', null)
+      .lt('created_at', data.created_at)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    previousInspection.value = previousData || null
   }
   results.value = relationArray(data.inspection_results)
     .map((row: any) => {

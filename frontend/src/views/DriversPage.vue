@@ -120,10 +120,16 @@
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-3">
                     <div
-                      class="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                      class="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                       :style="{ background: d.avatar_color || '#3b82f6' }"
                     >
-                      {{ initials(d.name) }}
+                      <img
+                        v-if="d.avatar_url"
+                        :src="d.avatar_url"
+                        :alt="`${d.name} avatar`"
+                        class="w-full h-full object-cover"
+                      />
+                      <span v-else>{{ initials(d.name) }}</span>
                     </div>
                     <div>
                       <p
@@ -257,10 +263,16 @@
           >
             <div class="flex items-start gap-3">
               <div
-                class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full overflow-hidden text-sm font-bold text-white"
                 :style="{ background: d.avatar_color || '#3b82f6' }"
               >
-                {{ initials(d.name) }}
+                <img
+                  v-if="d.avatar_url"
+                  :src="d.avatar_url"
+                  :alt="`${d.name} avatar`"
+                  class="h-full w-full object-cover"
+                />
+                <span v-else>{{ initials(d.name) }}</span>
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-start justify-between gap-2">
@@ -364,6 +376,7 @@ type Driver = {
   id: string;
   name: string;
   email: string;
+  avatar_url?: string | null;
   phone?: string | null;
   license_no?: string | null;
   license_class?: string | null;

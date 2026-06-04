@@ -52,6 +52,19 @@
             </div>
 
             <div>
+              <label class="label">Distance unit</label>
+              <select v-model="form.odometer_unit" class="input-field">
+                <option
+                  v-for="option in odometerUnitOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+
+            <div>
               <label class="label">Address</label>
               <input v-model="form.address" class="input-field" />
             </div>
@@ -124,6 +137,12 @@ const industryOptions = [
   "Other",
 ];
 
+const odometerUnitOptions = [
+  { value: "mi", label: "Miles (mi)" },
+  { value: "km", label: "Kilometers (km)" },
+  { value: "nm", label: "Nautical miles (nm)" },
+];
+
 const form = reactive({
   name: "",
   phone: "",
@@ -132,6 +151,7 @@ const form = reactive({
   state: "",
   city: "",
   industry: "",
+  odometer_unit: "mi",
 });
 
 watch(
@@ -147,6 +167,7 @@ watch(
       state: props.company?.state || "",
       city: props.company?.city || "",
       industry: props.company?.industry || "",
+      odometer_unit: props.company?.odometer_unit || "mi",
     });
   },
   { immediate: true }
@@ -167,6 +188,7 @@ function submit() {
     state: form.state || null,
     city: form.city || null,
     industry: form.industry || null,
+    odometer_unit: form.odometer_unit || "mi",
   });
 }
 </script>

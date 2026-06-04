@@ -263,13 +263,10 @@
                 <span v-else class="text-gray-400 text-xs">-</span>
               </td>
               <td class="px-4 py-3">
-                <div
-                  v-if="r.photos > 0"
-                  class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
-                >
-                  <Camera :size="12" /> {{ r.photos }}
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                  <p>{{ odometerLabel(r) }}</p>
+                  <p v-if="odometerDeltaLabel(r)" class="mt-1 text-[11px] text-gray-400 dark:text-gray-500">{{ odometerDeltaLabel(r) }}</p>
                 </div>
-                <span v-else class="text-gray-400 text-xs">-</span>
               </td>
               <td class="px-4 py-3">
                 <span
@@ -354,9 +351,12 @@
               </p>
             </div>
             <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
-              <p class="text-gray-400">Issues / photos</p>
+              <p class="text-gray-400">Issues / {{ store.t("odometer") }}</p>
               <p class="mt-1 font-medium text-gray-700 dark:text-gray-200">
-                {{ r.issues }} issues · {{ r.photos }} photos
+                {{ r.issues }} issues · {{ odometerLabel(r) }}
+              </p>
+              <p v-if="odometerDeltaLabel(r)" class="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                {{ odometerDeltaLabel(r) }}
               </p>
             </div>
             <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
@@ -417,7 +417,6 @@ import {
   Truck,
   CheckCircle,
   XCircle,
-  Camera,
   FileText,
   ClipboardCheck,
   File as FileEdit,
@@ -457,6 +456,9 @@ interface Report {
   reviewIssueId: string | null;
   issues: number;
   photos: number;
+  odometer: number | null;
+  odometerDelta: number | null;
+  odometerDeltaPerDay: number | null;
   fraudSuspicious: boolean;
   fraudMaxRisk: number;
   status: "draft" | "submitted" | "approved" | "needs-review" | "rejected";
@@ -534,55 +536,105 @@ async function fetchReports() {
   loading.value = true;
   error.value = null;
 
-  const { data, error: reportsError } = await supabase
-    .from("inspections")
-    .select(
-      `
-      id,
-      company_id,
-      vehicle_id,
-      driver_id,
-      type,
-      status,
-      created_at,
-      submitted_at,
-      vehicles (
-        unit,
-        make,
-        model,
-        plate,
-        photo_url
-      ),
-      drivers!inspections_driver_id_fkey (
+  const [vehiclesResult, driversResult, reportsResult] = await Promise.all([
+    supabase
+      .from("vehicles")
+      .select("id, unit, make, model, plate, photo_url")
+      .eq("company_id", authStore.companyId),
+    supabase
+      .from("drivers")
+      .select("id, name")
+      .eq("company_id", authStore.companyId),
+    supabase
+      .from("inspections")
+      .select(
+        `
         id,
-        name
-      ),
-      inspection_results (
-        id,
-        result,
-        photo_urls,
-        inspection_template_items (
-          title
-        )
-      ),
-      issues (
-        id,
-        status
+        company_id,
+        vehicle_id,
+        driver_id,
+        type,
+        status,
+        odometer,
+        created_at,
+        submitted_at
+      `,
       )
-    `,
-    )
-    .eq("company_id", authStore.companyId)
-    .order("created_at", { ascending: false });
+      .eq("company_id", authStore.companyId)
+      .order("created_at", { ascending: false })
+      .limit(500),
+  ]);
 
-  if (reportsError) {
-    error.value = reportsError.message;
+  if (reportsResult.error) {
+    error.value = reportsResult.error.message;
     reports.value = [];
     loading.value = false;
     return;
   }
 
-  const inspections = normalizeInspectionRows(data || []);
-  const inspectionIds = inspections.map((inspection: any) => inspection.id).filter(Boolean);
+  if (vehiclesResult.error) {
+    console.warn("[Reports] vehicles lookup failed", vehiclesResult.error);
+  }
+
+  if (driversResult.error) {
+    console.warn("[Reports] drivers lookup failed", driversResult.error);
+  }
+
+  const vehicleMap = new Map(
+    ((vehiclesResult.data as any[]) || []).map((vehicle: any) => [String(vehicle.id), vehicle]),
+  );
+  const driverMap = new Map(
+    ((driversResult.data as any[]) || []).map((driver: any) => [String(driver.id), driver]),
+  );
+
+  const baseInspections = normalizeInspectionRows(reportsResult.data || []);
+  const inspectionIds = baseInspections.map((inspection: any) => inspection.id).filter(Boolean);
+
+  const [resultsResult, issuesResult] = inspectionIds.length
+    ? await Promise.all([
+        supabase
+          .from("inspection_results")
+          .select("id, inspection_id, result, photo_urls")
+          .in("inspection_id", inspectionIds),
+        supabase
+          .from("issues")
+          .select("id, inspection_id, status")
+          .in("inspection_id", inspectionIds),
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }];
+
+  if (resultsResult.error) {
+    console.warn("[Reports] inspection results lookup failed", resultsResult.error);
+  }
+
+  if (issuesResult.error) {
+    console.warn("[Reports] issues lookup failed", issuesResult.error);
+  }
+
+  const resultsByInspectionId = new Map<string, any[]>();
+  for (const row of (resultsResult.data as any[]) || []) {
+    const key = String(row?.inspection_id || "");
+    if (!key) continue;
+    if (!resultsByInspectionId.has(key)) resultsByInspectionId.set(key, []);
+    resultsByInspectionId.get(key)!.push(row);
+  }
+
+  const issuesByInspectionId = new Map<string, any[]>();
+  for (const row of (issuesResult.data as any[]) || []) {
+    const key = String(row?.inspection_id || "");
+    if (!key) continue;
+    if (!issuesByInspectionId.has(key)) issuesByInspectionId.set(key, []);
+    issuesByInspectionId.get(key)!.push(row);
+  }
+
+  const inspections = baseInspections.map((inspection: any) => ({
+    ...inspection,
+    vehicles: vehicleMap.get(String(inspection.vehicle_id)) || null,
+    drivers: driverMap.get(String(inspection.driver_id)) || null,
+    inspection_results: resultsByInspectionId.get(String(inspection.id)) || [],
+    issues: issuesByInspectionId.get(String(inspection.id)) || [],
+  }));
+  const odometerByInspectionId = buildOdometerDeltaMap(inspections);
   const fraudByInspection = new Map<string, { suspicious: boolean; maxRisk: number }>();
 
   if (inspectionIds.length) {
@@ -594,55 +646,6 @@ async function fetchReports() {
     if (fraudError) {
       console.warn("[Reports] fraud summary load failed", fraudError);
     } else {
-      const rows = Array.isArray(fraudRows) ? fraudRows : [];
-      const groupedByInspectionId = new Map<string, any[]>();
-
-      for (const row of rows) {
-        const key = String(row?.inspection_id || "");
-        if (!key) continue;
-        if (!groupedByInspectionId.has(key)) groupedByInspectionId.set(key, []);
-        groupedByInspectionId.get(key)!.push(row);
-      }
-
-      const recomputeTargets = inspections.filter((inspection: any) => {
-        const photos = collectInspectionPhotos(inspection);
-        if (!photos.length) return false;
-
-        const inspectionRows = groupedByInspectionId.get(String(inspection.id)) || [];
-        if (!inspectionRows.length) return true;
-
-        return inspectionRows.some((row) => hasStaleDuplicateDirection(row, inspection.created_at));
-      });
-
-      if (recomputeTargets.length) {
-        for (const inspection of recomputeTargets) {
-          const photos = collectInspectionPhotos(inspection);
-          if (!photos.length) continue;
-
-          try {
-            await analyzeAndStoreInspectionPhotos({
-              companyId: authStore.companyId,
-              inspectionId: inspection.id,
-              driverId: inspection.driver_id || null,
-              vehicleId: inspection.vehicle_id || null,
-              inspectionCreatedAt: inspection.created_at || null,
-              photos,
-            });
-          } catch (analysisError) {
-            console.warn("[Reports] fraud recompute failed", analysisError);
-          }
-        }
-
-        const reloaded = await supabase
-          .from("inspection_photo_verifications")
-          .select("inspection_id, risk_score, flags, details")
-          .in("inspection_id", inspectionIds);
-
-        if (!reloaded.error) {
-          fraudRows = reloaded.data;
-        }
-      }
-
       for (const row of Array.isArray(fraudRows) ? fraudRows : []) {
         const inspectionId = String(row?.inspection_id || "");
         if (!inspectionId) continue;
@@ -668,7 +671,11 @@ async function fetchReports() {
   }
 
   reports.value = inspections.map((inspection: any) =>
-    toReport(inspection, fraudByInspection.get(String(inspection.id)))
+    toReport(
+      inspection,
+      fraudByInspection.get(String(inspection.id)),
+      odometerByInspectionId.get(String(inspection.id)) || null,
+    )
   );
   loading.value = false;
 }
@@ -692,6 +699,63 @@ function toTimestamp(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function buildOdometerDeltaMap(inspections: any[]) {
+  const byVehicle = new Map<string, any[]>();
+
+  for (const inspection of inspections) {
+    const vehicleId = String(inspection?.vehicle_id || "");
+    if (!vehicleId) continue;
+    if (!byVehicle.has(vehicleId)) byVehicle.set(vehicleId, []);
+    byVehicle.get(vehicleId)!.push(inspection);
+  }
+
+  const deltaByInspectionId = new Map<string, { delta: number | null; perDay: number | null }>();
+
+  for (const vehicleInspections of byVehicle.values()) {
+    vehicleInspections.sort((left: any, right: any) => {
+      const leftTs = toTimestamp(left?.submitted_at || left?.created_at) || 0;
+      const rightTs = toTimestamp(right?.submitted_at || right?.created_at) || 0;
+      return leftTs - rightTs;
+    });
+
+    let previous: any | null = null;
+    for (const inspection of vehicleInspections) {
+      const inspectionId = String(inspection?.id || "");
+      const currentOdometer = Number(inspection?.odometer);
+      if (!inspectionId) continue;
+
+      if (
+        previous &&
+        Number.isFinite(currentOdometer) &&
+        Number.isFinite(Number(previous?.odometer))
+      ) {
+        const delta = currentOdometer - Number(previous.odometer);
+        const currentTs = toTimestamp(inspection?.submitted_at || inspection?.created_at);
+        const previousTs = toTimestamp(previous?.submitted_at || previous?.created_at);
+        const elapsedDays = currentTs != null && previousTs != null && currentTs > previousTs
+          ? (currentTs - previousTs) / 86400000
+          : null;
+
+        deltaByInspectionId.set(inspectionId, {
+          delta: Number.isFinite(delta) && delta >= 0 ? delta : null,
+          perDay:
+            Number.isFinite(delta) && delta >= 0 && elapsedDays != null && elapsedDays > 0
+              ? delta / elapsedDays
+              : null,
+        });
+      } else {
+        deltaByInspectionId.set(inspectionId, { delta: null, perDay: null });
+      }
+
+      if (Number.isFinite(currentOdometer)) {
+        previous = inspection;
+      }
+    }
+  }
+
+  return deltaByInspectionId;
+}
+
 function hasStaleDuplicateDirection(row: any, inspectionCreatedAt: string | null | undefined) {
   const inspectionTs = toTimestamp(inspectionCreatedAt);
   if (inspectionTs == null) return false;
@@ -705,12 +769,14 @@ function hasStaleDuplicateDirection(row: any, inspectionCreatedAt: string | null
 function toReport(
   inspection: any,
   fraudSummary?: { suspicious: boolean; maxRisk: number },
+  odometerSummary?: { delta: number | null; perDay: number | null } | null,
 ): Report {
   const vehicle = firstRelation(inspection.vehicles);
   const driver = firstRelation(inspection.drivers);
   const results = normalizeRelationArray(inspection.inspection_results);
   const issues = normalizeRelationArray(inspection.issues);
   const failed = results.some((row: any) => row.result === "fail");
+  const fraudSuspicious = Boolean(fraudSummary?.suspicious) || Number(fraudSummary?.maxRisk || 0) >= 50;
   const photos = results.reduce(
     (count: number, row: any) => count + normalizePhotoUrls(row.photo_urls).length,
     0,
@@ -740,23 +806,37 @@ function toReport(
     type: inspection.type === "post-trip" ? "post-trip" : "pre-trip",
     status: inspection.status,
     result: inspection.status === "draft" ? "draft" : failed ? "fail" : "pass",
-    reviewStatus: getReviewStatus(issues, failed, inspection.status),
+    reviewStatus: getReviewStatus(issues, failed, inspection.status, fraudSuspicious),
     reviewIssueId:
       issues.find((issue: any) => issue.status === "under-review")?.id ||
       issues[0]?.id ||
       null,
     issues: issues.length,
     photos,
-    fraudSuspicious: Boolean(fraudSummary?.suspicious),
+    odometer: Number.isFinite(Number(inspection.odometer)) ? Number(inspection.odometer) : null,
+    odometerDelta: odometerSummary?.delta ?? null,
+    odometerDeltaPerDay: odometerSummary?.perDay ?? null,
+    fraudSuspicious,
     fraudMaxRisk: Number(fraudSummary?.maxRisk || 0),
   };
+}
+
+function odometerLabel(report: Report) {
+  return report.odometer != null ? `${report.odometer.toLocaleString()} ${authStore.companyOdometerUnit}` : "-";
+}
+
+function odometerDeltaLabel(report: Report) {
+  if (report.odometerDelta == null) return "";
+  return `+${Math.round(report.odometerDelta).toLocaleString()} ${authStore.companyOdometerUnit}`;
 }
 
 function getReviewStatus(
   issues: any[],
   failed: boolean,
   status: string,
+  fraudSuspicious = false,
 ): ReviewStatus {
+  if (fraudSuspicious && status !== "draft") return "needs-review";
   if (status === "draft" || !failed) return "none";
   if (issues.some((issue) => issue.status === "under-review"))
     return "needs-review";
@@ -947,7 +1027,7 @@ const reportHeaders = computed(() => [
   store.t("result"),
   store.t("reviewStatus"),
   store.t("issues"),
-  store.t("photos"),
+  store.t("odometer"),
   store.t("fraudFlagged"),
   store.t("actions"),
 ]);

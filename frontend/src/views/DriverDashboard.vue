@@ -380,6 +380,9 @@ async function fetchDashboard() {
 
     currentDriver.value = driver
     await vehicleStore.fetchDriverVehicles()
+    const vehicleMap = new Map(
+      (vehicleStore.vehicles || []).map((vehicle: any) => [String(vehicle.id), vehicle])
+    )
 
     const [
       reportsResult,
@@ -396,13 +399,6 @@ async function fetchDashboard() {
         status,
         created_at,
         submitted_at,
-        vehicles (
-          unit,
-          make,
-          model,
-          plate,
-          photo_url
-        ),
         inspection_results (
           id,
           result
@@ -458,7 +454,10 @@ async function fetchDashboard() {
       return
     }
 
-    recentReports.value = reportsResult.data || []
+    recentReports.value = (reportsResult.data || []).map((report: any) => ({
+      ...report,
+      vehicles: vehicleMap.get(String(report.vehicle_id)) || null,
+    }))
     analyticsReports.value = analyticsReportsResult.data || []
     reportsSubmittedCount.value = reportsSubmittedResult.count || 0
     failedReportsCount.value = failedReportsResult.count || 0

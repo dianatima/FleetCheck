@@ -318,6 +318,11 @@ async function fetchReports() {
       return
     }
 
+    await driverVehicleStore.fetchDriverVehicles()
+    const vehicleMap = new Map(
+      (driverVehicleStore.vehicles || []).map((vehicle: any) => [String(vehicle.id), vehicle])
+    )
+
     const { data: inspections, error: inspectionsError } = await supabase
       .from('inspections')
       .select(`
@@ -327,13 +332,6 @@ async function fetchReports() {
       status,
       created_at,
       submitted_at,
-      vehicles (
-        unit,
-        make,
-        model,
-        plate,
-        photo_url
-      ),
       inspection_results (
         id,
         result,
@@ -358,7 +356,7 @@ async function fetchReports() {
     }
 
     reports.value = normalizeInspectionRows(inspections || []).map((inspection: any) => {
-      const vehicle = Array.isArray(inspection.vehicles) ? inspection.vehicles[0] : inspection.vehicles
+      const vehicle = vehicleMap.get(String(inspection.vehicle_id)) || null
       const results = normalizeRelationArray(inspection.inspection_results)
       const issues = normalizeRelationArray(inspection.issues)
       const failed = results.some((row: any) => row.result === 'fail')
@@ -378,7 +376,7 @@ async function fetchReports() {
         vehicleId: inspection.vehicle_id,
         createdAt: inspection.submitted_at || inspection.created_at,
         date: formatDate(inspection.submitted_at || inspection.created_at),
-        vehicle: [name, vehicle?.unit ? `#${vehicle.unit}` : '', vehicle?.plate || ''].filter(Boolean).join(' · ') || '—',
+        vehicle: [name, vehicle?.unit ? `#${vehicle.unit}` : '', vehicle?.plate || ''].filter(Boolean).join(' · ') || inspection.vehicle_id || '—',
         driver: driverName,
         thumbnailUrl,
         type: inspection.type === 'post-trip' ? 'post-trip' : 'pre-trip',
@@ -401,7 +399,14 @@ function formatDate(value: string | null) {
 }
 
 function continueDraft(r: Report) {
-  router.push(`/inspect/${r.type === 'post-trip' ? 'post' : 'pre'}?inspectionId=${r.id}&vehicleId=${r.vehicleId}`)
+  const query = new URLSearchParams({
+    inspectionId: r.id,
+    vehicleId: r.vehicleId,
+    vehicleLabel: r.vehicle,
+    driverLabel: r.driver,
+    createdAt: r.createdAt,
+  })
+  router.push(`/inspect/${r.type === 'post-trip' ? 'post' : 'pre'}?${query.toString()}`)
 }
 
 function viewReport(r: Report) {

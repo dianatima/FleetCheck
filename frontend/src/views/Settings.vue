@@ -75,6 +75,10 @@
               </p>
 
               <p class="text-xs text-gray-400 mt-1">
+                Distance unit: {{ company.odometer_unit || "mi" }}
+              </p>
+
+              <p class="text-xs text-gray-400 mt-1">
                 {{ formatCompanyAddress(company) }}
               </p>
             </div>
@@ -657,9 +661,6 @@ async function deleteAccessRule(rule: any) {
 }
 
 async function saveCompany(payload: any) {
-  console.log("SAVE COMPANY PAYLOAD", payload);
-  console.log("EDITING COMPANY", editingCompany.value);
-
   saving.value = true;
   authStore.error = null;
 

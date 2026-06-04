@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 
-import { sendDriverApprovalEmail } from '../lib/approval-email.js'
+import { sendDriverApprovalEmail, sendDriverInviteEmail } from '../lib/approval-email.js'
 import { supabaseAdmin } from '../lib/supabase-admin.js'
 
 type InviteBody = {
@@ -102,6 +102,39 @@ async function findAuthUserByEmail(email: string) {
     }
 }
 
+async function sendExistingUserInviteFallbackEmail(args: {
+    email: string
+    redirectTo?: string
+    metadata: InviteMetadata
+}) {
+    const { error } = await supabaseAdmin.auth.signInWithOtp({
+        email: args.email,
+        options: {
+            emailRedirectTo: args.redirectTo,
+            shouldCreateUser: false,
+            data: args.metadata,
+        },
+    })
+
+    return error
+}
+
+function inviteFallbackResponse(args: {
+    userId: string | null
+    invitationSentAt: string
+    resent: boolean
+    inviteLink: string
+}) {
+    return {
+        user_id: args.userId,
+        status: 'pending',
+        invitation_sent_at: args.invitationSentAt,
+        resent: args.resent,
+        inviteLink: args.inviteLink,
+        message: 'Email delivery is unavailable. Share the invitation link manually.',
+    }
+}
+
 const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
     app.post<{ Params: { id: string }; Body: InviteBody }>(
         '/api/drivers/:id/invite',
@@ -162,6 +195,7 @@ const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
             const metadata = driverInviteMetadata(driver)
             let authUserId: string | null = null
             let resent = false
+            let fallbackInviteLink: string | null = null
 
             const { data: inviteData, error: inviteError } =
                 await supabaseAdmin.auth.admin.inviteUserByEmail(driver.email, {
@@ -177,8 +211,21 @@ const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
                     await findAuthUserByEmail(driver.email)
 
                 if (!existingUser && !existingUserError) {
-                    // User truly does not exist — the invite error is legitimate.
-                    return reply.code(400).send({ error: inviteError.message })
+                    const { data: inviteLinkData, error: inviteLinkError } =
+                        await supabaseAdmin.auth.admin.generateLink({
+                            type: 'invite',
+                            email: driver.email,
+                            options: {
+                                redirectTo: request.body?.redirectTo,
+                                data: metadata,
+                            },
+                        })
+
+                    if (inviteLinkError || !inviteLinkData?.properties?.action_link) {
+                        return reply.code(400).send({ error: inviteError.message })
+                    }
+
+                    fallbackInviteLink = inviteLinkData.properties.action_link
                 }
 
                 if (existingUserError) {
@@ -219,13 +266,46 @@ const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
                     )
                 }
 
-                const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(
-                    driver.email,
-                    { redirectTo: request.body?.redirectTo }
-                )
+                const { data: magicLinkData, error: magicLinkError } =
+                    await supabaseAdmin.auth.admin.generateLink({
+                        type: 'magiclink',
+                        email: driver.email,
+                        options: {
+                            redirectTo: request.body?.redirectTo,
+                            data: metadata,
+                        },
+                    })
 
-                if (resetError) {
-                    return reply.code(400).send({ error: resetError.message })
+                if (magicLinkError || !magicLinkData?.properties?.action_link) {
+                    return reply.code(400).send({ error: magicLinkError?.message || 'Invitation link could not be generated' })
+                }
+
+                fallbackInviteLink = magicLinkData.properties.action_link
+
+                try {
+                    await sendDriverInviteEmail({
+                        driverEmail: driver.email,
+                        driverName: driver.name || 'Driver',
+                        inviteLink: magicLinkData.properties.action_link,
+                    })
+                } catch (inviteEmailError) {
+                    request.log.warn(
+                        { err: inviteEmailError, driverId: driver.id, driverEmail: driver.email },
+                        'Custom invite email failed, falling back to Supabase magic-link email'
+                    )
+
+                    const fallbackError = await sendExistingUserInviteFallbackEmail({
+                        email: driver.email,
+                        redirectTo: request.body?.redirectTo,
+                        metadata,
+                    })
+
+                    if (fallbackError) {
+                        request.log.error(
+                            { err: fallbackError, originalErr: inviteEmailError, driverId: driver.id, driverEmail: driver.email },
+                            'Existing driver invite email fallback could not be sent'
+                        )
+                    }
                 }
             } else {
                 authUserId = inviteData.user?.id || null
@@ -242,6 +322,15 @@ const driverInvitationsRoute: FastifyPluginAsync = async (app) => {
 
             if (updateError) {
                 return reply.code(400).send({ error: updateError.message })
+            }
+
+            if (fallbackInviteLink) {
+                return inviteFallbackResponse({
+                    userId: authUserId,
+                    invitationSentAt,
+                    resent,
+                    inviteLink: fallbackInviteLink,
+                })
             }
 
             return {

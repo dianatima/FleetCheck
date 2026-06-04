@@ -417,6 +417,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Camera, Check, CheckCheck, X, FileText } from 'lucide-vue-next'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '@/stores/authStore'
 import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
 import AppLayout from '../components/layout/AppLayout.vue'
@@ -435,8 +436,13 @@ function isMissingSignatureColumnsError(message?: string | null) {
   )
 }
 
+function isMissingOdometerUnitColumnError(message?: string | null) {
+  return String(message || '').toLowerCase().includes('odometer_unit')
+}
+
 const props = defineProps<{ isPostTrip?: boolean }>()
 const store = useAppStore()
+const authStore = useAuthStore()
 const vehicleStore = useDriverVehicleStore()
 const router = useRouter()
 const route = useRoute()
@@ -511,6 +517,12 @@ onBeforeUnmount(() => {
 const inspectionType = computed<'pre-trip' | 'post-trip'>(() =>
   inspection.value?.type === 'post-trip' || props.isPostTrip ? 'post-trip' : 'pre-trip'
 )
+
+function routeQueryValue(key: string) {
+  const value = route.query[key]
+  if (Array.isArray(value)) return String(value[0] || '')
+  return String(value || '')
+}
 
 function setState(item: Item, s: State) {
   item.state = item.state === s ? null : s
@@ -750,7 +762,11 @@ async function loadInspectionItems() {
     .eq('id', inspectionId)
     .single()
 
-  if (inspectionError && isMissingSignatureColumnsError(inspectionError.message)) {
+  if (
+    inspectionError &&
+    (isMissingSignatureColumnsError(inspectionError.message) ||
+      isMissingOdometerUnitColumnError(inspectionError.message))
+  ) {
     const retry = await supabase
       .from('inspections')
       .select(`
@@ -766,8 +782,7 @@ async function loadInspectionItems() {
           unit,
           make,
           model,
-          odometer,
-          odometer_unit
+          odometer
         ),
         drivers!inspections_driver_id_fkey (
           name
@@ -788,7 +803,7 @@ async function loadInspectionItems() {
     if (!inspection.value?.vehicles && vehicleId) {
       const { data: vehicleData } = await supabase
         .from('vehicles')
-        .select('id, unit, make, model, odometer, odometer_unit')
+        .select('id, unit, make, model, odometer')
         .eq('id', vehicleId)
         .maybeSingle()
       if (vehicleData) {
@@ -805,16 +820,19 @@ async function loadInspectionItems() {
         inspection.value = { ...inspection.value, drivers: driverData }
       }
     }
-    initialInspectionOdometer.value =
+    const persistedInspectionOdometer =
       inspectionData?.odometer != null && Number.isFinite(Number(inspectionData.odometer))
         ? Number(inspectionData.odometer)
         : null
+    initialInspectionOdometer.value = persistedInspectionOdometer
     const localFallbackSignature = readSignatureFallback(inspectionId)
     const fallbackSignature =
       localFallbackSignature || (await readSignatureFallbackFromDb(inspectionId))
     signatureDataUrl.value = inspectionData?.signature_data_url || fallbackSignature?.dataUrl || ''
     odometerInput.value =
-      inspectionData?.odometer != null ? String(Math.trunc(Number(inspectionData.odometer))) : ''
+      inspectionData?.status && inspectionData.status !== 'draft' && persistedInspectionOdometer != null
+        ? String(Math.trunc(persistedInspectionOdometer))
+        : ''
     latestCommittedOdometer.value = await fetchLatestCommittedOdometer(
       inspectionData?.vehicle_id,
       inspectionData?.id
@@ -832,17 +850,13 @@ async function loadInspectionItems() {
       latestCommittedOdometer.value,
       historicalMaxOdometer.value,
       vehicleOdometer,
-      initialInspectionOdometer.value,
+      inspectionData?.status && inspectionData.status !== 'draft'
+        ? initialInspectionOdometer.value
+        : null,
     ].filter((value): value is number => Number.isFinite(value))
-    const baselineOdometer = baselineValues.length ? Math.max(...baselineValues) : null
 
-    if (baselineOdometer != null) {
-      const currentDraftValue = odometerInput.value ? Number(odometerInput.value) : null
-      const normalized =
-        Number.isFinite(currentDraftValue) && (currentDraftValue as number) > baselineOdometer
-          ? (currentDraftValue as number)
-          : baselineOdometer
-      odometerInput.value = String(Math.trunc(normalized))
+    if (baselineValues.length) {
+      initialInspectionOdometer.value = Math.max(...baselineValues)
     }
   }
 
@@ -917,23 +931,23 @@ const vehicleLabel = computed(() => {
     ? inspection.value.vehicles[0]
     : inspection.value?.vehicles
   const name = `${vehicle?.make || ''} ${vehicle?.model || ''}`.trim()
-  return [name, vehicle?.unit ? `#${vehicle.unit}` : ''].filter(Boolean).join(' · ') || '—'
+  return [name, vehicle?.unit ? `#${vehicle.unit}` : ''].filter(Boolean).join(' · ') || routeQueryValue('vehicleLabel') || '—'
 })
 const driverLabel = computed(() => {
   const driver = Array.isArray(inspection.value?.drivers)
     ? inspection.value.drivers[0]
     : inspection.value?.drivers
-  return driver?.name || '—'
+  return driver?.name || routeQueryValue('driverLabel') || '—'
 })
 const inspectionDateLabel = computed(() =>
-  formatDateTime(inspection.value?.created_at, store.language)
+  formatDateTime(inspection.value?.created_at || routeQueryValue('createdAt'), store.language)
 )
 const odometerLabel = computed(() => {
   const vehicle = Array.isArray(inspection.value?.vehicles)
     ? inspection.value.vehicles[0]
     : inspection.value?.vehicles
   const value = inspection.value?.odometer ?? vehicle?.odometer
-  const unit = vehicle?.odometer_unit || 'mi'
+  const unit = vehicle?.odometer_unit || authStore.companyOdometerUnit || 'mi'
   return value != null ? `${Number(value).toLocaleString()} ${unit}` : '—'
 })
 
@@ -941,7 +955,7 @@ const odometerUnit = computed(() => {
   const vehicle = Array.isArray(inspection.value?.vehicles)
     ? inspection.value.vehicles[0]
     : inspection.value?.vehicles
-  return vehicle?.odometer_unit || 'mi'
+  return vehicle?.odometer_unit || authStore.companyOdometerUnit || 'mi'
 })
 
 const lastOdometerValue = computed<number | null>(() => {
@@ -1046,7 +1060,7 @@ async function validateOdometerJumpOnSubmit(vehicleId: string, inspectionId: str
 }
 
 async function runPhotoFraudAnalysis(inspectionId: string) {
-  const companyId = inspection.value?.company_id
+  const companyId = inspection.value?.company_id || authStore.companyId
   if (!companyId) return
 
   const photos = items.flatMap((item) => {

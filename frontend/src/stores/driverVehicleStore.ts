@@ -925,7 +925,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
       template_id: template.id,
       type,
       status: 'draft',
-      odometer: odometerFloor ?? latestCommittedOdometer ?? vehicle.odometer ?? null,
+      odometer: null,
       engine_hours: vehicle.engine_hours ?? null,
     }
 
