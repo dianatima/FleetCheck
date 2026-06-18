@@ -119,9 +119,6 @@ const translations: Record<Language, Record<string, string>> = {
     restoreService: 'Restore Service',
     signOut: 'Sign Out',
     reportProblem: 'Report Problem',
-    viewAllNotifications: 'View all notifications',
-    notifications: 'Notifications',
-    new: 'new',
     approveOk: 'Approve — OK',
     flagIssue: 'Flag Issue',
     reviewInspection: 'Review Inspection',
@@ -354,7 +351,6 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Repair / Issue actions
     createRepairRequest: 'Create Repair',
-    notifyManager: 'Notify Manager',
 
     // Pending
     pendingApproval: 'Registration Pending Approval',
@@ -615,9 +611,6 @@ const translations: Record<Language, Record<string, string>> = {
     restoreService: 'Відновити службу',
     signOut: 'Вийти',
     reportProblem: 'Повідомити про проблему',
-    viewAllNotifications: 'Усі сповіщення',
-    notifications: 'Сповіщення',
-    new: 'нових',
     approveOk: 'Схвалити — OK',
     flagIssue: 'Позначити проблему',
     reviewInspection: 'Перевірити огляд',
@@ -850,7 +843,6 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Repair / Issue actions
     createRepairRequest: 'Створити ремонт',
-    notifyManager: 'Повідомити менеджера',
 
     // Pending
     pendingApproval: 'Реєстрація очікує підтвердження',
@@ -1111,9 +1103,6 @@ const translations: Record<Language, Record<string, string>> = {
     restoreService: 'Restaurar Servicio',
     signOut: 'Cerrar Sesión',
     reportProblem: 'Reportar Problema',
-    viewAllNotifications: 'Ver todas las notificaciones',
-    notifications: 'Notificaciones',
-    new: 'nuevas',
     approveOk: 'Aprobar — OK',
     flagIssue: 'Marcar Problema',
     reviewInspection: 'Revisar Inspección',
@@ -1346,7 +1335,6 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Repair / Issue actions
     createRepairRequest: 'Crear Reparación',
-    notifyManager: 'Notificar al Gerente',
 
     // Pending
     pendingApproval: 'Registro Pendiente de Aprobación',
@@ -1607,9 +1595,6 @@ const translations: Record<Language, Record<string, string>> = {
     restoreService: 'Restaurer le Service',
     signOut: 'Se Déconnecter',
     reportProblem: 'Signaler un Problème',
-    viewAllNotifications: 'Voir toutes les notifications',
-    notifications: 'Notifications',
-    new: 'nouvelles',
     approveOk: 'Approuver — OK',
     flagIssue: 'Signaler le Problème',
     reviewInspection: "Réviser l'Inspection",
@@ -1842,7 +1827,6 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Repair / Issue actions
     createRepairRequest: 'Créer une Réparation',
-    notifyManager: 'Notifier le Gestionnaire',
 
     // Pending
     pendingApproval: "Inscription en attente d'approbation",

@@ -22,7 +22,6 @@
       <div class="flex items-center gap-1">
         <LanguageSelector :compact="true" />
         <ThemeToggle />
-        <NotificationBell />
 
         <div class="ml-1 h-8 w-px bg-gray-200 dark:bg-gray-700" />
 
@@ -134,7 +133,6 @@ import Sidebar from "./Sidebar.vue";
 import MobileNav from "./MobileNav.vue";
 import ThemeToggle from "../shared/ThemeToggle.vue";
 import LanguageSelector from "../shared/LanguageSelector.vue";
-import NotificationBell from "../shared/NotificationBell.vue";
 
 import { useAppStore } from "../../stores/app";
 import { useAuthStore } from "@/stores/authStore";
