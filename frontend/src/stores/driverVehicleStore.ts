@@ -3,7 +3,6 @@ import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { saveSignatureFallback } from '@/lib/signatureFallback'
-import { isDevDriverPreviewEnabled } from '@/lib/devDriverPreview'
 
 type InspectionType = 'pre-trip' | 'post-trip'
 type AvailabilityFilter = 'all' | 'available' | 'assigned' | 'unavailable' | 'repair'
@@ -172,12 +171,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   }
 
   async function fetchDriverContext() {
-    if (isDevDriverPreviewEnabled()) {
-      const previewDriver = await fetchPreviewDriverContext()
-      if (previewDriver) return previewDriver
-      return null
-    }
-
     const profileId = authStore.profile?.id
 
     if (!profileId) {
@@ -212,12 +205,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   }
 
   async function fetchActiveDriverForInspection() {
-    if (isDevDriverPreviewEnabled()) {
-      const previewDriver = await fetchPreviewDriverContext()
-      if (previewDriver) return previewDriver
-      return null
-    }
-
     const profileId = authStore.profile?.id
 
     if (!profileId) {
@@ -239,21 +226,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
   }
 
   async function fetchAllowedVehicleTypeIds(driver: any) {
-    if (isDevDriverPreviewEnabled()) {
-      const { data, error: typesError } = await supabase
-        .from('vehicles')
-        .select('vehicle_type_id')
-        .eq('company_id', driver.company_id)
-        .not('vehicle_type_id', 'is', null)
-
-      if (typesError) {
-        error.value = typesError.message
-        return []
-      }
-
-      return [...new Set((data || []).map((row: any) => row.vehicle_type_id).filter(Boolean))]
-    }
-
     if (!driver.license_class) return []
 
     const { data, error: ruleError } = await supabase
@@ -295,13 +267,8 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     error.value = null
     const driver = await fetchDriverContext()
     const allowedTypeIds = driver ? await fetchAllowedVehicleTypeIds(driver) : []
-    const fallbackTypeIds =
-      !allowedTypeIds.length && driver && isDevDriverPreviewEnabled()
-        ? await fetchAllCompanyVehicleTypeIds(driver.company_id)
-        : []
-    const effectiveTypeIds = allowedTypeIds.length ? allowedTypeIds : fallbackTypeIds
 
-    if (!driver || !effectiveTypeIds.length) {
+    if (!driver || !allowedTypeIds.length) {
       vehicles.value = []
       annotatedVehicles.value = []
       filteredVehicles.value = []
@@ -315,7 +282,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
         .from('vehicles')
         .select(selectClause)
         .eq('company_id', driver.company_id)
-        .in('vehicle_type_id', effectiveTypeIds)
+        .in('vehicle_type_id', allowedTypeIds)
         .not('status', 'in', '(blocked,inactive,in-repair)')
         .order('created_at', { ascending: false })
     )
@@ -353,13 +320,8 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     error.value = null
     const driver = await fetchDriverContext()
     const allowedTypeIds = driver ? await fetchAllowedVehicleTypeIds(driver) : []
-    const fallbackTypeIds =
-      !allowedTypeIds.length && driver && isDevDriverPreviewEnabled()
-        ? await fetchAllCompanyVehicleTypeIds(driver.company_id)
-        : []
-    const effectiveTypeIds = allowedTypeIds.length ? allowedTypeIds : fallbackTypeIds
 
-    if (!driver || !effectiveTypeIds.length) {
+    if (!driver || !allowedTypeIds.length) {
       selectedVehicle.value = null
       loading.value = false
       return
@@ -371,7 +333,7 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
         .select(selectClause)
         .eq('id', id)
         .eq('company_id', driver.company_id)
-        .in('vehicle_type_id', effectiveTypeIds)
+        .in('vehicle_type_id', allowedTypeIds)
         .not('status', 'in', '(blocked,inactive,in-repair)')
         .maybeSingle()
     )
@@ -1018,40 +980,6 @@ export const useDriverVehicleStore = defineStore('driverVehicles', () => {
     ].filter((value): value is number => Number.isFinite(value))
 
     return candidates.length ? Math.max(...candidates) : null
-  }
-
-  async function fetchPreviewDriverContext() {
-    const companyId = authStore.companyId
-
-    if (!companyId) {
-      error.value = 'Driver preview mode requires an active company in your account.'
-      return null
-    }
-
-    const { data, error: previewError } = await supabase
-      .from('drivers')
-      .select('id, company_id, license_class, status, user_id')
-      .eq('company_id', companyId)
-      .in('status', ['active', 'pending', 'new'])
-      .order('created_at', { ascending: true })
-      .limit(50)
-
-    if (previewError || !data?.length) {
-      error.value = previewError?.message || 'Driver preview mode: no driver found for this company.'
-      currentDriver.value = null
-      return null
-    }
-
-    const rank = (status: string) =>
-      status === 'active' ? 0 : status === 'pending' ? 1 : 2
-
-    const selected = [...data].sort(
-      (a: any, b: any) => rank(a.status) - rank(b.status)
-    )[0]
-
-    currentDriver.value = selected
-    currentDriverProfileId.value = authStore.profile?.id || null
-    return selected
   }
 
   async function findExistingDraftInspection(driverId: string, vehicleId: string, type: InspectionType) {

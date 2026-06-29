@@ -343,7 +343,6 @@ import { useAuthStore } from '@/stores/authStore'
 import { useDriverVehicleStore } from '@/stores/driverVehicleStore'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateFormat'
-import { isDevDriverPreviewEnabled } from '@/lib/devDriverPreview'
 
 const router = useRouter()
 const store = useAppStore()
@@ -369,7 +368,7 @@ watch(
 
 async function fetchDashboard() {
   if (!authStore.profile?.id) return
-  if (!isDevDriverPreviewEnabled() && authStore.profile?.status !== 'active') return
+  if (authStore.profile?.status !== 'active') return
 
   loading.value = true
   error.value = null
